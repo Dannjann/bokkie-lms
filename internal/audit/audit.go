@@ -47,6 +47,12 @@ const (
 	ActionUpdateFailed     = "system.update.failed"
 	ActionUpdateRolledBack = "system.update.rolled_back"
 	ActionBackupWritten    = "system.backup.written"
+
+	// ActionLedgerCacheRebuilt is the ledger self-check finding that a cached
+	// balance disagreed with the sum of the entries behind it, and correcting
+	// it. It should never appear. If it does, the row is the only record that
+	// a balance changed without anybody posting anything.
+	ActionLedgerCacheRebuilt = "ledger.cache.rebuilt"
 )
 
 // ConsoleUser is the username recorded for something done at the host's command

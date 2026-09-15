@@ -1,0 +1,80 @@
+# 2026/09/15 22:27:56.501112 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw existing: 0
+# 2026/09/15 22:27:56.501131 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw lines: 3
+# 2026/09/15 22:27:56.501132 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line0/customer: 1
+# 2026/09/15 22:27:56.501132 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line0/day: 0
+# 2026/09/15 22:27:56.501133 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line0/user: 1
+# 2026/09/15 22:27:56.501133 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line0/type: "opening"
+# 2026/09/15 22:27:56.501134 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line0/principal: 1
+# 2026/09/15 22:27:56.501135 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line0/interest: 1
+# 2026/09/15 22:27:56.501135 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line1/customer: 1
+# 2026/09/15 22:27:56.501135 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line1/day: 0
+# 2026/09/15 22:27:56.501136 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line1/user: 1
+# 2026/09/15 22:27:56.501136 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line1/type: "opening"
+# 2026/09/15 22:27:56.501136 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line1/principal: 1
+# 2026/09/15 22:27:56.501136 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line1/interest: 1
+# 2026/09/15 22:27:56.501137 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line2/customer: 1
+# 2026/09/15 22:27:56.501137 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line2/day: 0
+# 2026/09/15 22:27:56.501137 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line2/user: 1
+# 2026/09/15 22:27:56.501138 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line2/type: "advance"
+# 2026/09/15 22:27:56.501138 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw line2/principal: 1
+# 2026/09/15 22:27:56.501138 [TestPropertyAFailedBatchLeavesNothingBehind] [rapid] draw poisoned: 1
+# 2026/09/15 22:27:56.501276 [TestPropertyAFailedBatchLeavesNothingBehind] the ledger holds 1 entries after a failed batch, want the 0 it started with
+# 
+v0.4.8#13191997680520054730
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1

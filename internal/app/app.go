@@ -25,6 +25,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/db"
 	"github.com/Dannjann/bokkie-lms/internal/discovery"
+	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 	"github.com/Dannjann/bokkie-lms/web"
 )
@@ -47,7 +48,8 @@ type App struct {
 	db  *sql.DB
 	srv *http.Server
 
-	backups *backup.Scheduler
+	backups      *backup.Scheduler
+	ledgerChecks *ledger.Checker
 
 	listener net.Listener
 	serveErr chan error
@@ -100,6 +102,17 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 	auditLog := audit.New(database, log)
 	backups := backup.NewScheduler(database, store, cfg.Backup.Folder, log)
 
+	// The ledger checks itself against its own cache before the port is open,
+	// so a balance that has drifted is corrected before anybody can be shown
+	// it. A failure here is logged rather than fatal: a cache that could not be
+	// verified is a reason to look at the logs, not a reason to leave the
+	// station with no system at all — the entries themselves are untouched and
+	// every balance can be rebuilt from them.
+	ledgerSvc := ledger.New(database, store, auditLog, log)
+	if err := ledgerSvc.CheckOnStart(ctx); err != nil {
+		log.Error("could not verify the ledger cache at startup", "error", err)
+	}
+
 	handler := api.NewHandler(api.Deps{
 		Logger:       log,
 		DB:           database,
@@ -116,10 +129,11 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 	})
 
 	return &App{
-		cfg:     cfg,
-		log:     log,
-		db:      database,
-		backups: backups,
+		cfg:          cfg,
+		log:          log,
+		db:           database,
+		backups:      backups,
+		ledgerChecks: ledger.NewChecker(ledgerSvc, log),
 		srv: &http.Server{
 			Handler:           handler,
 			ReadHeaderTimeout: readHeaderTimeout,
@@ -147,6 +161,7 @@ func (a *App) Start() error {
 	a.log.Info("http server listening", "addr", addr, "port", a.cfg.Port)
 	a.startDiscovery()
 	a.backups.Start()
+	a.ledgerChecks.Start()
 
 	go func() {
 		err := a.srv.Serve(listener)
@@ -197,6 +212,7 @@ func (a *App) Stop(ctx context.Context) error {
 	// out an in-flight VACUUM INTO is far cheaper than explaining a folder with
 	// a corrupt backup in it.
 	a.backups.Stop()
+	a.ledgerChecks.Stop()
 
 	ctx, cancel := context.WithTimeout(ctx, shutdownGrace)
 	defer cancel()
