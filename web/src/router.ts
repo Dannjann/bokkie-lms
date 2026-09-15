@@ -12,6 +12,29 @@ export const router = createRouter({
       component: () => import('@/pages/HomePage.vue'),
     },
     {
+      path: '/customers',
+      name: 'customers',
+      component: () => import('@/pages/CustomersPage.vue'),
+    },
+    {
+      path: '/customers/new',
+      name: 'customer-new',
+      component: () => import('@/pages/CustomerNewPage.vue'),
+    },
+    {
+      // Manager-only in the UI, and manager-only at the server too — this
+      // guard only saves a pointless round trip, it does not enforce anything.
+      path: '/customers/import',
+      name: 'customers-import',
+      component: () => import('@/pages/CustomerImportPage.vue'),
+      meta: { manager: true },
+    },
+    {
+      path: '/customers/:id(\\d+)',
+      name: 'customer',
+      component: () => import('@/pages/CustomerPage.vue'),
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),
@@ -67,6 +90,12 @@ router.beforeEach(async (to) => {
   // Someone already signed in has no business on the login form.
   if (session.isLoggedIn && to.name === 'login') {
     return { name: 'home' }
+  }
+
+  // An encoder following a link to a manager's screen is sent somewhere useful
+  // rather than shown a page whose every request comes back 403.
+  if (to.meta.manager && !session.isManager) {
+    return { name: 'customers' }
   }
 
   return true

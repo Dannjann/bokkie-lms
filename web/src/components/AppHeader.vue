@@ -40,6 +40,10 @@ async function signOut(): Promise<void> {
     <RouterLink to="/" class="app-header__brand">Bokkie</RouterLink>
     <span class="app-header__station">TLS Palay &amp; Corn Buying Station</span>
 
+    <nav v-if="isLoggedIn" class="app-header__nav">
+      <RouterLink :to="{ name: 'customers' }">Customers</RouterLink>
+    </nav>
+
     <div v-if="isLoggedIn && user" class="app-header__session">
       <span class="app-header__user">
         {{ user.display_name }}
@@ -71,6 +75,26 @@ async function signOut(): Promise<void> {
 .app-header__station {
   font-size: 0.875rem;
   opacity: 0.85;
+}
+
+.app-header__nav {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.app-header__nav a {
+  color: inherit;
+  text-decoration: none;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  opacity: 0.85;
+}
+
+.app-header__nav a:hover,
+.app-header__nav a.router-link-active {
+  opacity: 1;
+  background: rgb(255 255 255 / 0.15);
 }
 
 .app-header__session {

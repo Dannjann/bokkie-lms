@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useHealthStore } from '@/stores/health'
 
@@ -12,9 +13,10 @@ onMounted(() => store.load())
 <template>
   <h1>Bokkie is running</h1>
   <p>
-    Lending management for TLS Palay &amp; Corn. The screens arrive from step 4;
-    this page exists to prove the path from this device to the server and its
-    database.
+    Lending management for TLS Palay &amp; Corn.
+    <RouterLink :to="{ name: 'customers' }">Customers</RouterLink> is the first
+    screen; advances and payments follow. The rest of this page proves the path
+    from this device to the server and its database.
   </p>
 
   <p v-if="loading">Checking the server…</p>
