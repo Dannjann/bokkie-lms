@@ -21,7 +21,7 @@ export CGO_ENABLED := 0
 
 GOOSES := windows darwin linux
 
-.PHONY: all setup dev web-dev web-install web-build test vet-all build-all release clean ci help
+.PHONY: all setup dev web-dev web-install web-build test vet-all build-all keygen sign release clean ci help
 
 all: build-all
 
@@ -33,7 +33,9 @@ help:
 	@echo "test        go test ./..."
 	@echo "vet-all     go vet once per GOOS, so build-tagged files are type-checked"
 	@echo "build-all   five binaries into dist/, embedding whatever web/dist holds"
-	@echo "release     web-build + build-all — binaries with the real SPA inside"
+	@echo "keygen      create the release signing key (once, ever)"
+	@echo "sign        write and sign dist/latest.json for the current tag"
+	@echo "release     web-build + build-all + sign — the folder that goes on the USB stick"
 	@echo "ci          vet-all + test + build-all — the gate"
 	@echo "clean       remove dist/ and the generated web/dist stub"
 
@@ -88,7 +90,23 @@ build-all: web/dist
 	GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/bokkie-linux-arm64  ./cmd/bokkie
 	@echo "--- dist ---" && ls -1 dist/
 
-release: web-build build-all
+# The release key. This is run once, ever: every host already installed trusts
+# the public half, so a second key pair would lock all of them out of updates.
+# The private half never enters this repository.
+keygen:
+	go run ./cmd/bokkie-release keygen
+
+# latest.json plus its signature, describing every binary in dist/. One
+# signature covers the whole release because the manifest carries each binary's
+# SHA-256 — altering a binary fails its hash, altering the hash fails the
+# signature.
+sign:
+	go run ./cmd/bokkie-release sign dist
+
+# A real release, and deliberately stricter than build-all: it refuses to run
+# without an exact version tag and without the signing key, because an unsigned
+# or untagged build is precisely what must never reach the station.
+release: web-build build-all sign
 
 ci: vet-all test build-all
 	@echo "ci: ok"
