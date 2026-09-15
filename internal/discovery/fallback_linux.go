@@ -23,10 +23,10 @@ const (
 	avahiNoPublishOpt = uint32(0) // no special publishing flags
 )
 
-// advertiseFallback registers hostname.local and the HTTP service through
-// Avahi. cause is the error from the built-in responder, kept so that a failure
-// here can report both attempts rather than only the second one.
-func advertiseFallback(log *slog.Logger, hostname string, port int, addresses []string, cause error) (io.Closer, error) {
+// registerViaAvahi registers hostname.local and the HTTP service through Avahi.
+// cause is the error from our own responder, kept so that a failure here can
+// report both attempts rather than only the second one.
+func registerViaAvahi(log *slog.Logger, hostname string, port int, addresses []string, cause error) (io.Closer, error) {
 	log.Info("built-in mDNS responder could not bind; registering through Avahi instead",
 		"reason", cause)
 
@@ -79,10 +79,13 @@ func publish(group dbus.BusObject, fqdn string, port int, addresses []string) er
 		}
 	}
 
-	txt := [][]byte{[]byte("path=/")}
+	txt := make([][]byte, 0, len(txtRecords))
+	for _, record := range txtRecords {
+		txt = append(txt, []byte(record))
+	}
 	if err := group.Call(avahiGroupIface+".AddService", 0,
 		avahiIfaceUnspec, avahiProtoUnspec, avahiNoPublishOpt,
-		"Bokkie", serviceType, "", fqdn, uint16(port), txt).Err; err != nil {
+		instanceName, serviceType, "", fqdn, uint16(port), txt).Err; err != nil {
 		return fmt.Errorf("publish service record: %w", err)
 	}
 

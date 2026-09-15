@@ -236,7 +236,7 @@ platform branches.
 | Auth | Session cookie + `argon2id` | Local users, no external IdP |
 | Service | `kardianos/service` | One API over Windows SCM, launchd, systemd |
 | Printing | `alexbrainman/printer` (Win) / CUPS `lp -o raw` (Unix) | Behind one `RawPrinter` interface |
-| Discovery | `grandcat/zeroconf` | `bokkie.local` survives a DHCP address change |
+| Discovery | host's own mDNS responder; `grandcat/zeroconf` where there is none | `bokkie.local` survives a DHCP address change |
 | Frontend | Vue 3 + Vite + TS | Embedded via `go:embed` |
 | UI kit | PrimeVue 4 (Aura) | DataTable handles the grid-heavy screens |
 | State | Pinia + vue-router | Standard |
@@ -377,9 +377,23 @@ ad-hoc signature (`codesign -s - bokkie`) or at install time with
 `xattr -d com.apple.quarantine bokkie`. Put it in the install script, not in a
 README nobody reads.
 
-**Linux gotcha.** Avahi usually already owns port 5353, so a second mDNS
-responder fails to bind. Detect it and register `bokkie.local` through Avahi's
-D-Bus API instead.
+**mDNS: register through whoever already owns port 5353.** This was learned the
+hard way on the first install, and it is not only a Linux problem:
+
+| Host | Who owns mDNS | How bokkie registers |
+|---|---|---|
+| macOS | `mDNSResponder`, always | `dns-sd -P`, supervised as a child process |
+| Linux | Avahi, on any desktop distribution | Avahi's D-Bus API, after the built-in responder fails to bind |
+| Windows | usually nothing | the built-in `grandcat/zeroconf` responder |
+
+A second responder on a host that already has one **binds without error and
+then answers nothing** — bokkie logs that it is advertising and no phone on the
+station can resolve the name. On macOS the Bonjour API is C, and using it would
+mean cgo, which would end cross-compilation for every other target: the
+supervised `dns-sd` child process is the cheaper trade.
+
+Advertising is a convenience, never a dependency. If it fails, the server still
+serves on its IP address and says so in the log.
 
 **Backup — replacing the legacy "Back-up Files" menu item.** Nightly
 `VACUUM INTO` writes a single timestamped, consistent `.db` file to a configured

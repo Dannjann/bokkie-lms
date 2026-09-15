@@ -89,15 +89,23 @@ reported success — and nothing ran. Two reasons, both now handled in code:
   held by something else — exactly what happened here — is caught at install
   time rather than at the counter.
 
+- **mDNS advertised nothing.** `grandcat/zeroconf` bound port 5353 on macOS
+  without error, logged a successful registration, and no device on the LAN
+  could resolve `bokkie.local` — Apple's `mDNSResponder` already owns mDNS
+  there, exactly as Avahi does on Linux. Registration now goes through the
+  host's own responder per OS (see `00-architecture.md` § Operations), which
+  resolves and serves from a second device. **Verified on macOS.**
+
 ### Still unverified
 
 - **Windows SCM and systemd** — no host available. The reboot-with-nobody-
   logged-in test, the account creation, the firewall rules and the Avahi
   fallback are all written but have never run. Carry this to Step 10.
 - **launchd** — the install drill needs `sudo` and has not been run either.
-- **`bokkie.local` resolution** — the responder binds and advertises (confirmed
-  in the log), but resolution could not be checked from this machine. It has to
-  be tested from a second machine and a phone, which the gate requires anyway.
+- **`bokkie.local` from a phone and a second PC** — resolution and an HTTP
+  fetch by name now work from the host itself. The other devices are still the
+  real test, and Windows PCs may need Bonjour for `.local` resolution if the
+  station's machines are old enough.
 
 ---
 
