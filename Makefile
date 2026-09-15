@@ -59,21 +59,22 @@ web-install:
 web-build: web-install
 	cd web && npm run build
 
-test:
+test: web/dist
 	go test ./...
 
 # go vet only type-checks the files selected by the host's build tags. Without
 # looping over GOOS, a broken spooler_windows.go sits undetected until someone
 # builds for Windows.
-vet-all:
+vet-all: web/dist
 	@for os in $(GOOSES); do \
 		echo "go vet GOOS=$$os"; \
 		GOOS=$$os go vet ./... || exit 1; \
 	done
 
-# go:embed refuses to compile against a directory that does not exist. The real
-# contents come from Vite at task 1.6; this keeps a clean checkout buildable
-# without committing anything build-output-shaped to git.
+# go:embed refuses to compile against a directory that does not exist, so every
+# target that compiles Go code depends on this stub. The real contents come from
+# `make web-build`; this keeps a clean checkout buildable without node installed
+# and without committing anything build-output-shaped to git.
 web/dist:
 	@mkdir -p web/dist
 	@echo '<!doctype html><title>bokkie</title><p>SPA not built — run the Vite build (task 1.6).' > web/dist/index.html
