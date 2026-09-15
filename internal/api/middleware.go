@@ -95,13 +95,6 @@ func withPanicRecovery(log *slog.Logger, next http.Handler) http.Handler {
 	})
 }
 
-// withSession is the hook task 2.1 fills in with cookie-based authentication.
-// It exists now so that the chain it has to slot into is already proven, and so
-// adding auth is not also a refactor of the middleware order.
-func withSession(next http.Handler) http.Handler {
-	return next
-}
-
 // statusRecorder captures what was actually sent, for the log line.
 type statusRecorder struct {
 	http.ResponseWriter

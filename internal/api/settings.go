@@ -1,0 +1,86 @@
+package api
+
+import (
+	"context"
+	"database/sql"
+	"net/http"
+	"time"
+
+	"github.com/Dannjann/bokkie-lms/internal/settings"
+)
+
+// settingView is one setting as the UI shows it: the value, plus enough
+// description to render an editor without hard-coding a form per setting.
+type settingView struct {
+	Key     string `json:"key"`
+	Value   string `json:"value"`
+	Kind    string `json:"kind"`
+	Default string `json:"default"`
+	Doc     string `json:"doc"`
+}
+
+func handleListSettings(d Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		views := make([]settingView, 0, len(settings.All))
+		for _, def := range settings.All {
+			views = append(views, settingView{
+				Key:     def.Key,
+				Value:   d.Settings.Raw(def),
+				Kind:    def.Kind.String(),
+				Default: def.Default,
+				Doc:     def.Doc,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"settings": views})
+	}
+}
+
+type updateSettingRequest struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// handleUpdateSetting changes one setting.
+//
+// Manager-only: the Ref. No. start and the backup schedule are not things an
+// encoder should be able to change mid-shift, and both of them have
+// consequences that are hard to see immediately.
+//
+// The write goes through the route wrapper's transaction, so the change and its
+// audit entry commit together — and the cache reload happens after the commit,
+// which is what makes the new value take effect without a restart.
+func handleUpdateSetting(d Deps) TxHandler {
+	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
+		var req updateSettingRequest
+		if err := decodeJSON(r, &req); err != nil {
+			return Change{}, err
+		}
+
+		def, ok := settings.Lookup(req.Key)
+		if !ok {
+			// Unknown keys are refused rather than stored. A settings table
+			// that accepts anything becomes a junk drawer, and a misspelled
+			// key would be silently ignored by the code that wanted to read it.
+			return Change{}, badRequest("%q is not a setting this system has", req.Key)
+		}
+		if err := settings.Validate(def, req.Value); err != nil {
+			return Change{}, badRequest("%s", err.Error())
+		}
+
+		before := d.Settings.Raw(def)
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+			 ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+			def.Key, req.Value, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			return Change{}, err
+		}
+
+		return Change{
+			EntityID:    def.Key,
+			Before:      map[string]string{"value": before},
+			After:       map[string]string{"value": req.Value},
+			Body:        settingView{Key: def.Key, Value: req.Value, Kind: def.Kind.String(), Default: def.Default, Doc: def.Doc},
+			AfterCommit: d.Settings.Reload,
+		}, nil
+	}
+}

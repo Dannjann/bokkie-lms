@@ -14,7 +14,11 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/Dannjann/bokkie-lms/internal/audit"
+	"github.com/Dannjann/bokkie-lms/internal/auth"
+	"github.com/Dannjann/bokkie-lms/internal/backup"
 	bokkiedb "github.com/Dannjann/bokkie-lms/internal/db"
+	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
 func TestHealthzReportsBuildAndDatabase(t *testing.T) {
@@ -50,9 +54,13 @@ func TestHealthzReportsBuildAndDatabase(t *testing.T) {
 // saying "ok" would hide that from whoever is polling.
 func TestHealthzIsDegradedWhenDatabaseIsClosed(t *testing.T) {
 	database := openTestDB(t)
+	handler := NewHandler(testDeps(t, database))
+
+	// Closed after the handler is built, which is the real-world shape of this
+	// failure: the app started fine and the database went away underneath it.
 	database.Close()
 
-	resp := do(t, NewHandler(testDeps(t, database)), http.MethodGet, "/healthz")
+	resp := do(t, handler, http.MethodGet, "/healthz")
 
 	if resp.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503", resp.Code)
@@ -105,15 +113,38 @@ func do(t *testing.T, h http.Handler, method, target string) *httptest.ResponseR
 	return rec
 }
 
+// testDeps builds the full dependency graph against a migrated, temporary
+// database. Handlers are exercised through the real stores rather than fakes:
+// the interesting bugs in this step are in the SQL and in the middleware
+// ordering, and a fake store would test neither.
 func testDeps(t *testing.T, database *sql.DB) Deps {
 	t.Helper()
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store, err := settings.Open(context.Background(), database)
+	if err != nil {
+		t.Fatalf("open settings: %v", err)
+	}
+
+	folder := filepath.Join(t.TempDir(), "backups")
 	return Deps{
-		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		DB:      database,
-		Started: time.Now().Add(-time.Minute),
+		Logger:       log,
+		DB:           database,
+		Started:      time.Now().Add(-time.Minute),
+		Users:        auth.NewUsers(database),
+		Sessions:     auth.NewSessions(database),
+		Limiter:      auth.NewLimiter(),
+		Audit:        audit.New(database, log),
+		Settings:     store,
+		Backup:       backup.NewScheduler(database, store, folder, log),
+		BackupFolder: folder,
 	}
 }
 
+// openTestDB opens a migrated database in a temporary directory. It is a real
+// file rather than :memory: because WAL, the pragmas db.Open verifies, and
+// VACUUM INTO all behave differently in memory — and those are precisely what
+// the backup tests are about.
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	database, err := bokkiedb.Open(context.Background(), filepath.Join(t.TempDir(), "bokkie.db"))
@@ -121,6 +152,11 @@ func openTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("open database: %v", err)
 	}
 	t.Cleanup(func() { database.Close() })
+
+	if err := bokkiedb.Migrate(context.Background(), database,
+		slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
 	return database
 }
 

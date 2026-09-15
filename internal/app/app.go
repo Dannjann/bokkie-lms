@@ -19,9 +19,13 @@ import (
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/api"
+	"github.com/Dannjann/bokkie-lms/internal/audit"
+	"github.com/Dannjann/bokkie-lms/internal/auth"
+	"github.com/Dannjann/bokkie-lms/internal/backup"
 	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/db"
 	"github.com/Dannjann/bokkie-lms/internal/discovery"
+	"github.com/Dannjann/bokkie-lms/internal/settings"
 	"github.com/Dannjann/bokkie-lms/web"
 )
 
@@ -42,6 +46,8 @@ type App struct {
 	log *slog.Logger
 	db  *sql.DB
 	srv *http.Server
+
+	backups *backup.Scheduler
 
 	listener net.Listener
 	serveErr chan error
@@ -69,24 +75,51 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		return nil, err
 	}
 
+	store, err := settings.Open(ctx, database)
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
+
 	spa, err := web.FS()
 	if err != nil {
 		database.Close()
 		return nil, fmt.Errorf("open embedded frontend: %w", err)
 	}
 
+	sessions := auth.NewSessions(database)
+	// Dead session rows accumulate over the years this machine runs. Startup is
+	// the natural moment to sweep them: nothing is serving yet, so a long
+	// delete cannot block a request.
+	if n, err := sessions.DeleteExpired(ctx); err != nil {
+		log.Warn("could not clear expired sessions", "error", err)
+	} else if n > 0 {
+		log.Info("cleared expired sessions", "count", n)
+	}
+
+	auditLog := audit.New(database, log)
+	backups := backup.NewScheduler(database, store, cfg.Backup.Folder, log)
+
 	handler := api.NewHandler(api.Deps{
-		Logger:   log,
-		DB:       database,
-		Started:  time.Now(),
-		SPA:      spa,
-		DevProxy: opts.DevProxy,
+		Logger:       log,
+		DB:           database,
+		Started:      time.Now(),
+		Users:        auth.NewUsers(database),
+		Sessions:     sessions,
+		Limiter:      auth.NewLimiter(),
+		Audit:        auditLog,
+		Settings:     store,
+		Backup:       backups,
+		BackupFolder: cfg.Backup.Folder,
+		SPA:          spa,
+		DevProxy:     opts.DevProxy,
 	})
 
 	return &App{
-		cfg: cfg,
-		log: log,
-		db:  database,
+		cfg:     cfg,
+		log:     log,
+		db:      database,
+		backups: backups,
 		srv: &http.Server{
 			Handler:           handler,
 			ReadHeaderTimeout: readHeaderTimeout,
@@ -113,6 +146,7 @@ func (a *App) Start() error {
 
 	a.log.Info("http server listening", "addr", addr, "port", a.cfg.Port)
 	a.startDiscovery()
+	a.backups.Start()
 
 	go func() {
 		err := a.srv.Serve(listener)
@@ -157,6 +191,12 @@ func (a *App) Stop(ctx context.Context) error {
 		}
 		a.mdns = nil
 	}
+
+	// Stop the nightly job before draining requests. A backup interrupted
+	// part-way leaves a file that would fail its own verification, and waiting
+	// out an in-flight VACUUM INTO is far cheaper than explaining a folder with
+	// a corrupt backup in it.
+	a.backups.Stop()
 
 	ctx, cancel := context.WithTimeout(ctx, shutdownGrace)
 	defer cancel()
