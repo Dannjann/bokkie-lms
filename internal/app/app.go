@@ -1,0 +1,161 @@
+// Package app wires the running system together and owns its lifecycle.
+//
+// Start and Stop are deliberately separate from any command line: task 1.7 has
+// the service manager call them directly, and a Windows service stop is not a
+// SIGTERM. Keeping the lifecycle here means there is one shutdown path, whether
+// it was triggered by Ctrl-C, systemd, launchd, or the Windows SCM.
+package app
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"time"
+
+	"github.com/Dannjann/bokkie-lms/internal/api"
+	"github.com/Dannjann/bokkie-lms/internal/config"
+	"github.com/Dannjann/bokkie-lms/internal/db"
+)
+
+// shutdownGrace is how long in-flight requests get to finish before the server
+// stops waiting. Long enough for a report to finish rendering, short enough
+// that a reboot is not held up by a stuck client.
+const shutdownGrace = 15 * time.Second
+
+// readHeaderTimeout defends against a client that opens a connection and never
+// finishes its request. There is deliberately no write timeout: a long report
+// download is a legitimate slow response, and cutting it off mid-stream would
+// look like a corrupt file.
+const readHeaderTimeout = 10 * time.Second
+
+// App is a configured, not-yet-listening system.
+type App struct {
+	cfg config.Config
+	log *slog.Logger
+	db  *sql.DB
+	srv *http.Server
+
+	listener net.Listener
+	serveErr chan error
+}
+
+// New opens the database, brings the schema up to date and builds the HTTP
+// handler. It does not listen — that is Start, so a port already in use is
+// reported by whoever asked for the server to start.
+func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error) {
+	database, err := db.Open(ctx, cfg.DatabasePath())
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Migrate(ctx, database, log); err != nil {
+		database.Close()
+		return nil, err
+	}
+
+	handler := api.NewHandler(api.Deps{
+		Logger:  log,
+		DB:      database,
+		Started: time.Now(),
+	})
+
+	return &App{
+		cfg: cfg,
+		log: log,
+		db:  database,
+		srv: &http.Server{
+			Handler:           handler,
+			ReadHeaderTimeout: readHeaderTimeout,
+			IdleTimeout:       60 * time.Second,
+			ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+		},
+		serveErr: make(chan error, 1),
+	}, nil
+}
+
+// Start binds the port and begins serving in the background. It returns once
+// the listener is open, so a caller that gets a nil error knows the station can
+// reach the app — a service manager that reports "started" while the port is
+// still in use would be lying.
+func (a *App) Start() error {
+	// 0.0.0.0, not localhost: the whole point is the other counter PCs and the
+	// phones on the station WiFi.
+	addr := fmt.Sprintf("0.0.0.0:%d", a.cfg.Port)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", addr, err)
+	}
+	a.listener = listener
+
+	a.log.Info("http server listening", "addr", addr, "port", a.cfg.Port)
+
+	go func() {
+		err := a.srv.Serve(listener)
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		a.serveErr <- err
+	}()
+	return nil
+}
+
+// Stop drains in-flight requests, then closes the database. Requests are
+// allowed to finish rather than being cut off: a half-written response to a
+// payment entry is exactly the ambiguity this system exists to remove.
+func (a *App) Stop(ctx context.Context) error {
+	a.log.Info("shutting down")
+
+	ctx, cancel := context.WithTimeout(ctx, shutdownGrace)
+	defer cancel()
+
+	shutdownErr := a.srv.Shutdown(ctx)
+	if errors.Is(shutdownErr, context.DeadlineExceeded) {
+		a.log.Warn("in-flight requests did not finish within the grace period; closing anyway",
+			"grace", shutdownGrace)
+		shutdownErr = a.srv.Close()
+	}
+
+	// The serve goroutine only returns once Shutdown or Close has run.
+	if err := <-a.serveErr; err != nil && shutdownErr == nil {
+		shutdownErr = err
+	}
+	if err := a.db.Close(); err != nil && shutdownErr == nil {
+		shutdownErr = err
+	}
+
+	a.log.Info("stopped")
+	return shutdownErr
+}
+
+// Addr is the address the server actually bound, which is what the caller needs
+// when the configured port was 0 in a test.
+func (a *App) Addr() net.Addr {
+	if a.listener == nil {
+		return nil
+	}
+	return a.listener.Addr()
+}
+
+// Run starts the server and blocks until ctx is cancelled or serving fails,
+// then shuts down. This is the foreground path; the service manager in 1.7
+// drives Start and Stop itself.
+func (a *App) Run(ctx context.Context) error {
+	if err := a.Start(); err != nil {
+		a.db.Close()
+		return err
+	}
+
+	select {
+	case err := <-a.serveErr:
+		// Serving died on its own — put the error back so Stop can report it.
+		a.serveErr <- err
+	case <-ctx.Done():
+	}
+
+	// Shut down with a fresh context: ctx is already cancelled, and the drain
+	// still deserves its grace period.
+	return a.Stop(context.WithoutCancel(ctx))
+}
