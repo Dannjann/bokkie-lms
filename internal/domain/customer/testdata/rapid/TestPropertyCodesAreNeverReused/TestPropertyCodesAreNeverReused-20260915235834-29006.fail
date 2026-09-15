@@ -1,0 +1,18 @@
+# 2026/09/15 23:58:34.740602 [TestPropertyCodesAreNeverReused] [rapid] draw steps: 2
+# 2026/09/15 23:58:34.740605 [TestPropertyCodesAreNeverReused] [rapid] draw op0: "create"
+# 2026/09/15 23:58:34.740663 [TestPropertyCodesAreNeverReused] [rapid] draw op1: "deactivate"
+# 2026/09/15 23:58:34.740664 [TestPropertyCodesAreNeverReused] [rapid] draw active1: false
+# 2026/09/15 23:58:34.740665 [TestPropertyCodesAreNeverReused] [rapid] draw target1: 1
+# 2026/09/15 23:58:34.740701 [TestPropertyCodesAreNeverReused] step 1: 0 codes on the books, 1 ever issued — something was deleted
+# 
+v0.4.8#1597864642325890573
+0x0
+0x0
+0x1
+0x0
+0x0
+0x38e38e38e38e4
+0x3
+0x0
+0x0
+0x0
