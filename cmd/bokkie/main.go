@@ -5,7 +5,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -23,6 +22,7 @@ commands:
   install      install as a system service and start it
   uninstall    stop the service and remove it
   backup       write a verified backup of the database now
+               (-list, -verify <file>, -to <folder>)
 
 run "bokkie <command> -h" for the flags of a single command.
 `
@@ -46,7 +46,7 @@ func main() {
 	case "uninstall":
 		err = cmdUninstall(args)
 	case "backup":
-		err = notImplemented("backup", "2.4 — backup subsystem")
+		err = cmdBackup(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return
@@ -73,11 +73,4 @@ func cmdVersion(args []string) error {
 	}
 	fmt.Println(buildinfo.String())
 	return nil
-}
-
-// notImplemented keeps the dispatch table honest: every subcommand the operator
-// will eventually type already exists and says which task fills it in, rather
-// than failing as an unknown command.
-func notImplemented(cmd, task string) error {
-	return errors.New(cmd + ": not implemented yet (task " + task + ")")
 }
