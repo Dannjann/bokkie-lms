@@ -16,11 +16,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"time"
 
 	// The station's business dates are always rendered in Asia/Manila, and a
 	// Windows host has no system tz database at all. Embedding it keeps the
 	// single-binary promise: no zoneinfo to install next to the executable.
+	// The timezone itself is a setting, not config — see internal/settings —
+	// but the database that resolves it has to be in the binary either way.
 	_ "time/tzdata"
 
 	"github.com/Dannjann/bokkie-lms/internal/logging"
@@ -42,14 +43,12 @@ type Config struct {
 	// read from, so it can never be set by that file.
 	DataDir string `yaml:"-"`
 
-	Port     int     `yaml:"port"`
-	Timezone string  `yaml:"timezone"`
-	Log      Log     `yaml:"log"`
-	MDNS     MDNS    `yaml:"mdns"`
-	Printer  Printer `yaml:"printer"`
-	Backup   Backup  `yaml:"backup"`
+	Port    int     `yaml:"port"`
+	Log     Log     `yaml:"log"`
+	MDNS    MDNS    `yaml:"mdns"`
+	Printer Printer `yaml:"printer"`
+	Backup  Backup  `yaml:"backup"`
 
-	loc      *time.Location
 	logLevel slog.Level
 }
 
@@ -76,19 +75,24 @@ type Printer struct {
 	Queue string `yaml:"queue"`
 }
 
-// Backup configures the nightly VACUUM INTO job. Folder is usually pointed at a
-// USB stick or a second disk, so it is allowed to live outside DataDir.
+// Backup says where backup files are written.
+//
+// Only the folder lives here. When the backup runs, how many copies to keep,
+// and whether it runs at all are in the settings table instead — they are
+// business decisions someone should be able to change from the app without
+// editing a file and restarting the service. The folder cannot join them: it is
+// a path on this particular machine, usually a USB stick, and a path stored in
+// the database would be wrong the moment that database is restored onto a
+// different host.
 type Backup struct {
-	Folder    string `yaml:"folder"`
-	Retention int    `yaml:"retention"`
+	Folder string `yaml:"folder"`
 }
 
 // Defaults returns the configuration of an install with no config.yaml.
 func Defaults(dataDir string) Config {
 	return Config{
-		DataDir:  dataDir,
-		Port:     8080,
-		Timezone: "Asia/Manila",
+		DataDir: dataDir,
+		Port:    8080,
 		Log: Log{
 			Level:     "info",
 			Retention: 30,
@@ -98,8 +102,7 @@ func Defaults(dataDir string) Config {
 			Hostname: "bokkie",
 		},
 		Backup: Backup{
-			Folder:    filepath.Join(dataDir, "backups"),
-			Retention: 14,
+			Folder: filepath.Join(dataDir, "backups"),
 		},
 	}
 }
@@ -155,9 +158,6 @@ func (c *Config) validate() error {
 	if c.Port < 1 || c.Port > 65535 {
 		return fmt.Errorf("port %d is out of range 1-65535", c.Port)
 	}
-	if c.Backup.Retention < 1 {
-		return fmt.Errorf("backup.retention is %d; at least one backup must be kept", c.Backup.Retention)
-	}
 	if c.Log.Retention < 1 {
 		return fmt.Errorf("log.retention is %d; at least one day of logs must be kept", c.Log.Retention)
 	}
@@ -167,12 +167,6 @@ func (c *Config) validate() error {
 	}
 	c.logLevel = level
 
-	loc, err := time.LoadLocation(c.Timezone)
-	if err != nil {
-		return fmt.Errorf("timezone %q: %w", c.Timezone, err)
-	}
-	c.loc = loc
-
 	if c.MDNS.Enabled && c.MDNS.Hostname == "" {
 		return fmt.Errorf("mdns.hostname is empty; set a name or turn mdns off")
 	}
@@ -181,10 +175,6 @@ func (c *Config) validate() error {
 	}
 	return nil
 }
-
-// Location is the timezone business dates are rendered in. Timestamps are
-// stored in UTC; only presentation uses this.
-func (c Config) Location() *time.Location { return c.loc }
 
 // LogLevel is the parsed form of Log.Level, validated at load time.
 func (c Config) LogLevel() slog.Level { return c.logLevel }
@@ -197,13 +187,11 @@ func (c Config) LogValue() slog.Value {
 		slog.String("data_dir", c.DataDir),
 		slog.String("database", c.DatabasePath()),
 		slog.Int("port", c.Port),
-		slog.String("timezone", c.Timezone),
 		slog.String("log_level", c.Log.Level),
 		slog.Int("log_retention_days", c.Log.Retention),
 		slog.Bool("mdns_enabled", c.MDNS.Enabled),
 		slog.String("mdns_hostname", c.MDNS.Hostname),
 		slog.String("backup_folder", c.Backup.Folder),
-		slog.Int("backup_retention", c.Backup.Retention),
 		slog.String("printer_queue", c.Printer.Queue),
 	)
 }

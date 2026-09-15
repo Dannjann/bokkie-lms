@@ -18,26 +18,21 @@ func TestLoadWithoutConfigFileUsesDefaults(t *testing.T) {
 	}
 
 	want := Defaults(dir)
-	if cfg.Port != want.Port || cfg.Timezone != want.Timezone {
-		t.Errorf("got port %d tz %q, want port %d tz %q", cfg.Port, cfg.Timezone, want.Port, want.Timezone)
+	if cfg.Port != want.Port {
+		t.Errorf("port = %d, want %d", cfg.Port, want.Port)
 	}
 	if cfg.Backup.Folder != filepath.Join(dir, "backups") {
 		t.Errorf("backup folder = %q, want it inside the data dir", cfg.Backup.Folder)
-	}
-	if cfg.Location().String() != "Asia/Manila" {
-		t.Errorf("location = %q, want Asia/Manila", cfg.Location())
 	}
 }
 
 func TestLoadReadsConfigFile(t *testing.T) {
 	dir := writeConfig(t, `
 port: 9090
-timezone: UTC
 printer:
   queue: EPSON-RAW
 backup:
   folder: /mnt/usb/bokkie
-  retention: 3
 `)
 
 	cfg, err := Load(dir)
@@ -51,8 +46,8 @@ backup:
 	if cfg.Printer.Queue != "EPSON-RAW" {
 		t.Errorf("printer queue = %q, want EPSON-RAW", cfg.Printer.Queue)
 	}
-	if cfg.Backup.Folder != "/mnt/usb/bokkie" || cfg.Backup.Retention != 3 {
-		t.Errorf("backup = %+v, want /mnt/usb/bokkie keeping 3", cfg.Backup)
+	if cfg.Backup.Folder != "/mnt/usb/bokkie" {
+		t.Errorf("backup folder = %q, want /mnt/usb/bokkie", cfg.Backup.Folder)
 	}
 	if cfg.DataDir != dir {
 		t.Errorf("data dir = %q, want %q — config.yaml must not be able to move it", cfg.DataDir, dir)
@@ -63,11 +58,15 @@ backup:
 // so each of these is a boot-time error rather than a fallback to the default.
 func TestLoadRejectsBadConfig(t *testing.T) {
 	tests := map[string]string{
-		"unknown key":       "prot: 9090\n",
-		"port out of range": "port: 70000\n",
-		"no backups kept":   "backup:\n  retention: 0\n",
-		"unknown timezone":  "timezone: Mars/Olympus\n",
-		"malformed yaml":    "port: [\n",
+		"unknown key":        "prot: 9090\n",
+		"port out of range":  "port: 70000\n",
+		"log retention zero": "log:\n  retention: 0\n",
+		// timezone and backup.retention moved to the settings table in step 2,
+		// so config.yaml must now reject them rather than quietly accept a key
+		// nothing reads.
+		"timezone is a setting now":  "timezone: Asia/Manila\n",
+		"retention is a setting now": "backup:\n  retention: 3\n",
+		"malformed yaml":             "port: [\n",
 	}
 
 	for name, body := range tests {
