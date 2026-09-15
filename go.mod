@@ -1,3 +1,3 @@
-module bokkie-lms
+module github.com/Dannjann/bokkie-lms
 
-go 1.24
+go 1.27
