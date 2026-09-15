@@ -1,0 +1,77 @@
+/*
+ * Shared layout for the two screens that appear before anyone is logged in.
+ *
+ * These are deliberately plain HTML inputs rather than PrimeVue components: the
+ * login form is the one screen that must render even if a theme fails to load,
+ * and it is the screen most likely to be used on a phone over the station WiFi.
+ * Controls are sized for a fingertip and for someone in a hurry.
+ */
+
+.auth {
+  max-width: 22rem;
+  margin: 3rem auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth__title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.auth__station {
+  margin: 0;
+  color: var(--p-surface-500);
+  font-size: 0.875rem;
+}
+
+.auth__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.auth__field input {
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid var(--p-surface-300);
+  border-radius: 6px;
+  background: var(--p-surface-0);
+  color: inherit;
+}
+
+.auth__field input:focus-visible {
+  outline: 2px solid var(--p-primary-color);
+  outline-offset: 1px;
+}
+
+.auth__field small {
+  color: var(--p-surface-500);
+}
+
+.auth__error {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.auth__submit {
+  padding: 0.7rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  background: var(--p-primary-color);
+  color: var(--p-primary-contrast-color);
+  cursor: pointer;
+}
+
+.auth__submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

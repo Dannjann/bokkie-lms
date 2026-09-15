@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { computed } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import AppHeader from '@/components/AppHeader.vue'
+import { useSessionStore } from '@/stores/session'
+
+const route = useRoute()
+const { isLoggedIn } = storeToRefs(useSessionStore())
+
+// The header carries the Lock and Sign out controls, so it has nothing to show
+// on the two screens that exist precisely because nobody is signed in.
+const showHeader = computed(() => isLoggedIn.value && !route.meta.public)
 </script>
 
 <template>
-  <AppHeader />
+  <AppHeader v-if="showHeader" />
   <main class="app-main">
     <RouterView />
   </main>
