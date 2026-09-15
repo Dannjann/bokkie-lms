@@ -23,6 +23,8 @@ commands:
   uninstall    stop the service and remove it
   backup       write a verified backup of the database now
                (-list, -verify <file>, -to <folder>)
+  update       replace the installed binary with a signed release folder
+               (-check to inspect one without changing anything)
 
 run "bokkie <command> -h" for the flags of a single command.
 `
@@ -47,6 +49,8 @@ func main() {
 		err = cmdUninstall(args)
 	case "backup":
 		err = cmdBackup(args)
+	case "update":
+		err = cmdUpdate(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return

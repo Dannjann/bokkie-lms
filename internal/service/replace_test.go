@@ -1,6 +1,8 @@
 package service
 
 import (
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -126,4 +128,78 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(content)
+}
+
+// useInstallPath points the package at a temporary target for one test, so the
+// swap and its rollback can be exercised without touching the real one.
+func useInstallPath(t *testing.T, path string) {
+	t.Helper()
+	previous := installPath
+	installPath = func() (string, error) { return path, nil }
+	t.Cleanup(func() { installPath = previous })
+}
+
+func TestSwapReplacesTheInstalledBinary(t *testing.T) {
+	dir := t.TempDir()
+	target := writeFile(t, filepath.Join(dir, "bokkie"), "old")
+	source := writeFile(t, filepath.Join(dir, "release", "bokkie"), "new")
+	useInstallPath(t, target)
+
+	if _, err := Swap(quietLogger(), source); err != nil {
+		t.Fatalf("Swap: %v", err)
+	}
+	if got := readFile(t, target); got != "new" {
+		t.Errorf("installed binary contains %q, want %q", got, "new")
+	}
+}
+
+// The rollback is the whole reason an update is safe to run on a machine nobody
+// is watching, so it gets a test of its own rather than being assumed.
+func TestSwapRollsBackToTheBinaryItReplaced(t *testing.T) {
+	dir := t.TempDir()
+	target := writeFile(t, filepath.Join(dir, "bokkie"), "old")
+	source := writeFile(t, filepath.Join(dir, "release", "bokkie"), "new")
+	useInstallPath(t, target)
+
+	restore, err := Swap(quietLogger(), source)
+	if err != nil {
+		t.Fatalf("Swap: %v", err)
+	}
+	if err := restore(); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	if got := readFile(t, target); got != "old" {
+		t.Errorf("after rollback the installed binary contains %q, want %q", got, "old")
+	}
+	if _, err := os.Stat(target + displacedSuffix); !os.IsNotExist(err) {
+		t.Errorf("the rejected binary was left at %s", target+displacedSuffix)
+	}
+	// The release folder is not ours to tidy up — it is somebody's USB stick.
+	if got := readFile(t, source); got != "new" {
+		t.Errorf("the release folder was disturbed: source contains %q", got)
+	}
+}
+
+// Installing onto a host that has no bokkie yet still has to be reversible.
+func TestSwapRollsBackToNothingWhenThereWasNothing(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "bokkie")
+	source := writeFile(t, filepath.Join(dir, "release", "bokkie"), "new")
+	useInstallPath(t, target)
+
+	restore, err := Swap(quietLogger(), source)
+	if err != nil {
+		t.Fatalf("Swap: %v", err)
+	}
+	if err := restore(); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Errorf("rollback left a binary at %s, but there was none before the swap", target)
+	}
+}
+
+func quietLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

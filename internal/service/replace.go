@@ -7,6 +7,13 @@ import (
 	"path/filepath"
 )
 
+// installPath is where the binary belongs on this host. It is a variable only
+// so that a test can point the swap-and-roll-back sequence at a temporary
+// directory: that path is the one piece of this package that must work first
+// time on a station host, and it would otherwise be the one piece with no test
+// covering it.
+var installPath = defaultInstallPath
+
 // Suffixes of the two temporary names replaceFile works through. They sit
 // beside the target rather than in a temp directory because a rename across
 // filesystems is a copy, and a copy is not atomic.

@@ -15,7 +15,7 @@ import (
 // drive is not C:, or a Windows installed in another language, has the folder
 // somewhere else, and a hardcoded path would install into a directory that does
 // not exist rather than failing usefully.
-func installPath() (string, error) {
+func defaultInstallPath() (string, error) {
 	base := os.Getenv("ProgramFiles")
 	if base == "" {
 		return "", fmt.Errorf("%%ProgramFiles%% is not set, so there is nowhere obvious to install bokkie; " +

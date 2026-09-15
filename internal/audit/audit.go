@@ -37,7 +37,26 @@ const (
 	// install that already has an administrator. It is either a confused
 	// operator or someone trying their luck, and both are worth a row.
 	ActionSetupRefused = "setup.refused"
+
+	// Replacing the binary that serves the ledger is the most consequential
+	// thing anyone does to this system short of restoring a backup, and until
+	// now it left no trace at all. All three outcomes are recorded: a rollback
+	// is the one worth being able to find months later, when the question is
+	// why a station sat on an old version.
+	ActionUpdateApplied    = "system.update.applied"
+	ActionUpdateFailed     = "system.update.failed"
+	ActionUpdateRolledBack = "system.update.rolled_back"
+	ActionBackupWritten    = "system.backup.written"
 )
+
+// ConsoleUser is the username recorded for something done at the host's command
+// line rather than through the app.
+//
+// It is not a real account and cannot be one: these actions happen with nobody
+// signed in, and inventing a user id for them would make the audit log claim
+// something it does not know. The row still says what happened and when, which
+// is the part that matters — "at the console" is a truthful answer to "who".
+const ConsoleUser = "console"
 
 // Entry is one thing that happened. Everything except Action is optional,
 // because the useful entries are not all shaped alike: a failed login has a

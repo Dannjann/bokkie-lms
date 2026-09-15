@@ -19,52 +19,64 @@ const (
 )
 
 // verifyRunning polls /healthz until the freshly installed service answers.
+func verifyRunning(log *slog.Logger, port int) error {
+	_, err := WaitUntilHealthy(log, port)
+	return err
+}
+
+// WaitUntilHealthy polls /healthz until the service answers, and reports the
+// version that answered.
 //
 // It checks the *body*, not just the status code: if something else already
 // owns the port — which is how this failure usually presents — the probe would
-// otherwise be satisfied by a completely unrelated server.
-func verifyRunning(log *slog.Logger, port int) error {
+// otherwise be satisfied by a completely unrelated server. Returning the
+// version is what lets an update confirm that the process now serving is the
+// one it just installed, rather than an old one that never restarted.
+func WaitUntilHealthy(log *slog.Logger, port int) (string, error) {
 	url := "http://127.0.0.1:" + strconv.Itoa(port) + "/healthz"
 	client := &http.Client{Timeout: 2 * time.Second}
 	deadline := time.Now().Add(startupProbeTimeout)
 
 	var lastErr error
 	for time.Now().Before(deadline) {
-		lastErr = probe(client, url)
+		var health healthBody
+		health, lastErr = probe(client, url)
 		if lastErr == nil {
-			log.Info("the service is answering", "url", url)
-			return nil
+			log.Info("the service is answering", "url", url, "version", health.Version)
+			return health.Version, nil
 		}
 		time.Sleep(startupProbeInterval)
 	}
 
-	return fmt.Errorf(
-		"the service was installed but is not answering on port %d after %s: %w.\n"+
+	return "", fmt.Errorf(
+		"the service is not answering on port %d after %s: %w.\n"+
 			"Check whether something else already uses that port, and read the log in the data directory",
 		port, startupProbeTimeout, lastErr)
 }
 
-func probe(client *http.Client, url string) error {
+type healthBody struct {
+	Status  string `json:"status"`
+	Version string `json:"version"`
+}
+
+func probe(client *http.Client, url string) (healthBody, error) {
+	var health healthBody
+
 	resp, err := client.Get(url)
 	if err != nil {
-		return err
+		return health, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 	if err != nil {
-		return fmt.Errorf("read the health response: %w", err)
+		return health, fmt.Errorf("read the health response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("health check returned %d", resp.StatusCode)
-	}
-
-	var health struct {
-		Status  string `json:"status"`
-		Version string `json:"version"`
+		return health, fmt.Errorf("health check returned %d", resp.StatusCode)
 	}
 	if err := json.Unmarshal(body, &health); err != nil || health.Status == "" {
-		return fmt.Errorf("port %s is answering, but not with bokkie's health response — is another program using it?", url)
+		return health, fmt.Errorf("port %s is answering, but not with bokkie's health response — is another program using it?", url)
 	}
-	return nil
+	return health, nil
 }

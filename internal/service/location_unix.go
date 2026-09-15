@@ -11,6 +11,6 @@ package service
 // file. That check exists because the obvious thing to type is
 // `sudo ./bokkie install` from a 0700 home directory, and the resulting
 // service has nothing it can execute.
-func installPath() (string, error) {
+func defaultInstallPath() (string, error) {
 	return "/usr/local/bin/bokkie", nil
 }
