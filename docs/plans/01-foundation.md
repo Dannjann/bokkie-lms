@@ -1,6 +1,7 @@
 # Step 1 — Build and Runtime Foundation
 
-**Status:** not started · **Depends on:** nothing · **Blocks:** Steps 2–10
+**Status:** tasks 1.1–1.7 built · gate not yet passed (the host drill is manual)
+· **Depends on:** nothing · **Blocks:** Steps 2–10
 
 ---
 
@@ -28,6 +29,51 @@ service lifecycle all get baked into how everything else is written.
 > this doc warns about hardest in 1.7, a Windows service that only runs while a
 > user is logged in. Do not mark Step 1 green without carrying this caveat
 > forward to Step 10.
+
+---
+
+## Where this stands
+
+All seven tasks are implemented and `make ci` is green: five binaries,
+`CGO_ENABLED=0`, `go vet` per GOOS, tests passing. What is **not** done is the
+manual gate below — it needs a host, a second machine and a phone, and on this
+machine it needs `sudo`.
+
+| Task | Built | Verified how |
+|---|---|---|
+| 1.1 build matrix | ✅ | `make ci` |
+| 1.2 config | ✅ | unit tests; `--data-dir` exercised end to end |
+| 1.3 logging | ✅ | unit tests for rotation and pruning |
+| 1.4 SQLite + migrations | ✅ | unit tests: fresh migrate, no-op re-boot, refusal on a newer schema |
+| 1.5 HTTP server | ✅ | unit tests + reached from the LAN address; drain-on-shutdown test |
+| 1.6 SPA | ✅ | production binary serves the SPA from a directory with no `web/`; `-dev` proxies to Vite |
+| 1.7 service, firewall, mDNS | ⚠️ built, install drill not run | see the gate below |
+
+### Deviations from this plan, and why
+
+- **PrimeVue 5, vue-router 5, Pinia 4** rather than the PrimeVue 4 written down
+  when this was drafted — they are the current majors, and pinning a greenfield
+  project to a superseded one buys nothing. `@primeuix/themes` carries Aura.
+  TypeScript is held at 5.x because `vue-tsc` does not support 7 yet.
+- **Two config settings the task list did not name:** `log.level` /
+  `log.retention` (1.3 needs a retention cap) and `mdns.enabled` /
+  `mdns.hostname` (1.7 needs a name to publish).
+- **`bokkie run` goes through the service wrapper even in the foreground.**
+  One lifecycle path rather than two, which is what makes the Windows stop
+  signal — not a signal at all — behave like Ctrl-C.
+- **mDNS failure is a warning, not a fatal error.** The app is still reachable
+  by IP; refusing to serve the station because a name could not be advertised
+  is the worse outcome.
+
+### Still unverified
+
+- **Windows SCM and systemd** — no host available. The reboot-with-nobody-
+  logged-in test, the account creation, the firewall rules and the Avahi
+  fallback are all written but have never run. Carry this to Step 10.
+- **launchd** — the install drill needs `sudo` and has not been run either.
+- **`bokkie.local` resolution** — the responder binds and advertises (confirmed
+  in the log), but resolution could not be checked from this machine. It has to
+  be tested from a second machine and a phone, which the gate requires anyway.
 
 ---
 
@@ -194,21 +240,26 @@ the station reboots one morning.
 ## Verification
 
 ```bash
-make ci          # vet per GOOS + tests + all five builds, CGO_ENABLED=0
+make ci          # vet per GOOS + tests + all five builds, CGO_ENABLED=0  ✅ passing
 make build-all   # five binaries in dist/
+make release     # web-build first, so the binaries carry the real SPA
 ```
 
 **All five must succeed with no C compiler installed.** If any target starts
 demanding a cross-toolchain, a cgo dependency has crept in — almost certainly the
 SQLite driver — and the host flexibility in Decision 5 is quietly gone.
 
-Manual, on the chosen host:
+Manual, on the chosen host — **none of these have been run yet:**
 
-1. `bokkie install`, reboot, confirm the service is running with nobody logged in.
+1. `sudo bokkie install`, reboot, confirm the service is running with nobody
+   logged in.
 2. Load the app shell from a second PC and from a phone via `bokkie.local`.
 3. `kill -9` the process; confirm the service manager restarts it and `/healthz`
    recovers.
 4. Delete the data dir, restart, confirm it rebuilds cleanly from nothing.
+
+Step 4 is the only one already proven: a fresh data directory migrates, and a
+second boot is a no-op.
 
 ## Risks
 
