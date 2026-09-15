@@ -14,11 +14,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/api"
 	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/db"
+	"github.com/Dannjann/bokkie-lms/web"
 )
 
 // shutdownGrace is how long in-flight requests get to finish before the server
@@ -43,10 +45,18 @@ type App struct {
 	serveErr chan error
 }
 
+// Options are the run-time choices that are not configuration: things decided
+// by how the process was started rather than by config.yaml.
+type Options struct {
+	// DevProxy, when set, serves the frontend from the Vite dev server instead
+	// of the copy embedded in this binary.
+	DevProxy *url.URL
+}
+
 // New opens the database, brings the schema up to date and builds the HTTP
 // handler. It does not listen — that is Start, so a port already in use is
 // reported by whoever asked for the server to start.
-func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error) {
+func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options) (*App, error) {
 	database, err := db.Open(ctx, cfg.DatabasePath())
 	if err != nil {
 		return nil, err
@@ -56,10 +66,18 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		return nil, err
 	}
 
+	spa, err := web.FS()
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("open embedded frontend: %w", err)
+	}
+
 	handler := api.NewHandler(api.Deps{
-		Logger:  log,
-		DB:      database,
-		Started: time.Now(),
+		Logger:   log,
+		DB:       database,
+		Started:  time.Now(),
+		SPA:      spa,
+		DevProxy: opts.DevProxy,
 	})
 
 	return &App{

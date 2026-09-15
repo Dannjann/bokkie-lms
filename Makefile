@@ -21,26 +21,43 @@ export CGO_ENABLED := 0
 
 GOOSES := windows darwin linux
 
-.PHONY: all setup dev test vet-all build-all clean ci help
+.PHONY: all setup dev web-dev web-install web-build test vet-all build-all release clean ci help
 
 all: build-all
 
 help:
-	@echo "setup      install the pre-push hook (run once after clone)"
-	@echo "dev        run the server in the foreground"
-	@echo "test       go test ./..."
-	@echo "vet-all    go vet once per GOOS, so build-tagged files are type-checked"
-	@echo "build-all  five release binaries into dist/"
-	@echo "ci         vet-all + test + build-all — the gate"
-	@echo "clean      remove dist/ and the generated web/dist stub"
+	@echo "setup       install the pre-push hook (run once after clone)"
+	@echo "dev         run the server against the Vite dev server (run web-dev too)"
+	@echo "web-dev     run the Vite dev server with hot reload"
+	@echo "web-build   build the SPA into web/dist"
+	@echo "test        go test ./..."
+	@echo "vet-all     go vet once per GOOS, so build-tagged files are type-checked"
+	@echo "build-all   five binaries into dist/, embedding whatever web/dist holds"
+	@echo "release     web-build + build-all — binaries with the real SPA inside"
+	@echo "ci          vet-all + test + build-all — the gate"
+	@echo "clean       remove dist/ and the generated web/dist stub"
 
 setup:
 	git config core.hooksPath .githooks
 	@echo "pre-push hook active: 'make ci' runs before every push (--no-verify to skip)"
 
-# Filled in properly at task 1.6, when the Vite dev server exists to proxy to.
+# Development is two processes: Vite serving the frontend with hot reload, and
+# bokkie proxying to it. Both are reached on bokkie's port, so there is one
+# origin in development and in production. Run `make web-dev` in another
+# terminal.
 dev:
-	go run ./cmd/bokkie run
+	go run ./cmd/bokkie run -dev
+
+web-dev: web-install
+	cd web && npm run dev
+
+web-install:
+	cd web && npm install
+
+# The real SPA, which build-all then embeds. Kept separate from build-all so a
+# Go-only change does not need node installed.
+web-build: web-install
+	cd web && npm run build
 
 test:
 	go test ./...
@@ -69,6 +86,8 @@ build-all: web/dist
 	GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/bokkie-linux-amd64  ./cmd/bokkie
 	GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/bokkie-linux-arm64  ./cmd/bokkie
 	@echo "--- dist ---" && ls -1 dist/
+
+release: web-build build-all
 
 ci: vet-all test build-all
 	@echo "ci: ok"

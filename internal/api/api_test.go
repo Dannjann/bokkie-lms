@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	bokkiedb "github.com/Dannjann/bokkie-lms/internal/db"
@@ -121,4 +122,45 @@ func openTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { database.Close() })
 	return database
+}
+
+// Deep links and refreshes must work: an unknown path is the SPA router's
+// business, not a 404. The exception is /api, which has to stay JSON.
+func TestSPAServesShellForUnknownPathsButNotForAPI(t *testing.T) {
+	deps := testDeps(t, openTestDB(t))
+	deps.SPA = fstest.MapFS{
+		"index.html":          {Data: []byte("<!doctype html><div id=app>")},
+		"assets/index-abc.js": {Data: []byte("console.log(1)")},
+	}
+	handler := NewHandler(deps)
+
+	t.Run("deep link gets the shell", func(t *testing.T) {
+		resp := do(t, handler, http.MethodGet, "/customers/BA-0001")
+		if resp.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", resp.Code)
+		}
+		if !strings.Contains(resp.Body.String(), "id=app") {
+			t.Errorf("body = %q, want the app shell", resp.Body)
+		}
+		if cc := resp.Header().Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("shell Cache-Control = %q, want no-cache so an upgrade is not pinned to old assets", cc)
+		}
+	})
+
+	t.Run("hashed asset is served and cached hard", func(t *testing.T) {
+		resp := do(t, handler, http.MethodGet, "/assets/index-abc.js")
+		if resp.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.Code)
+		}
+		if !strings.Contains(resp.Header().Get("Cache-Control"), "immutable") {
+			t.Errorf("asset Cache-Control = %q, want immutable", resp.Header().Get("Cache-Control"))
+		}
+	})
+
+	t.Run("unknown api path is still JSON", func(t *testing.T) {
+		resp := do(t, handler, http.MethodGet, "/api/customers")
+		if ct := resp.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+			t.Errorf("content type = %q, want JSON — the SPA fallback must not swallow /api", ct)
+		}
+	})
 }

@@ -8,8 +8,10 @@ package api
 
 import (
 	"database/sql"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -19,6 +21,15 @@ type Deps struct {
 	Logger  *slog.Logger
 	DB      *sql.DB
 	Started time.Time
+
+	// SPA is the built frontend, embedded in the binary. Ignored when DevProxy
+	// is set.
+	SPA fs.FS
+
+	// DevProxy, when set, forwards everything that is not API to the Vite dev
+	// server instead of serving SPA. This is the one flag that switches
+	// between development and production serving.
+	DevProxy *url.URL
 }
 
 // NewHandler builds the router and wraps it in the middleware chain.
@@ -36,10 +47,14 @@ func NewHandler(d Deps) http.Handler {
 	// which is a baffling thing to debug from a counter PC.
 	mux.HandleFunc("/api/", notFoundJSON)
 
-	// Placeholder root until task 1.6 embeds the SPA.
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "bokkie is running; the app shell arrives in task 1.6", http.StatusOK)
-	})
+	// Everything else is the app: the embedded SPA in production, or the Vite
+	// dev server in development. Both are reached on bokkie's own port, so
+	// there is one origin either way.
+	if d.DevProxy != nil {
+		mux.Handle("/", newDevProxy(d.DevProxy, d.Logger))
+	} else {
+		mux.Handle("/", newSPAHandler(d.SPA))
+	}
 
 	return withRequestID(
 		withRequestLog(d.Logger,

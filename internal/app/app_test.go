@@ -83,7 +83,7 @@ func newTestApp(t *testing.T) *App {
 		t.Fatalf("ensure dirs: %v", err)
 	}
 
-	server, err := New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server, err := New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
