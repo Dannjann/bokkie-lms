@@ -48,6 +48,11 @@ type Options struct {
 	DataDir string
 	// Port is opened in the host firewall.
 	Port int
+	// LogDir is where the service manager is told to put the process's stdout
+	// and stderr. It must be a directory the service account can write to:
+	// launchd refuses to spawn a job whose output files it cannot open, and
+	// the default (/var/log) belongs to root, so the job silently never starts.
+	LogDir string
 }
 
 // Run runs handler under the host's service manager, or in the foreground when
@@ -188,6 +193,11 @@ func newService(prog ksvc.Interface, opts Options, account, executable string) (
 			"Wants=network-online.target",
 		},
 		Option: ksvc.KeyValue{
+			// Not cosmetic. See Options.LogDir: the default would make launchd
+			// refuse to start the job at all. bokkie's own log is the record;
+			// these two files stay empty because the service runs with
+			// --console=false.
+			"LogDirectory":           opts.LogDir,
 			"KeepAlive":              true,      // launchd: restart if it dies
 			"RunAtLoad":              true,      // launchd: start at boot
 			"Restart":                "always",  // systemd

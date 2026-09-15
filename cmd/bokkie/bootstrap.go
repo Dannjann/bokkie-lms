@@ -68,7 +68,11 @@ func serviceCommand(name string, args []string) (service.Options, *slog.Logger, 
 	if err != nil {
 		return service.Options{}, nil, nil, err
 	}
-	return service.Options{DataDir: cfg.DataDir, Port: cfg.Port}, log, closeLog, nil
+	return service.Options{
+		DataDir: cfg.DataDir,
+		Port:    cfg.Port,
+		LogDir:  cfg.LogDir(),
+	}, log, closeLog, nil
 }
 
 // itoa keeps the call sites reading as prose.

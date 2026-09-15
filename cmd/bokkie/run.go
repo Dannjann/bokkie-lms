@@ -43,7 +43,11 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	return service.Run(log, server, service.Options{DataDir: cfg.DataDir, Port: cfg.Port})
+	return service.Run(log, server, service.Options{
+		DataDir: cfg.DataDir,
+		Port:    cfg.Port,
+		LogDir:  cfg.LogDir(),
+	})
 }
 
 // runOptions turns the -dev flag into the one choice it controls: whether the

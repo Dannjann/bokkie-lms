@@ -77,6 +77,12 @@ reported success — and nothing ran. Two reasons, both now handled in code:
   fixes it. **Install from a system path, never from the build directory** —
   `dist/` is also wiped by `make clean`, which would break the service at the
   next boot.
+- **launchd would not spawn the job at all.** `kardianos/service` points the
+  daemon's stdout and stderr at `/var/log/<name>.log`, which a non-root service
+  account cannot create — and launchd refuses to start a job whose output files
+  it cannot open, silently and with no log to say so. The install now sets
+  `LogDirectory` to the data directory's `logs/`, which the service account
+  already owns. Watch for the equivalent on the first systemd host.
 - **The install reported success without checking.** A service manager says
   "started" as soon as it has spawned the process. `install` now polls
   `/healthz` for up to 15s and validates the response body, so a port already
