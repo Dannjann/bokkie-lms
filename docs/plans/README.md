@@ -15,8 +15,9 @@ Station**, Pintor Gamu, Isabela.
 | [02.5-install-update.md](02.5-install-update.md) | Step 2.5 — install location, signed USB updates, first inch | 🟨 Built, gate pending |
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
+| [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | ⬜ Planned |
 
-Steps 4–10 are **features**. They are listed in the roadmap in
+Steps 5–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
 we reach it, not now.
 
@@ -61,6 +62,15 @@ audits a cache found disagreeing with the entries behind it. Nothing is visible
 in the UI, which is what this step was for. See
 [03-ledger-core.md](03-ledger-core.md) for the decisions taken while building —
 two of them amend what the plan originally said.
+
+**Step 4 is planned and nothing is built yet.** It is the first step that puts
+anything on screen: the customer master, `BA-####` codes assigned by the server
+and never editable, server-side search, and a CSV import of the 364 legacy
+customers with a dry run that is the real import minus the commit. Master data
+only — no money, and no way to post a ledger entry — so the one bulk write in
+the system is structurally unable to put a wrong number into the record. See
+[04-customers.md](04-customers.md) for the five decisions settled before
+building.
 
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,

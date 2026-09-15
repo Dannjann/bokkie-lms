@@ -456,7 +456,7 @@ it.**
 | 2 | **Identity, audit, backup** | [02-identity-audit.md](02-identity-audit.md) | Step 1 |
 | 2.5 | **Install location, signed USB updates, first inch** | [02.5-install-update.md](02.5-install-update.md) | Step 2 |
 | 3 | **Money & ledger core** | [03-ledger-core.md](03-ledger-core.md) | Step 2 |
-| 4 | Customers — CRUD, `BA-####` codes, search, **CSV import** | *later* | Step 3 |
+| 4 | **Customers — CRUD, `BA-####` codes, search, CSV import** | [04-customers.md](04-customers.md) | Step 3 |
 | 5 | Advances — voucher + line grid, draft→posted, void via reversal | *later* | Step 4 |
 | 6 | Payments — entry, allocation, customer statement | *later* | Step 5, Q5 |
 | 7 | Interest — posting run, preview, reversible | *later* | **Blocked on Q1** |
