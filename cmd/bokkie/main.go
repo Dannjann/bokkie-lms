@@ -22,7 +22,7 @@ commands:
   install      install as a system service and start it
   uninstall    stop the service and remove it
   backup       write a verified backup of the database now
-               (-list, -verify <file>, -to <folder>)
+               (-list, -verify <file>, -to <folder>, -set-folder <folder>)
   update       replace the installed binary with a signed release folder
                (-check to inspect one without changing anything)
 

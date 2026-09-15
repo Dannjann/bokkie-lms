@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/Dannjann/bokkie-lms/internal/backup"
+	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/db"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
@@ -25,6 +26,7 @@ func cmdBackup(args []string) error {
 	folder := fs.String("to", "", "write the backup here instead of the configured folder")
 	list := fs.Bool("list", false, "list existing backups instead of writing one")
 	verify := fs.String("verify", "", "check an existing backup file and print its row counts")
+	setFolder := fs.String("set-folder", "", "write future backups here — a USB stick or a second disk")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -42,6 +44,12 @@ func cmdBackup(args []string) error {
 		fmt.Printf("%s verified\n", *verify)
 		printCounts(counts)
 		return nil
+	}
+
+	// -set-folder is likewise its own command. It changes where backups go and
+	// writes nothing, so it does not need the database open.
+	if *setFolder != "" {
+		return setBackupFolder(*dataDir, *setFolder)
 	}
 
 	cfg, log, closeLog, err := bootstrap(*dataDir, true)
@@ -99,6 +107,25 @@ func cmdBackup(args []string) error {
 	for _, pruned := range result.Pruned {
 		fmt.Printf("  pruned old backup %s\n", pruned)
 	}
+	return nil
+}
+
+// setBackupFolder points backups at a new destination, usually a USB stick.
+//
+// The folder is checked before it is saved, and the restart is spelled out
+// rather than implied: the folder is read when the service starts, so a change
+// made at the counter does nothing until the service is restarted, and an owner
+// who does not know that will believe their backups are on the stick when they
+// are not.
+func setBackupFolder(dataDir, folder string) error {
+	cfg, err := config.SetBackupFolder(dataDir, folder)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("backups will be written to %s\n", cfg.Backup.Folder)
+	fmt.Printf("  saved in %s\n", cfg.ConfigPath())
+	fmt.Printf("  restart the service for this to take effect, then run `bokkie backup` to confirm\n")
 	return nil
 }
 

@@ -4,6 +4,7 @@ export interface Health {
   status: string
   version: string
   commit: string
+  built: string
   uptime_seconds: number
   database: string
 }

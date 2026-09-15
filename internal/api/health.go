@@ -14,9 +14,13 @@ import (
 const healthPingTimeout = 2 * time.Second
 
 type healthResponse struct {
-	Status        string `json:"status"`
-	Version       string `json:"version"`
-	Commit        string `json:"commit"`
+	Status  string `json:"status"`
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	// Built is here for the support call: "which build is on that machine?"
+	// is answered by version alone only while versions are being tagged
+	// properly, and the date settles it either way.
+	Built         string `json:"built"`
 	UptimeSeconds int64  `json:"uptime_seconds"`
 	Database      string `json:"database"`
 }
@@ -33,6 +37,7 @@ func healthHandler(d Deps) http.HandlerFunc {
 			Status:        "ok",
 			Version:       buildinfo.Version,
 			Commit:        buildinfo.Commit,
+			Built:         buildinfo.Date,
 			UptimeSeconds: int64(time.Since(d.Started).Seconds()),
 			Database:      "ok",
 		}

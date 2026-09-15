@@ -24,6 +24,8 @@ onMounted(() => store.load())
     <dd>{{ health.status }}</dd>
     <dt>Build</dt>
     <dd>{{ health.version }} ({{ health.commit }})</dd>
+    <dt>Built</dt>
+    <dd>{{ health.built }}</dd>
     <dt>Database</dt>
     <dd>{{ health.database }}</dd>
     <dt>Uptime</dt>
