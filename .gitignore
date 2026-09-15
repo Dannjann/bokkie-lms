@@ -1,0 +1,32 @@
+# Build output
+/dist/
+
+# Go
+*.test
+*.out
+
+# Frontend
+node_modules/
+/web/dist/
+
+# Local database and runtime data
+*.db
+*.db-wal
+*.db-shm
+/data/
+/logs/
+/backups/
+
+# Secrets and local config
+.env
+.env.local
+config.local.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
