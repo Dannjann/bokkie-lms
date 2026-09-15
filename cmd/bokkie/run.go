@@ -5,20 +5,19 @@ import (
 	"flag"
 	"fmt"
 	"net/url"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/Dannjann/bokkie-lms/internal/app"
+	"github.com/Dannjann/bokkie-lms/internal/service"
 )
 
 // defaultViteURL is where `make web-dev` puts the Vite dev server.
 const defaultViteURL = "http://localhost:5173"
 
-// cmdRun runs the server in the foreground until interrupted. The service
-// manager path in task 1.7 does not come through here — it drives the same
-// app.Start and app.Stop directly, because a Windows service stop is not a
-// signal.
+// cmdRun runs the server: in the foreground when it was typed at a terminal,
+// and under the host's service manager when that started it. Both go through
+// internal/service, so the lifecycle that gets exercised daily in development
+// is the same one the station depends on — and a Windows service stop, which
+// is not a signal, is handled by the same code path as Ctrl-C.
 func cmdRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	dataDir := fs.String("data-dir", "", "override the per-OS data directory")
@@ -40,14 +39,11 @@ func cmdRun(args []string) error {
 	}
 	defer closeLog.Close()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	server, err := app.New(ctx, cfg, log, opts)
+	server, err := app.New(context.Background(), cfg, log, opts)
 	if err != nil {
 		return err
 	}
-	return server.Run(ctx)
+	return service.Run(log, server, service.Options{DataDir: cfg.DataDir, Port: cfg.Port})
 }
 
 // runOptions turns the -dev flag into the one choice it controls: whether the

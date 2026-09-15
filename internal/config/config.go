@@ -45,6 +45,7 @@ type Config struct {
 	Port     int     `yaml:"port"`
 	Timezone string  `yaml:"timezone"`
 	Log      Log     `yaml:"log"`
+	MDNS     MDNS    `yaml:"mdns"`
 	Printer  Printer `yaml:"printer"`
 	Backup   Backup  `yaml:"backup"`
 
@@ -58,6 +59,14 @@ type Config struct {
 type Log struct {
 	Level     string `yaml:"level"`
 	Retention int    `yaml:"retention"`
+}
+
+// MDNS configures how the station finds the host. Hostname is the name
+// published on the LAN, so the app is reached at http://<hostname>.local:<port>
+// however DHCP moves the host's address around.
+type MDNS struct {
+	Enabled  bool   `yaml:"enabled"`
+	Hostname string `yaml:"hostname"`
 }
 
 // Printer configures the dot-matrix slip path. An empty queue disables slip
@@ -83,6 +92,10 @@ func Defaults(dataDir string) Config {
 		Log: Log{
 			Level:     "info",
 			Retention: 30,
+		},
+		MDNS: MDNS{
+			Enabled:  true,
+			Hostname: "bokkie",
 		},
 		Backup: Backup{
 			Folder:    filepath.Join(dataDir, "backups"),
@@ -160,6 +173,9 @@ func (c *Config) validate() error {
 	}
 	c.loc = loc
 
+	if c.MDNS.Enabled && c.MDNS.Hostname == "" {
+		return fmt.Errorf("mdns.hostname is empty; set a name or turn mdns off")
+	}
 	if c.Backup.Folder == "" {
 		c.Backup.Folder = filepath.Join(c.DataDir, "backups")
 	}
@@ -184,6 +200,8 @@ func (c Config) LogValue() slog.Value {
 		slog.String("timezone", c.Timezone),
 		slog.String("log_level", c.Log.Level),
 		slog.Int("log_retention_days", c.Log.Retention),
+		slog.Bool("mdns_enabled", c.MDNS.Enabled),
+		slog.String("mdns_hostname", c.MDNS.Hostname),
 		slog.String("backup_folder", c.Backup.Folder),
 		slog.Int("backup_retention", c.Backup.Retention),
 		slog.String("printer_queue", c.Printer.Queue),

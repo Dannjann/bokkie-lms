@@ -1,12 +1,15 @@
 package main
 
 import (
+	"flag"
 	"io"
 	"log/slog"
+	"strconv"
 
 	"github.com/Dannjann/bokkie-lms/internal/buildinfo"
 	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/logging"
+	"github.com/Dannjann/bokkie-lms/internal/service"
 )
 
 // bootstrap resolves configuration and opens the log file — everything that has
@@ -48,3 +51,25 @@ func bootstrap(dataDir string, console bool) (config.Config, *slog.Logger, io.Cl
 
 	return cfg, log, closeLog, nil
 }
+
+// serviceCommand is the shared front end of `install` and `uninstall`: both
+// take only --data-dir, and both need configuration and a log before they can
+// report anything. The installed service is told the *resolved* data directory
+// rather than the flag, so it reads the same one the installer did even though
+// it runs as a different account with a different environment.
+func serviceCommand(name string, args []string) (service.Options, *slog.Logger, io.Closer, error) {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	dataDir := fs.String("data-dir", "", "override the per-OS data directory")
+	if err := fs.Parse(args); err != nil {
+		return service.Options{}, nil, nil, err
+	}
+
+	cfg, log, closeLog, err := bootstrap(*dataDir, true)
+	if err != nil {
+		return service.Options{}, nil, nil, err
+	}
+	return service.Options{DataDir: cfg.DataDir, Port: cfg.Port}, log, closeLog, nil
+}
+
+// itoa keeps the call sites reading as prose.
+func itoa(n int) string { return strconv.Itoa(n) }

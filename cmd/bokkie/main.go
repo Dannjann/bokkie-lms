@@ -42,9 +42,9 @@ func main() {
 	case "run":
 		err = cmdRun(args)
 	case "install":
-		err = notImplemented("install", "1.7 — service install")
+		err = cmdInstall(args)
 	case "uninstall":
-		err = notImplemented("uninstall", "1.7 — service install")
+		err = cmdUninstall(args)
 	case "backup":
 		err = notImplemented("backup", "2.4 — backup subsystem")
 	case "help", "-h", "--help":

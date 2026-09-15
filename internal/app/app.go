@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/api"
 	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/db"
+	"github.com/Dannjann/bokkie-lms/internal/discovery"
 	"github.com/Dannjann/bokkie-lms/web"
 )
 
@@ -43,6 +45,7 @@ type App struct {
 
 	listener net.Listener
 	serveErr chan error
+	mdns     io.Closer
 }
 
 // Options are the run-time choices that are not configuration: things decided
@@ -109,6 +112,7 @@ func (a *App) Start() error {
 	a.listener = listener
 
 	a.log.Info("http server listening", "addr", addr, "port", a.cfg.Port)
+	a.startDiscovery()
 
 	go func() {
 		err := a.srv.Serve(listener)
@@ -120,11 +124,39 @@ func (a *App) Start() error {
 	return nil
 }
 
+// startDiscovery publishes the LAN name. A failure here is logged and
+// tolerated, never fatal: the app is still perfectly reachable by IP address,
+// and refusing to serve the station because a name could not be advertised
+// would be a worse outcome than the inconvenience it prevents.
+func (a *App) startDiscovery() {
+	if !a.cfg.MDNS.Enabled {
+		a.log.Info("mDNS advertising is disabled; reach the server by IP address")
+		return
+	}
+
+	closer, err := discovery.Advertise(a.log, a.cfg.MDNS.Hostname, a.cfg.Port)
+	if err != nil {
+		a.log.Warn("could not advertise over mDNS; reach the server by IP address instead",
+			"hostname", a.cfg.MDNS.Hostname, "error", err)
+		return
+	}
+	a.mdns = closer
+}
+
 // Stop drains in-flight requests, then closes the database. Requests are
 // allowed to finish rather than being cut off: a half-written response to a
 // payment entry is exactly the ambiguity this system exists to remove.
 func (a *App) Stop(ctx context.Context) error {
 	a.log.Info("shutting down")
+
+	// Withdraw the LAN name first: for the rest of the shutdown the station
+	// should be sent to a server that is still answering, not to this one.
+	if a.mdns != nil {
+		if err := a.mdns.Close(); err != nil {
+			a.log.Warn("could not withdraw the mDNS records", "error", err)
+		}
+		a.mdns = nil
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, shutdownGrace)
 	defer cancel()
@@ -155,25 +187,4 @@ func (a *App) Addr() net.Addr {
 		return nil
 	}
 	return a.listener.Addr()
-}
-
-// Run starts the server and blocks until ctx is cancelled or serving fails,
-// then shuts down. This is the foreground path; the service manager in 1.7
-// drives Start and Stop itself.
-func (a *App) Run(ctx context.Context) error {
-	if err := a.Start(); err != nil {
-		a.db.Close()
-		return err
-	}
-
-	select {
-	case err := <-a.serveErr:
-		// Serving died on its own — put the error back so Stop can report it.
-		a.serveErr <- err
-	case <-ctx.Done():
-	}
-
-	// Shut down with a fresh context: ctx is already cancelled, and the drain
-	// still deserves its grace period.
-	return a.Stop(context.WithoutCancel(ctx))
 }
