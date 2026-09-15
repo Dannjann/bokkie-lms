@@ -15,7 +15,7 @@ Station**, Pintor Gamu, Isabela.
 | [02.5-install-update.md](02.5-install-update.md) | Step 2.5 — install location, signed USB updates, first inch | 🟨 Built, gate pending |
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
-| [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | ⬜ Planned |
+| [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | 🟨 Built, gate pending |
 
 Steps 5–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -63,14 +63,20 @@ in the UI, which is what this step was for. See
 [03-ledger-core.md](03-ledger-core.md) for the decisions taken while building —
 two of them amend what the plan originally said.
 
-**Step 4 is planned and nothing is built yet.** It is the first step that puts
-anything on screen: the customer master, `BA-####` codes assigned by the server
-and never editable, server-side search, and a CSV import of the 364 legacy
-customers with a dry run that is the real import minus the commit. Master data
-only — no money, and no way to post a ledger entry — so the one bulk write in
-the system is structurally unable to put a wrong number into the record. See
-[04-customers.md](04-customers.md) for the five decisions settled before
-building.
+**Step 4 is built and one line of its gate is outstanding.** The system now has
+screens. The customer master is in: codes assigned by the server inside the
+`INSERT` itself, so fifty simultaneous creates get fifty distinct codes;
+nothing ever deleted, so no code is handed out twice; server-side search that
+treats a typed `%` as a percent sign and finds `0917-123-4567` when somebody
+types `0917`; and a CSV import with two front doors over one engine, where the
+dry run is not a description of the import but the import minus the commit, and
+a bad row at line 300 writes nothing at all. The import cannot post a ledger
+entry — it has no way to — so the one bulk write in the system is structurally
+unable to put a wrong number into the record. Both mutation checks hold: a
+read-then-write allocator and a deactivation that deletes are each caught. What
+is left is looking at the screens in a browser at counter-PC resolution. See
+[04-customers.md](04-customers.md) for what the gate proved and the four
+decisions taken while building.
 
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,
@@ -102,8 +108,9 @@ make dev        # … and bokkie proxying to it on its own port
 make release    # SPA build + all five binaries
 make ci         # the gate
 
-go test ./internal/domain/ledger/... -race   # the ledger, including concurrent posts
-go test ./... -run Property -count=10        # the six invariants, harder
+go test ./internal/domain/ledger/... -race     # the ledger, including concurrent posts
+go test ./internal/domain/customer/... -race  # codes, under fifty writers at once
+go test ./... -run Property -count=10         # every invariant, harder
 
 bokkie backup            # a verified backup, safe while the server is running
 bokkie backup -list      # what is in the backup folder
@@ -112,4 +119,7 @@ bokkie backup -set-folder F   # point backups at a USB stick, checked before sav
 
 bokkie update -check DIR # is that folder a genuine release, and what is in it
 bokkie update DIR        # back up, swap, restart, verify — or roll back
+
+bokkie import-customers -check F.csv  # what the file would do, writing nothing
+bokkie import-customers F.csv         # load the customer master, all or nothing
 ```

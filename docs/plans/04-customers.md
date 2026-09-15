@@ -1,6 +1,6 @@
 # Step 4 — Customers
 
-**Status:** ⬜ planned · **Depends on:** Step 3 · **Blocks:** Steps 5, 6, 8, 10
+**Status:** 🟨 built, gate all but one item passed · **Depends on:** Step 3 · **Blocks:** Steps 5, 6, 8, 10
 
 ---
 
@@ -22,6 +22,70 @@ an answer immediately; can add a new one that is assigned the next `BA-` number
 with no chance of a collision; and a manager can deactivate one — with every
 change in `audit_log`, and the import proved all-or-nothing by a file whose last
 row is bad.
+
+---
+
+## Where this stands
+
+All seven tasks are built. Everything the gate asks for has been checked except
+the last line of 4.7, which needs a browser and a person.
+
+| Checked | Result |
+|---|---|
+| Codes unique, monotonic, never reused over generated sequences | ✅ holds |
+| 50 concurrent creates under `-race` | ✅ 50 distinct codes |
+| Allocation past `BA-9999` | ✅ refused, nothing written |
+| A lower-case `ba-0400` in an import file | ✅ allocator continues at `BA-0401` |
+| A bad row at line 300 | ✅ nothing written, the line is named |
+| Dry run, both front doors | ✅ table and audit log both untouched |
+| Searching `%` and `_` | ✅ literal, not a wildcard |
+| `0917`, `0917-123`, `09171234567` | ✅ all find a number stored as `0917-123-4567` |
+| An encoder deactivating a customer | ✅ refused, and the refusal is audited |
+| A caller supplying a code, on create or update | ✅ refused at the edge |
+| Import, end to end from the command line | ✅ 3 customers, one `console` audit row |
+| Re-running the same import | ✅ all three rows rejected as already on the books |
+| SPA shell and lazy chunks for every new route | ✅ served |
+| **The screens, in a browser, at counter-PC resolution** | ⬜ **outstanding** |
+
+**Both mutation checks hold.** A test that cannot fail reports success over
+exactly the ground it was meant to be watching, so each of the two tests
+carrying this step's real weight was checked against a deliberate break:
+
+- Replacing the allocator with a read-then-write made
+  `TestConcurrentCreatesGetDistinctCodes` fail immediately.
+- Making deactivation delete the row made `TestPropertyCodesAreNeverReused` fail
+  on its first generated sequence.
+
+## Decisions taken while building
+
+**1. The read-then-write allocator fails louder than expected, and that is
+worth knowing.** The plan justified allocating inside the `INSERT` on the
+grounds that a deferred transaction lets two encoders read the same `MAX`. The
+mutation test showed something worse: of 50 concurrent creates, 43 failed with
+`SQLITE_BUSY` and only 7 got through. Reading inside a deferred transaction and
+then writing means asking for a write lock the transaction did not reserve, so
+the realistic symptom is not a duplicate code at all — it is the counter seizing
+up under two people working at once, which is much harder to attribute to its
+cause. The single-statement allocator avoids both.
+
+**2. `Draft` having no code field closes the API edge for free.** The plan gave
+the reason as making the rule a property of the type rather than something to
+remember. It does more than that: `decodeJSON` already rejects unknown fields,
+so a request carrying `"code"` is refused with a 400 before any handler runs, on
+create and on update alike. Nothing had to be written to make that true.
+
+**3. The import's audit entry is written by the domain package, not the
+handler.** The plan put the entry at the self-audited route. Writing it inside
+`Apply`'s own transaction instead means the row and the customers it describes
+commit together, and — more usefully — that the command line and the browser
+produce the same audit row rather than two that have to be kept in step. The
+route is still registered `mutateSelfAudited`, and the reason recorded on it is
+still true: the wrapper cannot tell a preview from a real import.
+
+**4. One existing test had to change.**
+`TestUnknownAPIPathReturnsJSONNotHTML` used `/api/customers` as its example of
+an unknown path, which was accurate when it was written. It now asks for a path
+that is not a route.
 
 ---
 
