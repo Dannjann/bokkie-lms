@@ -12,6 +12,7 @@ Station**, Pintor Gamu, Isabela.
 | [domain-interview.md](domain-interview.md) | Questions for the owner — unblocks Steps 7–8 | ⬜ Not started |
 | [01-foundation.md](01-foundation.md) | Step 1 — build system, runtime, service install | 🟨 Built, gate pending |
 | [02-identity-audit.md](02-identity-audit.md) | Step 2 — auth, roles, audit log, backup | ✅ Built, gate passed |
+| [02.5-install-update.md](02.5-install-update.md) | Step 2.5 — install location, signed USB updates, first inch | ⬜ Not started |
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ⬜ Not started |
 
@@ -47,6 +48,12 @@ actually been restored** — service stopped, database deleted, backup swapped i
 everything back including live sessions. See
 [02-identity-audit.md](02-identity-audit.md) for the drill results and
 [../runbook.md](../runbook.md) for the restore procedure in the owner's language.
+
+**Step 2.5 is planned and not started.** Before Step 3 goes in, the host needs a
+fixed install location and a `bokkie update` that backs up, swaps, restarts and
+rolls itself back. Updates are manual from a USB stick by decision; the step is
+shaped so OTA later adds a download and changes nothing else. See
+[02.5-install-update.md](02.5-install-update.md).
 
 **Step 1's manual drill is still outstanding**, and is now the only thing behind.
 It needs hardware this project has not had: a second machine and a phone reaching

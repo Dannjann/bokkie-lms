@@ -437,6 +437,7 @@ it.**
 | 0 | **Domain interview** — questions for the owner | [domain-interview.md](domain-interview.md) | — (parallel track) |
 | 1 | **Build & runtime foundation** | [01-foundation.md](01-foundation.md) | — |
 | 2 | **Identity, audit, backup** | [02-identity-audit.md](02-identity-audit.md) | Step 1 |
+| 2.5 | **Install location, signed USB updates, first inch** | [02.5-install-update.md](02.5-install-update.md) | Step 2 |
 | 3 | **Money & ledger core** | [03-ledger-core.md](03-ledger-core.md) | Step 2 |
 | 4 | Customers — CRUD, `BA-####` codes, search, **CSV import** | *later* | Step 3 |
 | 5 | Advances — voucher + line grid, draft→posted, void via reversal | *later* | Step 4 |
