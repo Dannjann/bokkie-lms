@@ -21,7 +21,7 @@ export CGO_ENABLED := 0
 
 GOOSES := windows darwin linux
 
-.PHONY: all setup dev web-dev web-install web-build test vet-all build-all keygen sign release clean ci help
+.PHONY: all setup dev web-dev web-install web-build test vet-all build-all keygen stage-scripts sign release clean ci help
 
 all: build-all
 
@@ -103,10 +103,20 @@ keygen:
 sign:
 	go run ./cmd/bokkie-release sign dist
 
+# The double-click wrappers travel with the binaries. Without them a release
+# folder is five executables and a JSON file, and the person it is handed to has
+# to know which one to run and how to run it with administrator rights.
+stage-scripts: | dist
+	cp scripts/* dist/
+	@chmod +x dist/*.command dist/pick-binary.sh
+
+dist:
+	@mkdir -p dist
+
 # A real release, and deliberately stricter than build-all: it refuses to run
 # without an exact version tag and without the signing key, because an unsigned
 # or untagged build is precisely what must never reach the station.
-release: web-build build-all sign
+release: web-build build-all stage-scripts sign
 
 ci: vet-all test build-all
 	@echo "ci: ok"

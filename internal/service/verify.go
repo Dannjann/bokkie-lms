@@ -54,6 +54,21 @@ func WaitUntilHealthy(log *slog.Logger, port int) (string, error) {
 		port, startupProbeTimeout, lastErr)
 }
 
+// ServingVersion asks the running service which version it is, in one attempt.
+//
+// This is the honest answer to "what is installed here", and it is not the same
+// as the version of the process asking. An update run from the binary on the
+// USB stick would otherwise compare the new version against itself and conclude
+// there was nothing to do.
+func ServingVersion(port int) (string, error) {
+	url := "http://127.0.0.1:" + strconv.Itoa(port) + "/healthz"
+	health, err := probe(&http.Client{Timeout: 2 * time.Second}, url)
+	if err != nil {
+		return "", err
+	}
+	return health.Version, nil
+}
+
 type healthBody struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`

@@ -70,7 +70,7 @@ type Result struct {
 
 // Apply performs the update, or leaves the machine exactly as it found it.
 func Apply(ctx context.Context, log *slog.Logger, opts Options) (Result, error) {
-	result := Result{From: buildinfo.Version}
+	result := Result{From: opts.installedVersion(log)}
 
 	// 1. Nothing in the release folder is believed before its signature is.
 	manifest, err := release.Load(opts.Dir)
@@ -85,7 +85,7 @@ func Apply(ctx context.Context, log *slog.Logger, opts Options) (Result, error) 
 	}
 
 	// 2. Newer, unless someone has explicitly said otherwise.
-	if err := opts.checkDirection(manifest.Version); err != nil {
+	if err := opts.checkDirection(manifest.Version, result.From); err != nil {
 		return result, opts.failed(ctx, log, result, err)
 	}
 
@@ -217,23 +217,43 @@ func (opts Options) rollBack(ctx context.Context, log *slog.Logger, result Resul
 	return fmt.Errorf("%s did not come up, so %s was put back and is running again: %w", result.To, result.From, cause)
 }
 
+// installedVersion is the version actually serving on this host, which is not
+// necessarily the version of the process asking.
+//
+// Running `bokkie update` from the new binary on the USB stick is the obvious
+// thing to do and has to work: comparing that binary's own version against the
+// release it came from would say "you are already running this" and refuse the
+// update that was the whole point of walking over.
+func (opts Options) installedVersion(log *slog.Logger) string {
+	serving, err := service.ServingVersion(opts.Service.Port)
+	if err != nil {
+		// Nothing is answering — a host where bokkie is stopped, or not
+		// installed at all. The running process's own version is then the best
+		// available answer, and checkDirection is careful about what it will
+		// conclude from it.
+		log.Debug("no running bokkie to ask for its version", "error", err)
+		return buildinfo.Version
+	}
+	return serving
+}
+
 // checkDirection refuses anything that is not a step forward.
 //
 // A build that is not an exact release tag has no place on the station's host
 // at all, and the message says why rather than just refusing.
-func (opts Options) checkDirection(candidate string) error {
+func (opts Options) checkDirection(candidate, installed string) error {
 	next, err := release.ParseVersion(candidate)
 	if err != nil {
 		return err
 	}
 
-	current, err := release.ParseVersion(buildinfo.Version)
+	current, err := release.ParseVersion(installed)
 	if err != nil {
-		// The running binary is a development build. There is no sensible
+		// What is installed is a development build. There is no sensible
 		// comparison to make, so the only question is whether someone meant it.
 		if !opts.Force {
-			return fmt.Errorf("the bokkie running here is %s, a development build, so there is no version to compare %s against; "+
-				"re-run with -force if you mean to replace it", buildinfo.Version, candidate)
+			return fmt.Errorf("the bokkie installed here is %s, a development build, so there is no version to compare %s against; "+
+				"re-run with -force if you mean to replace it", installed, candidate)
 		}
 		return nil
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"path/filepath"
 
 	"github.com/Dannjann/bokkie-lms/internal/audit"
 	"github.com/Dannjann/bokkie-lms/internal/backup"
@@ -100,17 +101,24 @@ func describeRelease(dir string) error {
 		return err
 	}
 
+	// Checked before anything is printed. A signed manifest sitting beside a
+	// binary that does not match it is not a genuine release, and saying so
+	// first and taking it back afterwards is how someone ends up remembering
+	// the reassuring half.
+	if err := artifact.Verify(filepath.Join(dir, artifact.File)); err != nil {
+		return err
+	}
+
 	fmt.Printf("%s is a genuine bokkie release\n", dir)
-	fmt.Printf("  version   %s (this machine is running %s)\n", manifest.Version, buildinfo.Version)
+	// Deliberately the version of *this* binary rather than the one serving:
+	// -check reads no configuration and opens nothing, so it does not know
+	// which port to ask. Apply works the installed version out properly.
+	fmt.Printf("  version   %s (this copy of bokkie is %s)\n", manifest.Version, buildinfo.Version)
 	fmt.Printf("  released  %s\n", manifest.Released)
 	if manifest.Notes != "" {
 		fmt.Printf("  notes     %s\n", manifest.Notes)
 	}
 	fmt.Printf("  for %s: %s\n", artifact.Platform, artifact.File)
-
-	if err := artifact.Verify(dir + "/" + artifact.File); err != nil {
-		return err
-	}
 	fmt.Println("  the binary matches the signed checksum")
 	return nil
 }

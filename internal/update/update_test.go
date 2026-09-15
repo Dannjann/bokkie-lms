@@ -8,14 +8,18 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/Dannjann/bokkie-lms/internal/backup"
 	"github.com/Dannjann/bokkie-lms/internal/buildinfo"
 	"github.com/Dannjann/bokkie-lms/internal/release"
+	"github.com/Dannjann/bokkie-lms/internal/service"
 )
 
 // Every test here checks a refusal, and checks it left no backup behind.
@@ -210,4 +214,42 @@ func releaseFolderForPlatform(t *testing.T, version string, setRunning func(*tes
 		t.Fatalf("write signature: %v", err)
 	}
 	return dir, backupFolder
+}
+
+// The version that matters is the one being served, not the one asking.
+//
+// Running `bokkie update` from the new binary on the USB stick is the obvious
+// thing to do, and if the comparison used that process's own version it would
+// compare the release against itself and refuse the very update someone walked
+// over to install. This drives the opposite case — an old binary on the stick,
+// a newer one already serving — because that is the one where getting it wrong
+// means going backwards rather than merely stopping.
+func TestApplyComparesAgainstTheVersionBeingServed(t *testing.T) {
+	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"status":"ok","version":"v2.0.0"}`)
+	}))
+	t.Cleanup(served.Close)
+
+	port, err := strconv.Atoi(served.URL[strings.LastIndex(served.URL, ":")+1:])
+	if err != nil {
+		t.Fatalf("parse the test server port from %q: %v", served.URL, err)
+	}
+
+	// The release is v2.0.0 — the same version already serving — while the
+	// binary running this update thinks it is v1.0.0.
+	dir, backupFolder := releaseFolder(t, "v2.0.0", running("v1.0.0"))
+
+	_, err = Apply(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil)), Options{
+		Dir:     dir,
+		Service: service.Options{Port: port},
+		Backup:  backup.Options{Folder: backupFolder, Retention: 2},
+	})
+	if err == nil {
+		t.Fatal("Apply proceeded: it compared against its own version rather than the one being served")
+	}
+	if !strings.Contains(err.Error(), "v2.0.0") {
+		t.Errorf("error %q does not mention the version actually being served", err)
+	}
+	assertNoBackup(t, backupFolder)
 }
