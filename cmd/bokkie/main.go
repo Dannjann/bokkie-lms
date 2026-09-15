@@ -40,7 +40,7 @@ func main() {
 	case "version":
 		err = cmdVersion(args)
 	case "run":
-		err = notImplemented("run", "1.5 — HTTP server")
+		err = cmdRun(args)
 	case "install":
 		err = notImplemented("install", "1.7 — service install")
 	case "uninstall":
