@@ -14,7 +14,7 @@ Station**, Pintor Gamu, Isabela.
 | [02-identity-audit.md](02-identity-audit.md) | Step 2 — auth, roles, audit log, backup | ✅ Built, gate passed |
 | [02.5-install-update.md](02.5-install-update.md) | Step 2.5 — install location, signed USB updates, first inch | 🟨 Built, gate pending |
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
-| [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ⬜ Not started |
+| [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
 
 Steps 4–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -49,6 +49,19 @@ everything back including live sessions. See
 [02-identity-audit.md](02-identity-audit.md) for the drill results and
 [../runbook.md](../runbook.md) for the restore procedure in the owner's language.
 
+**Step 3 is complete and its gate has passed.** The spine is in: a `Money` type
+that is int64 centavos and marshals as a string, with a test that parses the
+syntax tree of the money packages and fails on any float; an append-only
+`ledger_entries` the database itself refuses to update or delete; reversals that
+are the exact negation of their target, at most once, never of another reversal,
+and dated the day of the void so an old statement stays reproducible; a small
+service every later step will code against; six property invariants holding over
+thousands of generated sequences; and a boot-time self-check that rebuilds and
+audits a cache found disagreeing with the entries behind it. Nothing is visible
+in the UI, which is what this step was for. See
+[03-ledger-core.md](03-ledger-core.md) for the decisions taken while building —
+two of them amend what the plan originally said.
+
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,
 backs the database up, swaps the binary, restarts, confirms `/healthz` answers
@@ -63,7 +76,7 @@ backed up off the machine — until then `PublicKey` is empty and every update i
 refused by design — and a first version tag, without which `make release`
 refuses to run. See [02.5-install-update.md](02.5-install-update.md).
 
-**Step 1's manual drill is still outstanding**, and is now the only thing behind.
+**Step 1's manual drill is still outstanding**, and remains the only thing behind.
 It needs hardware this project has not had: a second machine and a phone reaching
 `bokkie.local` across a LAN, plus a reboot. Windows and Linux hosts remain
 unavailable, so SCM, systemd and the Avahi fallback are written but unverified.
@@ -78,6 +91,9 @@ make web-dev    # Vite with hot reload …
 make dev        # … and bokkie proxying to it on its own port
 make release    # SPA build + all five binaries
 make ci         # the gate
+
+go test ./internal/domain/ledger/... -race   # the ledger, including concurrent posts
+go test ./... -run Property -count=10        # the six invariants, harder
 
 bokkie backup            # a verified backup, safe while the server is running
 bokkie backup -list      # what is in the backup folder

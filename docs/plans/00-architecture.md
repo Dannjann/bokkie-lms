@@ -316,7 +316,9 @@ ledger_entries                      -- ★ the single source of truth
       -- advance | interest | payment | adjustment | reversal | opening
   principal_delta_cents, interest_delta_cents,
   source_table, source_id,          -- provenance back to the document
-  reversed_by_id, created_at, created_by
+  reverses_id,                      -- set on a reversal, naming its target
+  reason,                           -- required on a reversal or an adjustment
+  created_at, created_by, created_by_username
 
 customer_balances                   -- derived cache, rebuildable
   customer_id, principal_cents, interest_cents,
@@ -326,6 +328,21 @@ users        id, username, display_name, password_hash, role, active
 audit_log    id, at, user_id, action, entity, entity_id, before_json, after_json
 settings     key, value             -- ref_no start, interest rules, slip layout
 ```
+
+The reversal link points **forward**, from the reversal to the entry it undoes,
+rather than backward from the target. Writing it on the target would mean
+updating a posted row, and then the append-only trigger would need an exception
+listing every column that must stay unchanged — a hole that widens silently
+every time a later migration adds a column. Pointing forward keeps the trigger
+total: `ledger_entries` refuses every `UPDATE`, with no conditions. "Has this
+been reversed?" is a lookup on a unique partial index, which is also what makes
+*reversed at most once* true under two simultaneous voids rather than merely
+usually true.
+
+`created_by_username` sits beside the nullable `created_by` for the same reason
+it does in `audit_log`: an interest run or a cutover import happens with nobody
+signed in, and inventing a user id for it would make the ledger claim something
+it does not know.
 
 **Opening balances** (the start-fresh cutover) are entered as `opening` ledger
 entries dated at the cutover, not as columns on `customers`. The ledger stays
