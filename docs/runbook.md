@@ -20,6 +20,7 @@ copies of that file. Restoring means putting a copy back.
 | Backups | `<data folder>\backups` | `<data folder>/backups` | `<data folder>/backups` |
 | Logs | `<data folder>\logs` | `<data folder>/logs` | `<data folder>/logs` |
 | Settings file | `<data folder>\config.yaml` | `<data folder>/config.yaml` | `<data folder>/config.yaml` |
+| The program itself | `C:\Program Files\Bokkie\bokkie.exe` | `/usr/local/bin/bokkie` | `/usr/local/bin/bokkie` |
 
 Run `bokkie backup -list` to have the program print the backup folder it is
 actually using, rather than trusting the table above.
@@ -104,15 +105,19 @@ A backup on the same disk as the original protects against a mistake, not
 against the disk failing. Point the backup folder at a USB stick:
 
 1. Plug the stick in and note its path (`E:\bokkie-backups`, `/Volumes/USB/bokkie-backups`).
-2. Stop the service.
-3. Open `config.yaml` in the data folder and set:
+2. On the host, run:
 
-   ```yaml
-   backup:
-     folder: E:\bokkie-backups
+   ```
+   bokkie backup -set-folder "E:\bokkie-backups"
    ```
 
-4. Start the service.
+   It writes a test file to that folder and reads it back before saving
+   anything, so a mistyped path or an unplugged drive is refused there and then
+   rather than discovered at 21:00 by nobody.
+
+3. Restart the service (table above). The folder is read when the service
+   starts, so until you do, backups still go to the old place.
+4. Run `bokkie backup` and confirm the file lands on the stick.
 
 Leave the stick plugged in. If it is missing at 21:00 the backup fails and says
 so in the log; the system keeps running normally.
@@ -124,6 +129,64 @@ bokkie backup -verify "E:\bokkie-backups\bokkie-20260915-210000.db"
 ```
 
 It prints the row counts, or explains what is wrong with the file.
+
+---
+
+## Installing on a new computer
+
+The developer hands over a folder — on a USB stick, or copied onto the machine.
+Copy the whole folder onto the computer first; do not run it from the stick.
+
+- **Windows:** double-click **Install Bokkie.cmd**. Windows will say *"Windows
+  protected your PC"* — this is expected, because the program is not signed by
+  a certificate we pay a yearly fee for. Click **More info**, then **Run
+  anyway**. Then approve the administrator prompt.
+- **macOS:** double-click **Install Bokkie.command** and type the computer's
+  password when asked.
+
+It prints the address to open when it finishes. If it does not finish, nothing
+has been removed — send the developer everything on the screen.
+
+On each counter PC, double-click **Create Bokkie Shortcut.cmd** once. That puts
+a **Bokkie** icon on the desktop which opens the system in its own window, with
+no address bar and no tabs.
+
+---
+
+## Updating to a new version
+
+The developer hands over a new folder the same way. Updating is one
+double-click, and the program does the careful part itself.
+
+**What it does, in this order:** checks the folder really is a genuine bokkie
+release and has not been altered; takes a full backup of the database and
+verifies it; stops the service; puts the new version in place; starts it again;
+and confirms the new version is answering. **If the new version does not come
+up, it puts the old one back and starts that** — the station keeps working and
+the update can wait for the developer.
+
+1. Copy the new folder onto the host computer.
+2. **Windows:** double-click **Update Bokkie.cmd**. **macOS:** double-click
+   **Update Bokkie.command**.
+3. It shows you which version is in the folder and asks you to confirm. Type
+   `y` and press Enter.
+4. When it finishes, open `http://bokkie.local:8080` and check the version on
+   the home page matches what it just installed.
+
+To look at a folder without changing anything — worth doing on a phone call
+before you commit to it:
+
+```
+bokkie update -check "D:\bokkie-v0.3.0"
+```
+
+That says whether the folder is genuine and what version is in it, and touches
+nothing.
+
+**If an update fails**, read the message. If it says the previous version was
+put back, the station is running normally on the old version — take a note and
+call the developer, there is no hurry. If it says anything else, call the
+developer before touching the machine again.
 
 ---
 
@@ -192,6 +255,7 @@ disputes something from two seasons ago.
 - A balance looks wrong. Do not try to correct it by editing anything — the
   audit log and the ledger are the evidence of what happened, and changing them
   destroys the only record of the mistake.
+- An update failed with anything other than "the previous version was put back".
 
 Have ready: what you were doing, the **request ID** if an error appeared on
 screen, and the day's log file from the `logs` folder.
