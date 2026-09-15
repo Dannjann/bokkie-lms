@@ -78,6 +78,9 @@ func Install(log *slog.Logger, opts Options) error {
 	if err != nil {
 		return err
 	}
+	if err := checkExecutableReachable(executable, account); err != nil {
+		return err
+	}
 	if err := prepareExecutable(log, executable); err != nil {
 		return err
 	}
@@ -106,7 +109,12 @@ func Install(log *slog.Logger, opts Options) error {
 		return fmt.Errorf("start the %s service: %w", Name, err)
 	}
 	log.Info("service started", "name", Name, "port", opts.Port)
-	return nil
+
+	// The service manager reports "started" as soon as it has spawned the
+	// process. Confirming the app actually answers is the difference between
+	// an install that worked and one that will be discovered to have failed
+	// the next time somebody walks up to a counter PC.
+	return verifyRunning(log, opts.Port)
 }
 
 // Uninstall stops and deregisters the service.

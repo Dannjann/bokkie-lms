@@ -47,7 +47,7 @@ machine it needs `sudo`.
 | 1.4 SQLite + migrations | ✅ | unit tests: fresh migrate, no-op re-boot, refusal on a newer schema |
 | 1.5 HTTP server | ✅ | unit tests + reached from the LAN address; drain-on-shutdown test |
 | 1.6 SPA | ✅ | production binary serves the SPA from a directory with no `web/`; `-dev` proxies to Vite |
-| 1.7 service, firewall, mDNS | ⚠️ built, install drill not run | see the gate below |
+| 1.7 service, firewall, mDNS | ⚠️ built; launchd install runs, the reboot drill has not | see the gate below |
 
 ### Deviations from this plan, and why
 
@@ -64,6 +64,24 @@ machine it needs `sudo`.
 - **mDNS failure is a warning, not a fatal error.** The app is still reachable
   by IP; refusing to serve the station because a name could not be advertised
   is the worse outcome.
+
+### Learned from the first real install
+
+`sudo ./dist/bokkie-mac-arm64 install` on the dev Mac registered cleanly and
+reported success — and nothing ran. Two reasons, both now handled in code:
+
+- **The binary was inside a home directory.** macOS home directories are 0700,
+  so `_bokkie` could not traverse the path; launchd had nothing to execute and
+  produced no log to say so. `install` now refuses when the service account
+  cannot reach the executable, and prints the `cp` to `/usr/local/bin` that
+  fixes it. **Install from a system path, never from the build directory** —
+  `dist/` is also wiped by `make clean`, which would break the service at the
+  next boot.
+- **The install reported success without checking.** A service manager says
+  "started" as soon as it has spawned the process. `install` now polls
+  `/healthz` for up to 15s and validates the response body, so a port already
+  held by something else — exactly what happened here — is caught at install
+  time rather than at the counter.
 
 ### Still unverified
 
@@ -251,8 +269,9 @@ SQLite driver — and the host flexibility in Decision 5 is quietly gone.
 
 Manual, on the chosen host — **none of these have been run yet:**
 
-1. `sudo bokkie install`, reboot, confirm the service is running with nobody
-   logged in.
+1. `sudo cp dist/bokkie-<target> /usr/local/bin/bokkie`, then
+   `sudo /usr/local/bin/bokkie install`; reboot, confirm the service is running
+   with nobody logged in.
 2. Load the app shell from a second PC and from a phone via `bokkie.local`.
 3. `kill -9` the process; confirm the service manager restarts it and `/healthz`
    recovers.
