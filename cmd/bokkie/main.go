@@ -25,6 +25,9 @@ commands:
                (-list, -verify <file>, -to <folder>, -set-folder <folder>)
   update       replace the installed binary with a signed release folder
                (-check to inspect one without changing anything)
+  import-customers
+               load the customer master from a CSV file
+               (-check to see what it would do without writing anything)
 
 run "bokkie <command> -h" for the flags of a single command.
 `
@@ -51,6 +54,8 @@ func main() {
 		err = cmdBackup(args)
 	case "update":
 		err = cmdUpdate(args)
+	case "import-customers":
+		err = cmdImportCustomers(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return

@@ -18,6 +18,8 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/auth"
 	"github.com/Dannjann/bokkie-lms/internal/backup"
 	bokkiedb "github.com/Dannjann/bokkie-lms/internal/db"
+	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
+	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
@@ -71,7 +73,7 @@ func TestHealthzIsDegradedWhenDatabaseIsClosed(t *testing.T) {
 }
 
 func TestUnknownAPIPathReturnsJSONNotHTML(t *testing.T) {
-	resp := do(t, NewHandler(testDeps(t, openTestDB(t))), http.MethodGet, "/api/customers")
+	resp := do(t, NewHandler(testDeps(t, openTestDB(t))), http.MethodGet, "/api/no-such-thing")
 
 	if resp.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.Code)
@@ -127,14 +129,17 @@ func testDeps(t *testing.T, database *sql.DB) Deps {
 	}
 
 	folder := filepath.Join(t.TempDir(), "backups")
+	auditLog := audit.New(database, log)
 	return Deps{
 		Logger:       log,
 		DB:           database,
 		Started:      time.Now().Add(-time.Minute),
+		Customers:    customer.New(database, auditLog, log),
+		Ledger:       ledger.New(database, store, auditLog, log),
 		Users:        auth.NewUsers(database),
 		Sessions:     auth.NewSessions(database),
 		Limiter:      auth.NewLimiter(),
-		Audit:        audit.New(database, log),
+		Audit:        auditLog,
 		Settings:     store,
 		Backup:       backup.NewScheduler(database, store, folder, log),
 		BackupFolder: folder,
@@ -194,7 +199,7 @@ func TestSPAServesShellForUnknownPathsButNotForAPI(t *testing.T) {
 	})
 
 	t.Run("unknown api path is still JSON", func(t *testing.T) {
-		resp := do(t, handler, http.MethodGet, "/api/customers")
+		resp := do(t, handler, http.MethodGet, "/api/no-such-thing")
 		if ct := resp.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
 			t.Errorf("content type = %q, want JSON — the SPA fallback must not swallow /api", ct)
 		}

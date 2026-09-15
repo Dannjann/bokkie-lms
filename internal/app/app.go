@@ -25,6 +25,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/db"
 	"github.com/Dannjann/bokkie-lms/internal/discovery"
+	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 	"github.com/Dannjann/bokkie-lms/web"
@@ -117,6 +118,8 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		Logger:       log,
 		DB:           database,
 		Started:      time.Now(),
+		Customers:    customer.New(database, auditLog, log),
+		Ledger:       ledgerSvc,
 		Users:        auth.NewUsers(database),
 		Sessions:     sessions,
 		Limiter:      auth.NewLimiter(),

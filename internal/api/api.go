@@ -24,6 +24,8 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/audit"
 	"github.com/Dannjann/bokkie-lms/internal/auth"
 	"github.com/Dannjann/bokkie-lms/internal/backup"
+	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
+	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
@@ -39,6 +41,13 @@ type Deps struct {
 	Limiter  *auth.Limiter
 	Audit    *audit.Log
 	Settings *settings.Store
+
+	// Customers and Ledger are held side by side rather than one inside the
+	// other. A customer's balance is composed from both at the handler — see
+	// customerDetail — which is what lets neither domain package import the
+	// other.
+	Customers *customer.Service
+	Ledger    *ledger.Service
 
 	// Backup runs the on-demand backup. It is the same scheduler that runs the
 	// nightly job, so a manual backup and a scheduled one are literally the
@@ -159,6 +168,29 @@ func registerRoutes(rt *router, d Deps) {
 	rt.read(ManagerOnly, "/api/backups", handleListBackups(d))
 	rt.mutateOutsideTx(ManagerOnly, http.MethodPost, "/api/backups", "backup.created", "backup",
 		handleBackupNow(d))
+
+	// --- Customers ----------------------------------------------------------
+	//
+	// Reading and writing a customer record is counter work: an encoder looks
+	// people up all day and types in a new farmer while they are standing
+	// there. Only the two irreversible-ish operations are held back.
+
+	rt.read(Authenticated, "/api/customers", handleListCustomers(d))
+	rt.read(Authenticated, "/api/customers/{id}", handleGetCustomer(d))
+
+	rt.mutate(Authenticated, http.MethodPost, "/api/customers",
+		"customer.created", "customer", handleCreateCustomer(d))
+	rt.mutate(Authenticated, http.MethodPut, "/api/customers/{id}",
+		"customer.updated", "customer", handleUpdateCustomer(d))
+
+	// Nothing is ever deleted: codes are allocated as a high-water mark, so
+	// releasing one would hand a former customer's code to a new one. This is
+	// the nearest thing to a deletion the system has, so it is a manager's.
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/customers/{id}/active",
+		"customer.active.changed", "customer", handleSetCustomerActive(d))
+
+	rt.mutateSelfAudited(ManagerOnly, http.MethodPost, "/api/customers/import",
+		auditImportRoute, handleImportCustomers(d))
 
 	// --- Audit --------------------------------------------------------------
 	//
