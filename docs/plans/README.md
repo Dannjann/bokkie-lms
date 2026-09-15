@@ -36,6 +36,11 @@ it is not a defence of the choice.
 
 ## Current state of the repo
 
-Scaffolding only: `go.mod` (module `bokkie-lms`, Go 1.24) and an initialised git
-repo with no commits. Go 1.27.1 is installed on the dev machine. **No
-application code has been written yet** — that begins at task 1.1.
+**Step 1 in progress.** Task 1.1 is done: module
+`github.com/Dannjann/bokkie-lms` (Go 1.27), the `bokkie` subcommand skeleton
+(`version` works, the rest name their task), `internal/buildinfo` stamped via
+`-ldflags`, and a Makefile producing all five cross-compiled binaries with
+`CGO_ENABLED=0`. `make ci` is the gate and `.githooks/pre-push` runs it — there
+is deliberately no hosted CI. Next: task 1.2, `internal/config`.
+
+Run `make setup` once after cloning to activate the hook.
