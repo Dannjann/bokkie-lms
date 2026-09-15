@@ -16,6 +16,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -70,16 +71,28 @@ func Run(log *slog.Logger, handler Handler, opts Options) error {
 // Install registers bokkie with the service manager and starts it.
 //
 // The order matters: the account has to exist before the service references it,
+// the binary has to be at its final path before anything records where it is,
 // the data directory has to be reachable by that account before the service
 // starts, and the firewall rule is last because it is the only step that is
 // merely inconvenient to have missing.
 func Install(log *slog.Logger, opts Options) error {
-	executable, err := resolveExecutable()
+	source, err := resolveExecutable()
 	if err != nil {
 		return err
 	}
 
 	account, err := ensureServiceAccount(log)
+	if err != nil {
+		return err
+	}
+
+	// Clearing an earlier registration first is also what stops Windows from
+	// holding the old binary open while the next step replaces it.
+	if err := clearExistingRegistration(log, opts); err != nil {
+		return err
+	}
+
+	executable, err := placeExecutable(log, source)
 	if err != nil {
 		return err
 	}
@@ -146,8 +159,12 @@ func Uninstall(log *slog.Logger, opts Options) error {
 		log.Warn("could not remove the firewall rule; it is harmless but can be deleted by hand", "error", err)
 	}
 
-	log.Info("service removed; the data directory and the service account were left in place",
-		"name", Name, "data_dir", opts.DataDir)
+	// The binary stays too. An uninstall is often the first half of a
+	// reinstall, and a machine with no bokkie on it at all is a longer way back
+	// than a stale service entry.
+	installed, _ := installPath()
+	log.Info("service removed; the binary, the data directory and the service account were left in place",
+		"name", Name, "executable", installed, "data_dir", opts.DataDir)
 	return nil
 }
 
@@ -210,10 +227,72 @@ func newService(prog ksvc.Interface, opts Options, account, executable string) (
 	return ksvc.New(prog, cfg)
 }
 
+// placeExecutable copies the binary to the one path the service manager will be
+// told about, and returns that path.
+//
+// Before this existed, the service was registered at whatever path the
+// installer happened to be run from — a Downloads folder, a USB stick, a build
+// directory. The service manager keeps that path forever, so deleting the
+// download months later produced a service that silently stopped starting at
+// the next boot. It also left no answer to the question every update begins
+// with: which file do I replace?
+func placeExecutable(log *slog.Logger, source string) (string, error) {
+	target, err := installPath()
+	if err != nil {
+		return "", err
+	}
+	if source == target {
+		log.Info("bokkie is already at its install location", "executable", target)
+		return target, nil
+	}
+
+	displaced, err := replaceFile(target, source)
+	if err != nil {
+		return "", fmt.Errorf("copy bokkie to %s (does it need administrator rights?): %w", target, err)
+	}
+	if displaced != "" {
+		// Nothing rolls an install back, so the previous binary has no further
+		// use. Failing to delete it is not worth stopping for: on Windows it
+		// stays locked until whatever is running it exits, and the next
+		// install clears it.
+		if err := os.Remove(displaced); err != nil {
+			log.Debug("could not remove the previous binary", "path", displaced, "error", err)
+		}
+	}
+
+	log.Info("bokkie copied to its install location", "from", source, "executable", target)
+	return target, nil
+}
+
+// clearExistingRegistration removes a registration left by an earlier install
+// so this one can replace it.
+//
+// Re-running install is how someone corrects a bad first attempt, and how a
+// machine installed before placeExecutable existed moves to the canonical
+// path. Registering a second time would either fail outright or leave two
+// service entries pointing at different files, which is worse than either.
+func clearExistingRegistration(log *slog.Logger, opts Options) error {
+	svc, err := newService(&program{log: log}, opts, "", "")
+	if err != nil {
+		return err
+	}
+	if _, err := svc.Status(); errors.Is(err, ksvc.ErrNotInstalled) {
+		return nil
+	}
+
+	log.Info("an earlier bokkie service is registered; replacing it", "name", Name)
+	if err := svc.Stop(); err != nil {
+		log.Debug("the existing service was not running", "error", err)
+	}
+	if err := svc.Uninstall(); err != nil {
+		return fmt.Errorf("remove the existing %s registration before replacing it: %w", Name, err)
+	}
+	return nil
+}
+
 // resolveExecutable returns the absolute, symlink-free path of this binary.
-// The service manager stores this path and uses it at every boot from now on,
-// so a relative path or a symlink that someone later moves would turn into a
-// service that silently stops starting.
+// It is the *source* of an install, not its destination — placeExecutable
+// decides where the copy the service manager runs actually lives.
 func resolveExecutable() (string, error) {
 	executable, err := os.Executable()
 	if err != nil {
