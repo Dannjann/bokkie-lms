@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,6 +23,7 @@ import (
 	// single-binary promise: no zoneinfo to install next to the executable.
 	_ "time/tzdata"
 
+	"github.com/Dannjann/bokkie-lms/internal/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -42,10 +44,20 @@ type Config struct {
 
 	Port     int     `yaml:"port"`
 	Timezone string  `yaml:"timezone"`
+	Log      Log     `yaml:"log"`
 	Printer  Printer `yaml:"printer"`
 	Backup   Backup  `yaml:"backup"`
 
-	loc *time.Location
+	loc      *time.Location
+	logLevel slog.Level
+}
+
+// Log configures the daily log files. Retention is in days, and the default is
+// generous: the logs are small, and the question they answer is usually asked
+// weeks after the day in question.
+type Log struct {
+	Level     string `yaml:"level"`
+	Retention int    `yaml:"retention"`
 }
 
 // Printer configures the dot-matrix slip path. An empty queue disables slip
@@ -68,6 +80,10 @@ func Defaults(dataDir string) Config {
 		DataDir:  dataDir,
 		Port:     8080,
 		Timezone: "Asia/Manila",
+		Log: Log{
+			Level:     "info",
+			Retention: 30,
+		},
 		Backup: Backup{
 			Folder:    filepath.Join(dataDir, "backups"),
 			Retention: 14,
@@ -129,6 +145,15 @@ func (c *Config) validate() error {
 	if c.Backup.Retention < 1 {
 		return fmt.Errorf("backup.retention is %d; at least one backup must be kept", c.Backup.Retention)
 	}
+	if c.Log.Retention < 1 {
+		return fmt.Errorf("log.retention is %d; at least one day of logs must be kept", c.Log.Retention)
+	}
+	level, err := logging.ParseLevel(c.Log.Level)
+	if err != nil {
+		return fmt.Errorf("log.level: %w", err)
+	}
+	c.logLevel = level
+
 	loc, err := time.LoadLocation(c.Timezone)
 	if err != nil {
 		return fmt.Errorf("timezone %q: %w", c.Timezone, err)
@@ -144,6 +169,26 @@ func (c *Config) validate() error {
 // Location is the timezone business dates are rendered in. Timestamps are
 // stored in UTC; only presentation uses this.
 func (c Config) Location() *time.Location { return c.loc }
+
+// LogLevel is the parsed form of Log.Level, validated at load time.
+func (c Config) LogLevel() slog.Level { return c.logLevel }
+
+// LogValue renders the resolved configuration for the boot log line. There are
+// no secrets in this struct today; when one arrives it must be omitted here
+// rather than relying on nobody reading the log file.
+func (c Config) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("data_dir", c.DataDir),
+		slog.String("database", c.DatabasePath()),
+		slog.Int("port", c.Port),
+		slog.String("timezone", c.Timezone),
+		slog.String("log_level", c.Log.Level),
+		slog.Int("log_retention_days", c.Log.Retention),
+		slog.String("backup_folder", c.Backup.Folder),
+		slog.Int("backup_retention", c.Backup.Retention),
+		slog.String("printer_queue", c.Printer.Queue),
+	)
+}
 
 // Paths derived from the data directory. They are methods rather than fields so
 // there is exactly one definition of where each thing lives.
