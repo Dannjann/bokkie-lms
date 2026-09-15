@@ -11,7 +11,8 @@ Station**, Pintor Gamu, Isabela.
 | [adr-001-language-choice.md](adr-001-language-choice.md) | Why Go, and the alternatives weighed against it | ✅ Accepted |
 | [domain-interview.md](domain-interview.md) | Questions for the owner — unblocks Steps 7–8 | ⬜ Not started |
 | [01-foundation.md](01-foundation.md) | Step 1 — build system, runtime, service install | 🟨 Built, gate pending |
-| [02-identity-audit.md](02-identity-audit.md) | Step 2 — auth, roles, audit log, backup | ⬜ Not started |
+| [02-identity-audit.md](02-identity-audit.md) | Step 2 — auth, roles, audit log, backup | ✅ Built, gate passed |
+| [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ⬜ Not started |
 
 Steps 4–10 are **features**. They are listed in the roadmap in
@@ -36,18 +37,23 @@ it is not a defence of the choice.
 
 ## Current state of the repo
 
-**Step 1 is built end to end; its gate has not been run.** All seven tasks are
-in: the five-target build matrix, `internal/config` (per-OS data dir,
-`config.yaml`, `--data-dir`), daily rotating `slog` files, SQLite with WAL and
-embedded `goose` migrations, the HTTP server with `/healthz` and graceful
-shutdown, the Vue SPA embedded via `go:embed`, and `bokkie install` registering
-a service with a dedicated account, a firewall rule and mDNS.
+**Step 2 is complete and its gate has passed.** On top of step 1's foundation,
+the system now has: argon2id logins with SQLite-backed sessions that survive a
+restart, a first-run admin setup that closes for good, `encoder`/`manager` roles
+enforced at route registration, an append-only `audit_log` that the schema
+itself refuses to edit, a typed `settings` table whose changes take effect
+without a restart, and a nightly self-verifying `VACUUM INTO` backup that **has
+actually been restored** — service stopped, database deleted, backup swapped in,
+everything back including live sessions. See
+[02-identity-audit.md](02-identity-audit.md) for the drill results and
+[../runbook.md](../runbook.md) for the restore procedure in the owner's language.
 
-`make ci` passes — five binaries, `CGO_ENABLED=0`, `go vet` per GOOS. What is
-left is the manual drill in [01-foundation.md](01-foundation.md): install on a
-host, reboot, and load the app from a second machine and a phone over
-`bokkie.local`. Windows and Linux hosts remain unavailable, so SCM, systemd and
-the Avahi fallback are written but unverified — that caveat travels to Step 10.
+**Step 1's manual drill is still outstanding**, and is now the only thing behind.
+It needs hardware this project has not had: a second machine and a phone reaching
+`bokkie.local` across a LAN, plus a reboot. Windows and Linux hosts remain
+unavailable, so SCM, systemd and the Avahi fallback are written but unverified.
+That caveat now covers step 2's service-management commands too, and travels to
+Step 10.
 
 Everyday commands:
 
@@ -57,4 +63,8 @@ make web-dev    # Vite with hot reload …
 make dev        # … and bokkie proxying to it on its own port
 make release    # SPA build + all five binaries
 make ci         # the gate
+
+bokkie backup            # a verified backup, safe while the server is running
+bokkie backup -list      # what is in the backup folder
+bokkie backup -verify F  # check one file, no config or database needed
 ```
