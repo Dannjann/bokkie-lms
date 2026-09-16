@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import CustomerFields from '@/components/CustomerFields.vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
 import { createCustomer, type CustomerDraft } from '@/api/customers'
 
@@ -28,46 +29,42 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <form class="new-customer" @submit.prevent="submit">
-    <h1 class="new-customer__title">New customer</h1>
-    <p class="new-customer__code">
-      The code is assigned when you save, continuing from the highest one on the books.
-    </p>
+  <div class="form-column">
+    <PageHeader
+      title="New customer"
+      description="The code is assigned when you save, continuing from the highest one on the books."
+    />
 
-    <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+    <Message v-if="error" severity="error" :closable="false" class="new-customer__error">
+      {{ error }}
+    </Message>
 
-    <CustomerFields v-model="draft" autofocus />
+    <form class="card card--padded new-customer" @submit.prevent="submit">
+      <CustomerFields v-model="draft" autofocus />
 
-    <div class="new-customer__actions">
-      <Button
-        label="Cancel"
-        severity="secondary"
-        text
-        :disabled="busy"
-        @click="router.back()"
-      />
-      <Button type="submit" label="Save" :loading="busy" />
-    </div>
-  </form>
+      <div class="new-customer__actions">
+        <Button
+          label="Cancel"
+          severity="secondary"
+          text
+          :disabled="busy"
+          @click="router.back()"
+        />
+        <Button type="submit" label="Save" :loading="busy" />
+      </div>
+    </form>
+  </div>
 </template>
 
 <style scoped>
+.new-customer__error {
+  margin-bottom: 1rem;
+}
+
 .new-customer {
-  max-width: 32rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.new-customer__title {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.new-customer__code {
-  margin: 0;
-  color: var(--p-surface-500);
-  font-size: 0.875rem;
+  gap: 1.25rem;
 }
 
 .new-customer__actions {

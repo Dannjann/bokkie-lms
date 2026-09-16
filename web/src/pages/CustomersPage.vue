@@ -9,8 +9,10 @@ import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
+import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
 import { listCustomers, type Customer, type CustomerStatus } from '@/api/customers'
+import { formatPhone } from '@/format'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
@@ -78,10 +80,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="customers">
-    <header class="customers__header">
-      <h1 class="customers__title">Customers</h1>
-      <div class="customers__actions">
+  <div>
+    <PageHeader
+      title="Customers"
+      description="The master list. Codes are assigned on save and are never reused."
+    >
+      <template #actions>
         <Button
           v-if="isManager"
           label="Import CSV"
@@ -91,95 +95,135 @@ onMounted(load)
           @click="router.push({ name: 'customers-import' })"
         />
         <Button label="New customer" icon="pi pi-plus" @click="router.push({ name: 'customer-new' })" />
-      </div>
-    </header>
-
-    <div class="customers__filters">
-      <InputText
-        v-model="search"
-        placeholder="Search by code, name or phone"
-        class="customers__search"
-        autocapitalize="none"
-        autocorrect="off"
-        spellcheck="false"
-      />
-      <Select v-model="status" :options="statusOptions" option-label="label" option-value="value" />
-    </div>
-
-    <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-
-    <DataTable
-      :value="customers"
-      :loading="loading"
-      lazy
-      paginator
-      :rows="perPage"
-      :first="first"
-      :total-records="total"
-      :rows-per-page-options="[25, 50, 100]"
-      data-key="id"
-      selection-mode="single"
-      class="customers__table"
-      @page="onPage"
-      @row-select="open($event.data)"
-    >
-      <template #empty>
-        <p class="customers__empty">
-          {{ search ? `Nobody matches “${search}”.` : 'No customers yet.' }}
-        </p>
       </template>
+    </PageHeader>
 
-      <Column field="code" header="Code" class="customers__code" />
-      <Column field="name" header="Name" />
-      <Column field="cell_no" header="Phone" />
-      <Column field="address" header="Address" />
-      <Column header="Status">
-        <template #body="{ data }">
-          <Tag
-            v-if="!data.active"
-            severity="secondary"
-            value="Deactivated"
+    <Message v-if="error" severity="error" :closable="false" class="customers__error">
+      {{ error }}
+    </Message>
+
+    <div class="card">
+      <div class="customers__filters">
+        <span class="customers__search">
+          <i class="pi pi-search customers__search-icon" aria-hidden="true" />
+          <InputText
+            v-model="search"
+            placeholder="Search by code, name or phone"
+            aria-label="Search customers"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            fluid
           />
+        </span>
+        <Select
+          v-model="status"
+          :options="statusOptions"
+          option-label="label"
+          option-value="value"
+          aria-label="Filter by status"
+          class="customers__status"
+        />
+        <span class="customers__count numeric">{{ total }} {{ total === 1 ? 'record' : 'records' }}</span>
+      </div>
+
+      <DataTable
+        :value="customers"
+        :loading="loading"
+        lazy
+        paginator
+        :rows="perPage"
+        :first="first"
+        :total-records="total"
+        :rows-per-page-options="[25, 50, 100]"
+        data-key="id"
+        selection-mode="single"
+        class="customers__table"
+        @page="onPage"
+        @row-select="open($event.data)"
+      >
+        <template #empty>
+          <p class="customers__empty">
+            {{ search ? `Nobody matches “${search}”.` : 'No customers yet.' }}
+          </p>
         </template>
-      </Column>
-    </DataTable>
+
+        <Column field="code" header="Code" class="customers__code" />
+        <Column field="name" header="Name" />
+        <Column header="Phone" class="customers__phone">
+          <template #body="{ data }">{{ formatPhone(data.cell_no) }}</template>
+        </Column>
+        <Column field="address" header="Address" />
+        <Column header="Status" class="customers__status-cell">
+          <template #body="{ data }">
+            <Tag v-if="!data.active" severity="secondary" value="Deactivated" />
+          </template>
+        </Column>
+      </DataTable>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.customers__header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+.customers__error {
   margin-bottom: 1rem;
-}
-
-.customers__title {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.customers__actions {
-  margin-left: auto;
-  display: flex;
-  gap: 0.5rem;
 }
 
 .customers__filters {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--shell-border);
 }
 
 .customers__search {
+  position: relative;
   flex: 1;
   min-width: 12rem;
+  max-width: 26rem;
+}
+
+.customers__search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.65rem;
+  transform: translateY(-50%);
+  font-size: 0.8125rem;
+  color: var(--p-surface-400);
+  pointer-events: none;
+}
+
+.customers__search :deep(input) {
+  padding-left: 2rem;
+}
+
+.customers__status {
+  min-width: 9rem;
+}
+
+.customers__count {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  color: var(--shell-muted);
+  white-space: nowrap;
+}
+
+.customers__table :deep(.customers__phone) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* The code is what a farmer reads off their slip, so it is the column the eye
    should land on first. */
 .customers__table :deep(.customers__code) {
   font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.customers__table :deep(.customers__status-cell) {
+  width: 1%;
   white-space: nowrap;
 }
 
@@ -187,21 +231,35 @@ onMounted(load)
   cursor: pointer;
 }
 
+/* The table lives inside the card, so it must not draw its own outer edges. */
+.customers__table :deep(.p-datatable-table-container) {
+  border-radius: 0;
+}
+
+.customers__table :deep(.p-datatable-paginator-bottom) {
+  border-width: 1px 0 0;
+  border-radius: 0 0 var(--shell-radius) var(--shell-radius);
+}
+
 .customers__empty {
   margin: 0;
-  padding: 1rem 0;
-  color: var(--p-surface-500);
+  padding: 1.5rem 0;
+  text-align: center;
+  color: var(--shell-muted);
 }
 
 @media (max-width: 40rem) {
-  .customers__header,
   .customers__filters {
     flex-wrap: wrap;
   }
 
-  .customers__actions {
+  .customers__search {
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .customers__count {
     margin-left: 0;
-    width: 100%;
   }
 }
 </style>

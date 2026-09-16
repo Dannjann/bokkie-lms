@@ -7,6 +7,7 @@ import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import ProgressSpinner from 'primevue/progressspinner'
 import CustomerFields from '@/components/CustomerFields.vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
 import {
   getCustomer,
@@ -17,6 +18,7 @@ import {
   type CustomerDraft,
 } from '@/api/customers'
 import { useSessionStore } from '@/stores/session'
+import { setPageTitle } from '@/pageTitle'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,6 +37,7 @@ const saved = ref(false)
 
 function adopt(loaded: Customer): void {
   customer.value = loaded
+  setPageTitle(loaded.name)
   draft.value = {
     name: loaded.name,
     address: loaded.address,
@@ -91,75 +94,88 @@ onMounted(load)
 
 <template>
   <div class="customer">
-    <ProgressSpinner v-if="loading" class="customer__spinner" />
+    <div v-if="loading" class="customer__loading">
+      <ProgressSpinner style="width: 2.5rem; height: 2.5rem" />
+    </div>
 
     <template v-else-if="customer">
-      <header class="customer__header">
-        <div>
-          <p class="customer__code">{{ customer.code }}</p>
+      <PageHeader>
+        <template #title>
+          <p class="customer__code numeric label">{{ customer.code }}</p>
           <h1 class="customer__name">
             {{ customer.name }}
             <Tag v-if="!customer.active" severity="secondary" value="Deactivated" />
           </h1>
-        </div>
-        <Button
-          label="Back to customers"
-          icon="pi pi-arrow-left"
-          severity="secondary"
-          text
-          @click="router.push({ name: 'customers' })"
-        />
-      </header>
-
-      <!--
-        The balance comes from the ledger, not from a column on this record.
-        It stays zero until step 5 can post an advance, which is expected.
-      -->
-      <section v-if="balance" class="balance">
-        <div class="balance__item">
-          <span class="balance__label">Principal</span>
-          <span class="balance__value">₱{{ balance.principal }}</span>
-        </div>
-        <div class="balance__item">
-          <span class="balance__label">Interest</span>
-          <span class="balance__value">₱{{ balance.interest }}</span>
-        </div>
-        <div class="balance__item balance__item--total">
-          <span class="balance__label">Total owed</span>
-          <span class="balance__value">₱{{ balance.total }}</span>
-        </div>
-        <p class="balance__note">
-          {{
-            balance.last_activity
-              ? `Last movement ${balance.last_activity}.`
-              : 'No advances or payments recorded yet.'
-          }}
-        </p>
-      </section>
+        </template>
+        <template #actions>
+          <Button
+            label="Back to customers"
+            icon="pi pi-arrow-left"
+            severity="secondary"
+            text
+            @click="router.push({ name: 'customers' })"
+          />
+        </template>
+      </PageHeader>
 
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <Message v-else-if="saved" severity="success" :closable="false">Saved.</Message>
 
-      <form class="customer__form" @submit.prevent="save">
-        <CustomerFields v-model="draft" />
+      <div class="customer__columns">
+        <section class="card card--padded">
+          <h2 class="customer__heading">Details</h2>
 
-        <div class="customer__actions">
-          <!--
-            Deactivation is a manager's, and it is the nearest thing to a
-            deletion this system has: nothing is ever removed, because a code
-            released here would be handed to the next customer created.
-          -->
-          <Button
-            v-if="isManager"
-            :label="customer.active ? 'Deactivate' : 'Reactivate'"
-            :severity="customer.active ? 'danger' : 'secondary'"
-            outlined
-            :disabled="busy"
-            @click="toggleActive"
-          />
-          <Button type="submit" label="Save changes" :loading="busy" />
-        </div>
-      </form>
+          <form class="customer__form" @submit.prevent="save">
+            <CustomerFields v-model="draft" />
+
+            <div class="customer__actions">
+              <!--
+                Deactivation is a manager's, and it is the nearest thing to a
+                deletion this system has: nothing is ever removed, because a code
+                released here would be handed to the next customer created.
+              -->
+              <Button
+                v-if="isManager"
+                :label="customer.active ? 'Deactivate' : 'Reactivate'"
+                :severity="customer.active ? 'danger' : 'secondary'"
+                outlined
+                :disabled="busy"
+                @click="toggleActive"
+              />
+              <Button type="submit" label="Save changes" :loading="busy" />
+            </div>
+          </form>
+        </section>
+
+        <!--
+          The balance comes from the ledger, not from a column on this record.
+          It stays zero until step 5 can post an advance, which is expected.
+        -->
+        <section v-if="balance" class="card card--padded balance">
+          <h2 class="customer__heading">Balance</h2>
+
+          <div class="balance__row">
+            <span class="balance__label">Principal</span>
+            <span class="balance__value numeric">₱{{ balance.principal }}</span>
+          </div>
+          <div class="balance__row">
+            <span class="balance__label">Interest</span>
+            <span class="balance__value numeric">₱{{ balance.interest }}</span>
+          </div>
+          <div class="balance__row balance__row--total">
+            <span class="balance__label">Total owed</span>
+            <span class="balance__value numeric">₱{{ balance.total }}</span>
+          </div>
+
+          <p class="balance__note">
+            {{
+              balance.last_activity
+                ? `Last movement ${balance.last_activity}.`
+                : 'No advances or payments recorded yet.'
+            }}
+          </p>
+        </section>
+      </div>
     </template>
 
     <Message v-else severity="error" :closable="false">{{ error || 'No such customer.' }}</Message>
@@ -168,85 +184,48 @@ onMounted(load)
 
 <style scoped>
 .customer {
-  max-width: 32rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-}
-
-.customer__spinner {
-  align-self: center;
-}
-
-.customer__header {
-  display: flex;
-  align-items: flex-start;
   gap: 1rem;
 }
 
-.customer__header > :last-child {
-  margin-left: auto;
+.customer__loading {
+  display: grid;
+  place-items: center;
+  padding: 4rem 0;
 }
 
 .customer__code {
   margin: 0;
-  font-variant-numeric: tabular-nums;
-  color: var(--p-surface-500);
-  font-size: 0.875rem;
-  letter-spacing: 0.04em;
 }
 
 .customer__name {
   margin: 0.15rem 0 0;
-  font-size: 1.5rem;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.balance {
+.customer__columns {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem 1rem;
-  padding: 1rem;
-  background: var(--p-surface-0);
-  border: 1px solid var(--p-surface-200);
-  border-radius: 8px;
+  grid-template-columns: minmax(0, 34rem) minmax(0, 20rem);
+  gap: 1rem;
+  align-items: start;
 }
 
-.balance__item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.balance__label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--p-surface-500);
-}
-
-.balance__value {
-  font-variant-numeric: tabular-nums;
-  font-size: 1.125rem;
-}
-
-.balance__item--total .balance__value {
+.customer__heading {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
   font-weight: 600;
-}
-
-.balance__note {
-  grid-column: 1 / -1;
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--p-surface-500);
 }
 
 .customer__form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .customer__actions {
@@ -255,9 +234,58 @@ onMounted(load)
   gap: 0.5rem;
 }
 
-@media (max-width: 40rem) {
+.balance__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--shell-border);
+}
+
+.balance__row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.balance__label {
+  font-size: 0.8125rem;
+  color: var(--shell-muted);
+}
+
+.balance__value {
+  font-size: 1rem;
+}
+
+.balance__row--total {
+  border-top-width: 2px;
+  border-top-color: var(--p-surface-300);
+}
+
+.balance__row--total .balance__label,
+.balance__row--total .balance__value {
+  font-weight: 600;
+  color: var(--p-surface-900);
+}
+
+.balance__row--total .balance__value {
+  font-size: 1.25rem;
+}
+
+.balance__note {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--shell-muted);
+}
+
+@media (max-width: 62rem) {
+  .customer__columns {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stacked, what is owed is the first thing anyone came here to read. */
   .balance {
-    grid-template-columns: 1fr 1fr;
+    order: -1;
   }
 }
 </style>
