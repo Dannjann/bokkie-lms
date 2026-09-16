@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/audit"
@@ -265,6 +266,31 @@ func (s *Service) Post(ctx context.Context, e Entry) (int64, error) {
 // has to unpick by hand from the one table that cannot be edited. Either every
 // line lands or none does.
 func (s *Service) PostBatch(ctx context.Context, entries []Entry) ([]int64, error) {
+	var ids []int64
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		ids, err = s.PostBatchTx(ctx, tx, entries)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// PostBatchTx is PostBatch inside a transaction the caller already owns.
+//
+// A document that produces entries — an advance voucher, and later a payment —
+// has a row of its own to write and an audit entry to go with it, and all of
+// that has to land together or not at all. A voucher marked posted with no
+// entries behind it is not a smaller problem than a failed post: it is a
+// document claiming money moved, contradicted by the one table that cannot be
+// corrected by editing. So the transaction belongs to whoever writes the
+// document, and the ledger joins it rather than opening a second one.
+//
+// Validation happens here rather than in PostBatch so that both doors are
+// guarded by the same check.
+func (s *Service) PostBatchTx(ctx context.Context, tx *sql.Tx, entries []Entry) ([]int64, error) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
@@ -273,17 +299,7 @@ func (s *Service) PostBatch(ctx context.Context, entries []Entry) ([]int64, erro
 			return nil, fmt.Errorf("entry %d of %d: %w", i+1, len(entries), err)
 		}
 	}
-
-	var ids []int64
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		var err error
-		ids, err = s.insert(ctx, tx, entries)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return ids, nil
+	return s.insert(ctx, tx, entries)
 }
 
 // Reverse writes the exact negation of an entry and returns the reversal's id.
@@ -294,6 +310,26 @@ func (s *Service) PostBatch(ctx context.Context, entries []Entry) ([]int64, erro
 // rewrites a number somebody has already been shown. The correction appears in
 // the period it was discovered, which is also how it would be done on paper.
 func (s *Service) Reverse(ctx context.Context, entryID int64, by Actor, reason string) (int64, error) {
+	var reversalID int64
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		reversalID, err = s.ReverseTx(ctx, tx, entryID, by, reason)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return reversalID, nil
+}
+
+// ReverseTx is Reverse inside a transaction the caller already owns.
+//
+// Voiding a document is the mirror of posting one: the document's status, every
+// reversal it implies, and the audit entry all describe a single act. Splitting
+// them across two transactions would allow a voucher marked voided whose
+// entries are still standing — which reads, to anyone looking at a balance, as
+// money that was never repaid.
+func (s *Service) ReverseTx(ctx context.Context, tx *sql.Tx, entryID int64, by Actor, reason string) (int64, error) {
 	if reason == "" {
 		return 0, fmt.Errorf("%w: a reversal must say why", ErrInvalidEntry)
 	}
@@ -301,58 +337,50 @@ func (s *Service) Reverse(ctx context.Context, entryID int64, by Actor, reason s
 		return 0, fmt.Errorf("%w: a reversal must say who made it", ErrInvalidEntry)
 	}
 
-	var reversalID int64
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		target, err := s.entryTx(ctx, tx, entryID)
-		if err != nil {
-			return err
-		}
-		if target.IsReversal() {
-			return fmt.Errorf("%w: entry %d", ErrReversalOfReversal, entryID)
-		}
-
-		// The unique index makes this race-proof; the check is here so the
-		// caller gets a sentence instead of a constraint violation.
-		var already int64
-		switch err := tx.QueryRowContext(ctx,
-			`SELECT id FROM ledger_entries WHERE reverses_id = ?`, entryID).Scan(&already); {
-		case err == nil:
-			return fmt.Errorf("%w: entry %d was reversed by entry %d", ErrAlreadyReversed, entryID, already)
-		case !errors.Is(err, sql.ErrNoRows):
-			return fmt.Errorf("look for an existing reversal of entry %d: %w", entryID, err)
-		}
-
-		principal, err := target.Principal.Neg()
-		if err != nil {
-			return fmt.Errorf("negate the principal of entry %d: %w", entryID, err)
-		}
-		interest, err := target.Interest.Neg()
-		if err != nil {
-			return fmt.Errorf("negate the interest of entry %d: %w", entryID, err)
-		}
-
-		ids, err := s.insert(ctx, tx, []Entry{{
-			CustomerID:  target.CustomerID,
-			Date:        s.today(),
-			Type:        TypeReversal,
-			Principal:   principal,
-			Interest:    interest,
-			SourceTable: target.SourceTable,
-			SourceID:    target.SourceID,
-			ReversesID:  target.ID,
-			Reason:      reason,
-			By:          by,
-		}})
-		if err != nil {
-			return err
-		}
-		reversalID = ids[0]
-		return nil
-	})
+	target, err := s.entryTx(ctx, tx, entryID)
 	if err != nil {
 		return 0, err
 	}
-	return reversalID, nil
+	if target.IsReversal() {
+		return 0, fmt.Errorf("%w: entry %d", ErrReversalOfReversal, entryID)
+	}
+
+	// The unique index makes this race-proof; the check is here so the
+	// caller gets a sentence instead of a constraint violation.
+	var already int64
+	switch err := tx.QueryRowContext(ctx,
+		`SELECT id FROM ledger_entries WHERE reverses_id = ?`, entryID).Scan(&already); {
+	case err == nil:
+		return 0, fmt.Errorf("%w: entry %d was reversed by entry %d", ErrAlreadyReversed, entryID, already)
+	case !errors.Is(err, sql.ErrNoRows):
+		return 0, fmt.Errorf("look for an existing reversal of entry %d: %w", entryID, err)
+	}
+
+	principal, err := target.Principal.Neg()
+	if err != nil {
+		return 0, fmt.Errorf("negate the principal of entry %d: %w", entryID, err)
+	}
+	interest, err := target.Interest.Neg()
+	if err != nil {
+		return 0, fmt.Errorf("negate the interest of entry %d: %w", entryID, err)
+	}
+
+	ids, err := s.insert(ctx, tx, []Entry{{
+		CustomerID:  target.CustomerID,
+		Date:        s.today(),
+		Type:        TypeReversal,
+		Principal:   principal,
+		Interest:    interest,
+		SourceTable: target.SourceTable,
+		SourceID:    target.SourceID,
+		ReversesID:  target.ID,
+		Reason:      reason,
+		By:          by,
+	}})
+	if err != nil {
+		return 0, err
+	}
+	return ids[0], nil
 }
 
 // insert writes entries and brings the cache up to date, inside a caller's
@@ -556,6 +584,70 @@ func (s *Service) entryTx(ctx context.Context, tx *sql.Tx, id int64) (Entry, err
 	return scanEntry(rows)
 }
 
+// EntriesBySource returns every entry produced by the named rows of one source
+// table, oldest first.
+//
+// This is how a posted document answers "what did I do to the ledger?". A void
+// reads it to find what it has to undo; a voucher screen reads it to show what
+// posting actually wrote. It belongs here rather than as a join in the
+// document's own package because "what came from this document?" is a question
+// about entries, and this package is the only thing allowed to answer it.
+//
+// Reversals come back too. A reversal carries the same provenance as the entry
+// it undoes, so a voided document shows both halves of what happened instead of
+// a set of entries that appear to be standing.
+func (s *Service) EntriesBySource(ctx context.Context, table string, ids []int64) ([]Entry, error) {
+	return s.entriesBySource(ctx, s.db, table, ids)
+}
+
+// EntriesBySourceTx is EntriesBySource inside a transaction the caller owns —
+// which is what voiding needs, because the entries it is about to reverse must
+// be read in the same transaction that reverses them.
+func (s *Service) EntriesBySourceTx(ctx context.Context, tx *sql.Tx, table string, ids []int64) ([]Entry, error) {
+	return s.entriesBySource(ctx, tx, table, ids)
+}
+
+func (s *Service) entriesBySource(ctx context.Context, q querier, table string, ids []int64) ([]Entry, error) {
+	if table == "" {
+		return nil, fmt.Errorf("%w: entries are looked up under a source table, and none was given", ErrInvalidEntry)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	// An IN list built from the ids themselves. The count varies with the
+	// document — a voucher has as many lines as it has — so this is one of the
+	// few queries in the system that cannot be a constant.
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, table)
+	marks := make([]string, len(ids))
+	for i, id := range ids {
+		marks[i] = "?"
+		args = append(args, id)
+	}
+
+	rows, err := q.QueryContext(ctx, selectEntries+`
+		 WHERE source_table = ? AND source_id IN (`+strings.Join(marks, ", ")+`)
+		 ORDER BY id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read the entries from %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	var entries []Entry
+	for rows.Next() {
+		entry, err := scanEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read the entries from %s: %w", table, err)
+	}
+	return entries, nil
+}
+
 const selectEntries = `
 	SELECT id, customer_id, entry_date, entry_type,
 	       principal_delta_cents, interest_delta_cents,
@@ -565,6 +657,12 @@ const selectEntries = `
 
 // scanner is what *sql.Row and *sql.Rows have in common.
 type scanner interface{ Scan(dest ...any) error }
+
+// querier is what *sql.DB and *sql.Tx have in common for reads, so one
+// implementation serves a caller who has a transaction and one who does not.
+type querier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
 
 func scanEntry(row scanner) (Entry, error) {
 	var e Entry

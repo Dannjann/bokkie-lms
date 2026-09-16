@@ -622,3 +622,153 @@ func TestConcurrentPostsProduceCorrectBalances(t *testing.T) {
 		t.Errorf("the cache drifted under concurrent posts: %v", found)
 	}
 }
+
+// The transaction-taking variants exist so that a document and the entries it
+// produces commit together. These three tests are what "together" means: work
+// done through them is gone when the caller's transaction rolls back, and no
+// second transaction of the ledger's own has quietly committed half of it.
+
+func TestPostBatchTxJoinsTheCallersTransaction(t *testing.T) {
+	svc, database := openTestService(t)
+	ctx := context.Background()
+	day := MustDate(2026, time.January, 10)
+
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+
+	if _, err := svc.PostBatchTx(ctx, tx, []Entry{advance(1, day, 500), advance(2, day, 700)}); err != nil {
+		t.Fatalf("post inside the caller's transaction: %v", err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatalf("roll back: %v", err)
+	}
+
+	if count := entryCount(t, database); count != 0 {
+		t.Errorf("the ledger holds %d entries after a rolled-back post, want 0", count)
+	}
+	for _, id := range []int64{1, 2} {
+		if got := balance(t, svc, id); !got.Principal.IsZero() {
+			t.Errorf("customer %d holds %s after a rolled-back post, want nothing", id, got.Principal)
+		}
+	}
+
+	var cached int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM customer_balances`).Scan(&cached); err != nil {
+		t.Fatal(err)
+	}
+	if cached != 0 {
+		t.Errorf("a rolled-back post left %d cached balances behind", cached)
+	}
+}
+
+func TestReverseTxJoinsTheCallersTransaction(t *testing.T) {
+	svc, database := openTestService(t)
+	ctx := context.Background()
+	day := MustDate(2026, time.January, 10)
+
+	entryID := mustPost(t, svc, advance(1, day, 500))
+	before := balance(t, svc, 1)
+
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err := svc.ReverseTx(ctx, tx, entryID, Actor{UserID: 2, Username: "manager"}, "voided the voucher"); err != nil {
+		t.Fatalf("reverse inside the caller's transaction: %v", err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatalf("roll back: %v", err)
+	}
+
+	if count := entryCount(t, database); count != 1 {
+		t.Errorf("the ledger holds %d entries after a rolled-back void, want only the advance", count)
+	}
+	if after := balance(t, svc, 1); after != before {
+		t.Errorf("a rolled-back void left customer 1 at %s, was %s", after.Principal, before.Principal)
+	}
+
+	// And the entry is still reversible: a rolled-back void must not have used
+	// up the one reversal an entry is allowed.
+	if _, err := svc.Reverse(ctx, entryID, Actor{UserID: 2, Username: "manager"}, "voided the voucher"); err != nil {
+		t.Errorf("reversing after a rolled-back void: %v", err)
+	}
+}
+
+func TestEntriesBySourceFindsWhatADocumentWrote(t *testing.T) {
+	svc, _ := openTestService(t)
+	ctx := context.Background()
+	day := MustDate(2026, time.January, 10)
+
+	// Two documents: a voucher with three lines, and an unrelated one whose
+	// entry must not come back with them.
+	voucher := []Entry{advance(1, day, 500), advance(2, day, 700), advance(1, day, 300)}
+	for i := range voucher {
+		voucher[i].SourceTable = "advance_lines"
+		voucher[i].SourceID = int64(i + 1)
+	}
+	ids, err := svc.PostBatch(ctx, voucher)
+	if err != nil {
+		t.Fatalf("post the voucher: %v", err)
+	}
+
+	other := advance(3, day, 900)
+	other.SourceTable = "advance_lines"
+	other.SourceID = 99
+	mustPost(t, svc, other)
+
+	lineIDs := []int64{1, 2, 3}
+	found, err := svc.EntriesBySource(ctx, "advance_lines", lineIDs)
+	if err != nil {
+		t.Fatalf("entries by source: %v", err)
+	}
+	if len(found) != 3 {
+		t.Fatalf("got %d entries for a three-line voucher, want 3", len(found))
+	}
+	for i, entry := range found {
+		if entry.ID != ids[i] {
+			t.Errorf("entry %d is id %d, want %d — the order is the order they were written", i, entry.ID, ids[i])
+		}
+	}
+
+	// A reversal carries its target's provenance, so voiding a line adds to
+	// what the document is shown to have done rather than removing from it.
+	if _, err := svc.Reverse(ctx, ids[0], Actor{UserID: 2, Username: "manager"}, "wrong amount"); err != nil {
+		t.Fatalf("reverse a line: %v", err)
+	}
+	found, err = svc.EntriesBySource(ctx, "advance_lines", lineIDs)
+	if err != nil {
+		t.Fatalf("entries by source after a void: %v", err)
+	}
+	if len(found) != 4 {
+		t.Fatalf("got %d entries after voiding one line, want 4 — the reversal belongs to the document too", len(found))
+	}
+	if !found[3].IsReversal() || found[3].ReversesID != ids[0] {
+		t.Errorf("the last entry is %s reversing %d, want a reversal of %d", found[3].Type, found[3].ReversesID, ids[0])
+	}
+}
+
+func TestEntriesBySourceAsksNothingOfAnEmptyDocument(t *testing.T) {
+	svc, _ := openTestService(t)
+
+	found, err := svc.EntriesBySource(context.Background(), "advance_lines", nil)
+	if err != nil {
+		t.Fatalf("entries by source with no ids: %v", err)
+	}
+	if len(found) != 0 {
+		t.Errorf("got %d entries for no ids", len(found))
+	}
+	if _, err := svc.EntriesBySource(context.Background(), "", []int64{1}); err == nil {
+		t.Error("entries were looked up with no source table named")
+	}
+}
+
+func entryCount(t *testing.T, database *sql.DB) int {
+	t.Helper()
+	var count int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM ledger_entries`).Scan(&count); err != nil {
+		t.Fatalf("count entries: %v", err)
+	}
+	return count
+}
