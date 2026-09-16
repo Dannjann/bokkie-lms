@@ -100,6 +100,34 @@ export const router = createRouter({
       meta: { title: 'Payment', parent: { label: 'Payments', to: '/payments' } },
     },
     {
+      // Manager-only in the UI and at the server, reads included — the whole
+      // section is, and this guard only saves a pointless round trip.
+      path: '/interest',
+      name: 'interest',
+      component: () => import('@/pages/InterestPage.vue'),
+      meta: { title: 'Interest', manager: true },
+    },
+    {
+      path: '/interest/new',
+      name: 'interest-new',
+      component: () => import('@/pages/InterestNewPage.vue'),
+      meta: {
+        title: 'New interest run',
+        parent: { label: 'Interest', to: '/interest' },
+        manager: true,
+      },
+    },
+    {
+      path: '/interest/:id(\\d+)',
+      name: 'interest-run',
+      component: () => import('@/pages/InterestRunPage.vue'),
+      meta: {
+        title: 'Interest run',
+        parent: { label: 'Interest', to: '/interest' },
+        manager: true,
+      },
+    },
+    {
       // Hangs off the customer rather than off a statements section: this is
       // one farmer's history, reached from the farmer. The all-customers
       // statement screen is step 8's, along with the print layout.

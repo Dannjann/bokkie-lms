@@ -276,7 +276,7 @@ func TestChargingAPeriodTwiceIsRefusedWithAnExplanation(t *testing.T) {
 	if resp.Code != http.StatusConflict {
 		t.Fatalf("charging the same period twice: status %d: %s", resp.Code, resp.Body)
 	}
-	if !strings.Contains(resp.Body.String(), "already covers") {
+	if !strings.Contains(resp.Body.String(), "covers") {
 		t.Errorf("the refusal reads %q; it should name the run that already covers the period", resp.Body)
 	}
 

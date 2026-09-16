@@ -146,7 +146,7 @@ func overlapping(ctx context.Context, q queryExecer, run Run) error {
 		return fmt.Errorf("check whether %s to %s has been charged: %w", run.From, run.To, err)
 	}
 
-	return fmt.Errorf("%w: interest run %d already covers %s to %s", ErrPeriodAlreadyCharged, runNo, from, to)
+	return fmt.Errorf("%w: interest run %d covers %s to %s", ErrPeriodAlreadyCharged, runNo, from, to)
 }
 
 // stale compares the preview a manager approved against what the ledger says

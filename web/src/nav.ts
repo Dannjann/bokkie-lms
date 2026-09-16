@@ -6,7 +6,7 @@
  * seeing where advances and payments will live — and that they are coming, not
  * missing — is worth more than a tidy list of two links. When a step lands,
  * `soon` comes off and `to` goes on, and nothing else changes — which is what
- * happened to Advances in step 5 and to Payments in step 6.
+ * happened to Advances in step 5, Payments in step 6 and Interest in step 7.
  */
 export interface NavItem {
   label: string
@@ -37,7 +37,7 @@ export const navigation: NavSection[] = [
     items: [
       { label: 'Advances', icon: 'pi pi-wallet', to: '/advances' },
       { label: 'Payments', icon: 'pi pi-money-bill', to: '/payments' },
-      { label: 'Interest', icon: 'pi pi-percentage', soon: true },
+      { label: 'Interest', icon: 'pi pi-percentage', to: '/interest', manager: true },
     ],
   },
   {

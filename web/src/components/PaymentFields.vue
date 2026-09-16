@@ -141,7 +141,7 @@ function submit(): void {
         <div class="payment-form__field">
           <label for="payment-customer">Customer</label>
           <AutoComplete
-            id="payment-customer"
+            input-id="payment-customer"
             v-model="customer"
             :suggestions="suggestions"
             :option-label="customerLabel"
@@ -156,7 +156,7 @@ function submit(): void {
           <div class="payment-form__field">
             <label for="payment-date">Date</label>
             <DatePicker
-              id="payment-date"
+              input-id="payment-date"
               v-model="date"
               date-format="yy-mm-dd"
               :max-date="latestDate"
@@ -184,7 +184,7 @@ function submit(): void {
           <div class="payment-form__field">
             <label for="payment-method">Method</label>
             <Select
-              id="payment-method"
+              input-id="payment-method"
               v-model="method"
               :options="paymentMethods"
               option-label="label"

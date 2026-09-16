@@ -128,7 +128,7 @@ onMounted(load)
           <div class="statement__range">
             <label for="statement-from">From</label>
             <DatePicker
-              id="statement-from"
+              input-id="statement-from"
               v-model="from"
               date-format="yy-mm-dd"
               :max-date="latestDate"
@@ -140,7 +140,7 @@ onMounted(load)
           <div class="statement__range">
             <label for="statement-to">To</label>
             <DatePicker
-              id="statement-to"
+              input-id="statement-to"
               v-model="to"
               date-format="yy-mm-dd"
               :max-date="latestDate"
