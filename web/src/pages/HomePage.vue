@@ -59,10 +59,9 @@ const uptime = computed(() => {
 
 /** The nav's disabled entries, said once in prose so the order is visible. */
 const upcoming = [
-  { label: 'Advances', note: 'Voucher entry with lines, drafts, and voids by reversal.' },
-  { label: 'Payments', note: 'Entry, allocation against advances, and a customer statement.' },
-  { label: 'Interest', note: 'A reversible posting run — waiting on the owner interview.' },
   { label: 'Reports', note: 'Current Advances, ROI, Liquidated, aging, and A4 printing.' },
+  { label: 'Statements', note: 'Across customers, with the print layout that makes one worth handing over.' },
+  { label: 'Slips', note: 'Vouchers and receipts on the dot-matrix, on continuous form.' },
 ]
 
 onMounted(loadCounts)

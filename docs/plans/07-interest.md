@@ -147,7 +147,32 @@ every ordinary row with "principal only" cost more than it said.
 charged: interest run 2 already covers…"*. It is the sentence a manager reads at
 the moment they are stopped, and it now reads once.
 
-**8. `payment.applies` is finally exercised against real interest.** Step 6 had
+**8. A blank screen after an update, found by walking the new screens.** Every
+route loads its page with a dynamic import, so each screen is a file with a
+content hash in its name. A browser open since before a new build asks for a
+file that is no longer there, the import rejects, and vue-router stops: on a
+click the navigation aborts and the old screen stays, and on a refresh or a
+typed address there is no old screen, so the rail and topbar render around an
+empty middle.
+
+**That is what `bokkie update` does to a counter PC.** The station runs the app
+in a chromeless window nobody closes for weeks; a USB update swaps the binary
+underneath it, and the next screen anybody opens is a chunk that no longer
+exists. It was found here because rebuilding the SPA several times in an
+afternoon does the same thing to an open tab — but it is Step 2.5's failure
+mode, not this step's, and it would have arrived at the station on the first
+update.
+
+`router.onError` now recognises the three engines' wordings for a failed module
+import and does a full load of the address that was asked for, which fetches an
+`index.html` naming the files that do exist. Once per destination, remembered in
+`sessionStorage` so a chunk that is genuinely missing cannot become a browser
+that reloads itself for ever. Four cases are checked in the browser: a refresh
+recovers, a click lands on the page that was asked for rather than the one being
+left, a permanently missing chunk reloads exactly once, and a healthy session
+never reloads at all.
+
+**9. `payment.applies` is finally exercised against real interest.** Step 6 had
 to write an interest entry by hand to see its own split work. The test that
 belongs to this step posts a run and then a payment: ₱1,000.00 against ₱5,000.00
 of principal and ₱150.00 of interest divides 850/150 under interest-first and

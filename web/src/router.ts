@@ -206,4 +206,93 @@ router.beforeEach(async (to) => {
 
 // The name of whatever record we are leaving does not belong to where we are
 // going, so it goes before the new screen has a chance to load its own.
-router.afterEach((to) => resetPageTitle(to.meta.title))
+router.afterEach((to) => {
+  resetPageTitle(to.meta.title)
+  forgetReload()
+})
+
+/**
+ * Every route above loads its screen with a dynamic import, so each one is its
+ * own file with a content hash in its name. When the server starts serving a
+ * new build, those names change — and a browser that has been open since before
+ * the update asks for a file that is no longer there.
+ *
+ * **This is not a rare case here, it is what `bokkie update` does.** The
+ * counter PCs run the app in a chromeless window that nobody closes for weeks;
+ * a USB update swaps the binary underneath them, and the next screen any of
+ * them opens is a chunk that no longer exists. Untreated, the import rejects
+ * and vue-router simply stops: on a click the navigation aborts and the screen
+ * that is already there stays, and on a refresh or a typed address there is no
+ * screen to stay on, so the rail and the topbar render around an empty middle.
+ * That blank middle is what somebody rings up about.
+ *
+ * The page that would work is the one the server is serving right now, so the
+ * answer is to go and get it. A full load — not a router navigation — fetches
+ * a fresh index.html naming the files that do exist.
+ */
+router.onError((error, to) => {
+  if (!isStaleChunk(error)) return
+
+  // Once per destination, and no more. A chunk that is genuinely missing —
+  // rather than merely renamed — would otherwise turn into a browser that
+  // reloads itself for ever, which is worse than a blank screen because
+  // nobody can read the address bar to tell you where they are.
+  if (alreadyReloadedFor(to.fullPath)) return
+  rememberReload(to.fullPath)
+
+  // assign rather than reload: on a click the address bar still holds the page
+  // being left, and reloading that would land the person somewhere they did
+  // not ask for.
+  window.location.assign(to.fullPath)
+})
+
+/**
+ * Whether this failure is a screen that could not be fetched.
+ *
+ * Matched on the message because that is all there is: the three engines throw
+ * a plain TypeError with no code on it, and each words it differently. Chromium
+ * says "Failed to fetch dynamically imported module", Firefox "error loading
+ * dynamically imported module", Safari "Importing a module script failed".
+ */
+function isStaleChunk(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    /dynamically imported module/i.test(message) ||
+    /Importing a module script failed/i.test(message) ||
+    /Unable to preload CSS/i.test(message)
+  )
+}
+
+const RELOAD_KEY = 'bokkie:reloaded-for'
+
+// sessionStorage rather than a module variable: the whole point is to survive
+// the reload we are about to do, and to be forgotten when the tab closes.
+// Wrapped because a browser with storage disabled must degrade to the blank
+// screen we have today rather than to an exception thrown inside an error
+// handler.
+function alreadyReloadedFor(path: string): boolean {
+  try {
+    return sessionStorage.getItem(RELOAD_KEY) === path
+  } catch {
+    return false
+  }
+}
+
+function rememberReload(path: string): void {
+  try {
+    sessionStorage.setItem(RELOAD_KEY, path)
+  } catch {
+    // Nothing to do: without storage the guard above returns false and the
+    // reload simply is not deduplicated.
+  }
+}
+
+// A navigation that arrives is proof the reload worked, so the next stale chunk
+// — after the next update — gets its own attempt.
+function forgetReload(): void {
+  try {
+    sessionStorage.removeItem(RELOAD_KEY)
+  } catch {
+    // As above.
+  }
+}
