@@ -17,6 +17,7 @@ import {
   type Customer,
   type CustomerDraft,
 } from '@/api/customers'
+import { formatPesos } from '@/format'
 import { useSessionStore } from '@/stores/session'
 import { setPageTitle } from '@/pageTitle'
 
@@ -156,15 +157,15 @@ onMounted(load)
 
           <div class="balance__row">
             <span class="balance__label">Principal</span>
-            <span class="balance__value numeric">₱{{ balance.principal }}</span>
+            <span class="balance__value numeric">{{ formatPesos(balance.principal) }}</span>
           </div>
           <div class="balance__row">
             <span class="balance__label">Interest</span>
-            <span class="balance__value numeric">₱{{ balance.interest }}</span>
+            <span class="balance__value numeric">{{ formatPesos(balance.interest) }}</span>
           </div>
           <div class="balance__row balance__row--total">
             <span class="balance__label">Total owed</span>
-            <span class="balance__value numeric">₱{{ balance.total }}</span>
+            <span class="balance__value numeric">{{ formatPesos(balance.total) }}</span>
           </div>
 
           <p class="balance__note">

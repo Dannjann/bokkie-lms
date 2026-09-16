@@ -34,7 +34,7 @@ export const navigation: NavSection[] = [
   {
     label: 'Transactions',
     items: [
-      { label: 'Advances', icon: 'pi pi-wallet', soon: true },
+      { label: 'Advances', icon: 'pi pi-wallet', to: '/advances' },
       { label: 'Payments', icon: 'pi pi-money-bill', soon: true },
       { label: 'Interest', icon: 'pi pi-percentage', soon: true },
     ],

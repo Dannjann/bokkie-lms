@@ -64,6 +64,24 @@ export const router = createRouter({
       meta: { title: 'Customer', parent: { label: 'Customers', to: '/customers' } },
     },
     {
+      path: '/advances',
+      name: 'advances',
+      component: () => import('@/pages/AdvancesPage.vue'),
+      meta: { title: 'Advances' },
+    },
+    {
+      path: '/advances/new',
+      name: 'advance-new',
+      component: () => import('@/pages/AdvanceNewPage.vue'),
+      meta: { title: 'New voucher', parent: { label: 'Advances', to: '/advances' } },
+    },
+    {
+      path: '/advances/:id(\\d+)',
+      name: 'advance',
+      component: () => import('@/pages/AdvancePage.vue'),
+      meta: { title: 'Voucher', parent: { label: 'Advances', to: '/advances' } },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),
