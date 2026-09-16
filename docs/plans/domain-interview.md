@@ -1,6 +1,6 @@
 # Step 0 — Domain Interview
 
-**Status:** not started · **Blocks:** Steps 7, 8 · **Runs:** in parallel with
+**Status:** not started · **Blocks:** Step 8 · **Runs:** in parallel with
 Steps 1–3, from day one
 
 ---
@@ -10,8 +10,9 @@ Steps 1–3, from day one
 Three things about how the business actually works are unknown, and two of them
 shape *behaviour*, not just report layout. The architecture is deliberately
 designed so this ignorance costs nothing up front — the ledger can express any
-of the likely answers — but Steps 7 (interest) and 8 (reports) **cannot be
-started** until these are answered.
+of the likely answers — but Step 8 (reports) **cannot be started** until Q3 and
+Q4 are answered. Q1 and Q5 no longer block: each became a setting whose default
+does nothing, and each records below what an answer could still cost.
 
 Guessing here is the expensive failure mode. An interest rule implemented wrong
 produces numbers that look plausible and are wrong, and nobody notices until a
@@ -33,7 +34,7 @@ farmer disputes a balance.
 
 ## Questions
 
-### Q1 — How is "Compute Percentage" calculated? ⚠️ blocks Step 7
+### Q1 — How is "Compute Percentage" calculated? ⚠️ no longer blocking
 
 The single most important question. Sub-questions:
 
@@ -44,6 +45,18 @@ The single most important question. Sub-questions:
 - Is it ever waived, discounted, or negotiated per customer?
 - What triggers a run — a date, or someone clicking the button?
 - If a farmer repays early, is interest pro-rated or charged in full?
+
+Step 7 does not wait for the answer, for the reason Step 6 did not wait for Q5:
+almost none of what this question decides is structure. The run, its preview,
+its numbering and its reversal are right under every likely answer, and the
+rule itself is the `interest.method`, `interest.rate_bps` and `interest.basis`
+settings — defaulting to `none`, so an install nobody has configured charges
+nothing at all.
+
+Two answers would still cost code rather than a settings change, and they are
+the two worth listening for on the day: **interest pro-rated when a farmer
+repays early**, and **a rate negotiated per customer**. Both are recorded in
+[07-interest.md](07-interest.md) under *What the answer can still cost*.
 
 **Answer:**
 

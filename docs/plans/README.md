@@ -19,8 +19,9 @@ Station**, Pintor Gamu, Isabela.
 | [04-customers-gate.md](04-customers-gate.md) | Step 4 — two questions still owed to the owner | 🟨 Task 1 done |
 | [05-advances.md](05-advances.md) | Step 5 — advance vouchers, draft→posted, void via reversal | ✅ Built, gate passed |
 | [06-payments.md](06-payments.md) | Step 6 — payments, the principal/interest split, customer statement | ✅ Built, gate passed |
+| [07-interest.md](07-interest.md) | Step 7 — the interest run, its preview, and undoing one | ⬜ Planned |
 
-Steps 7–10 are **features**. They are listed in the roadmap in
+Steps 8–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
 we reach it, not now.
 
