@@ -17,7 +17,7 @@ Station**, Pintor Gamu, Isabela.
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
 | [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | ✅ Built, gate passed |
 | [04-customers-gate.md](04-customers-gate.md) | Step 4 — two questions still owed to the owner | 🟨 Task 1 done |
-| [05-advances.md](05-advances.md) | Step 5 — advance vouchers, draft→posted, void via reversal | ⬜ Planned, not built |
+| [05-advances.md](05-advances.md) | Step 5 — advance vouchers, draft→posted, void via reversal | ✅ Built, gate passed |
 
 Steps 6–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -91,17 +91,26 @@ decisions taken while building, and
 to the owner — neither blocks Step 5, and both belong on the same visit as the
 domain interview.
 
-**Step 5 is planned and not built.** [05-advances.md](05-advances.md) is the
-work order: the advance voucher, entered as a draft that survives a closed tab,
-posted once into the ledger with a gap-free Ref. No. continuing the legacy
-sequence, and undone only by reversing every line at once. Seven decisions are
-settled in it before any code — the two worth knowing are that a Ref. No. is
-allocated at post rather than at draft creation, and that posting must write
-before it reads, because a deferred transaction that upgrades its lock is what
-made Step 4's read-then-write mutation fail as `SQLITE_BUSY` on 43 of 50
-writers. Its first task closes a real seam: `ledger.PostBatch` and
-`ledger.Reverse` each open their own transaction, so a voucher's status and its
-entries would otherwise commit separately.
+**Step 5 is complete and its gate has passed.** The system can lend money. A
+voucher is typed as a draft that survives a closed tab, posted once — which is
+when it is numbered, from a gap-free sequence continuing the legacy one — and
+undone only by reversing every line at once. Posting writes the voucher's
+status, its ledger entries and the audit row in a single transaction, which is
+what task 5.1 went into the ledger to make possible; and its `UPDATE` runs
+before anything is read, because a deferred transaction that upgrades its lock
+is what made Step 4's read-then-write mutation fail as `SQLITE_BUSY` on 43 of 50
+writers. Both mutations here are caught: a read-then-write allocator seizes the
+counter up under twenty posters, and a void that reverses only its first line
+leaves two of three farmers holding money they were never lent.
+
+The screens were walked in Chromium against the real binary at the width the
+station runs — 1024px — and swept from 700 to 1440 and at 390. They turned up
+three faults, all invisible at a convenient width or on a screen that had never
+had real money on it: pesos printed ungrouped beside a screen that grouped
+them, a reversal printing `₱-500.00`, and a one-pixel hidden label that escaped
+a scrolling card and dragged the page 316px wide on a phone. All three are
+fixed; see [05-advances.md](05-advances.md) for the seven decisions taken
+before building and the seven taken while building.
 
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,

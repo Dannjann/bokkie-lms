@@ -1,6 +1,6 @@
 # Step 5 — Advances
 
-**Status:** ⬜ planned · **Depends on:** Step 4 · **Blocks:** Steps 6, 8, 9, 10
+**Status:** ✅ built, gate passed · **Depends on:** Step 4 · **Blocks:** Steps 6, 8, 9, 10
 
 ---
 
@@ -28,6 +28,100 @@ exactly what the lines say, the voucher is numbered in the station's own Ref. No
 sequence, and nothing about it can be edited again. A manager can void it, after
 which those same customers owe exactly what they owed before it was posted, to
 the centavo, with both the advance and its reversal still on the record.
+
+---
+
+## Where this stands
+
+All eight tasks are built and the gate has been run, screens included.
+
+| Checked | Result |
+|---|---|
+| Five property invariants over generated sequences | ✅ hold |
+| 20 concurrent posts under `-race` | ✅ 20 distinct consecutive Ref. Nos. |
+| Two simultaneous posts of one draft | ✅ posted once |
+| A voided three-line voucher across three customers | ✅ every balance exactly back |
+| A second void, and voiding a draft | ✅ both refused |
+| Editing or deleting a posted voucher | ✅ refused by the package, the API and the database |
+| `UPDATE`/`DELETE` on a posted voucher's row, by hand in SQL | ✅ refused |
+| A `voided → draft` transition, by hand in SQL | ✅ refused |
+| A rolled-back post or void | ✅ no entries, no cache movement, still reversible |
+| `refno.start` moved to 5000 after the sequence began | ✅ ignored, as designed |
+| An encoder voiding | ✅ refused, refusal audited |
+| A caller supplying `ref_no` or `status` | ✅ refused at the edge |
+| **The screens, in a browser, at counter-PC resolution** | ✅ **see below** |
+
+**Both mutations hold.** Each of the two tests carrying this step's weight was
+checked against a deliberate break:
+
+- A read-then-write Ref. No. allocator makes the concurrency test fail — and it
+  fails exactly as Step 4 predicted, with `database is locked (SQLITE_BUSY)` on
+  the ninth of twenty posters rather than with two vouchers sharing a number.
+- A void that reverses only its first line fails the property test after 18
+  generated sequences, shrunk to a two-line voucher for one centavo: *customer
+  1 owes 1 centavos, want 0*.
+
+**The screens were walked** in Chromium against the real binary with the real
+embedded SPA, signed in as a manager and again as an encoder, at 1024px and
+then swept from 700 to 1440px and at 390px. The everyday path holds: a
+three-line voucher typed, saved as a draft, posted as Ref. No. 1, the farmers'
+balances moved, voided with a reason, and the balances exactly back. An encoder
+sees no Void button. Nothing scrolls sideways at any width, and no console
+errors appear anywhere. Three faults it found are in *Decisions taken while
+building* below — all three were invisible at any convenient width or on any
+screen that had not had real money on it.
+
+---
+
+## Decisions taken while building
+
+**1. The grid is not PrimeVue's cell-edit mode.** The plan called for an
+inline-editing grid, and this is one, but its cells are ordinary
+always-editable inputs. Entry here is keyboard work — a stack of slips, tab
+from customer to amount to the next row — and a grid that needs a click to open
+each cell doubles that. Enter on an amount starts the next line and puts the
+cursor in it.
+
+**2. The browser adds money up, in one place, in centavos.**
+`00-architecture.md` says the frontend formats money and does not compute with
+it. The running total under the grid is a deliberate exception: somebody
+entering twelve lines needs to check the total against the paper *before*
+saving, and the server's total does not exist until they do. It parses the text
+into whole centavos with its own parser, never a float, and an unparseable
+amount makes the total unknown rather than wrong — a half-typed figure must not
+quietly count as nothing.
+
+**3. Money from the server was printed ungrouped, and a reversal printed its
+sign in the wrong place.** `₱1200.50` sat beside the grid's own `₱1,700.50`, and
+a reversal read `₱-500.00`. `formatPesos` groups by string surgery — the value
+never becomes a number — and puts the minus before the peso sign. The customer
+screen's balance panel uses it too: a manager seeing pesos grouped on one screen
+and not on another has a reason to distrust both.
+
+**4. A one-pixel label dragged the page 316px wide.** The visually-hidden label
+in the grid's last header cell is absolutely positioned, had nothing to be
+positioned against, and so was laid out against the document — at the far edge
+of a 46rem table inside a card that scrolls. It escaped the card and widened
+the whole app at 390px. This step's equivalent of Step 4's 964–1032px band:
+found by measuring overflow at the widths that are actually used, not by
+looking at a screen.
+
+**5. `advance.Actor` is the ledger's type, aliased.** The plan said to declare
+it locally, as `internal/domain/customer` does. That reasoning does not carry
+here: the customer package declares its own to *avoid* importing the ledger,
+and this package already imports it in order to post entries. A separate type
+would exist only to be converted back.
+
+**6. Voiding checks the document and the ledger agree before undoing
+anything.** If a voucher's line count and its posted entries ever disagree, the
+void is refused rather than attempted. A partial void is worse than a refused
+one, because it looks finished.
+
+**7. `refno.start` reaches this package through the `Station` interface.** The
+plan did not say where the setting comes from. It arrives the same way the
+station's clock does — through a small interface `settings.Store` satisfies —
+so that changing it takes effect immediately rather than at a restart, and so
+tests can start the sequence where they like.
 
 ---
 
