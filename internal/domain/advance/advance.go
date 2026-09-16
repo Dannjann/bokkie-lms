@@ -22,6 +22,7 @@ import (
 
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/money"
+	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
 // SourceTable is the provenance every ledger entry a voucher produces carries.
@@ -173,11 +174,24 @@ const (
 	maxNotesLen      = 1000
 )
 
+// Station is what this package needs to know about where it is running: which
+// calendar "today" means, and where the Ref. No. sequence starts. settings.Store
+// satisfies it.
+//
+// It is an interface rather than the store itself for the same reason the
+// ledger's Station is: a setting changed at the station takes effect
+// immediately, rather than at a restart which on that machine may be months
+// away.
+type Station interface {
+	Location() *time.Location
+	Int(d settings.Def) int
+}
+
 // Service is the advance voucher.
 type Service struct {
 	db      *sql.DB
 	ledger  *ledger.Service
-	station ledger.Station
+	station Station
 	log     *slog.Logger
 
 	// now is the clock, replaceable in tests.
@@ -189,7 +203,7 @@ type Service struct {
 // The ledger is not optional and is not an interface: posting a voucher is a
 // ledger write, and a voucher service that could be constructed without one
 // would be a document that cannot do the only thing it exists for.
-func New(database *sql.DB, entries *ledger.Service, station ledger.Station, log *slog.Logger) *Service {
+func New(database *sql.DB, entries *ledger.Service, station Station, log *slog.Logger) *Service {
 	return &Service{db: database, ledger: entries, station: station, log: log, now: time.Now}
 }
 

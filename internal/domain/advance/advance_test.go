@@ -6,19 +6,30 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/audit"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/money"
+	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
-// station is the station's clock in tests: a fixed +08:00, so nothing here
-// depends on the tz database or on where the machine running it is.
-type station struct{}
+// station is the station in tests: a clock fixed at +08:00, so nothing here
+// depends on the tz database or on where the machine running it is, and a
+// Ref. No. sequence that starts wherever a test needs it to.
+type station struct{ refNoStart int }
 
 func (station) Location() *time.Location { return time.FixedZone("PHT", 8*60*60) }
+
+func (s station) Int(d settings.Def) int {
+	if d.Key == settings.RefNoStart.Key && s.refNoStart > 0 {
+		return s.refNoStart
+	}
+	n, _ := strconv.Atoi(d.Default)
+	return n
+}
 
 // today is the day the test clock is frozen on. Dates in tests are written
 // relative to it, because "not in the future" is one of the rules under test.
@@ -27,12 +38,27 @@ var today = ledger.MustDate(2026, time.March, 2)
 func openTestService(t *testing.T) (*Service, *ledger.Service, *sql.DB) {
 	t.Helper()
 
-	database := openSchema(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	entries := ledger.New(database, station{}, audit.New(database, log), log)
+	return openStationService(t, station{})
+}
 
-	svc := New(database, entries, station{}, log)
-	svc.now = func() time.Time { return time.Date(2026, 3, 2, 9, 30, 0, 0, station{}.Location()) }
+// openStationService is openTestService with the station's settings chosen by
+// the test — which today means where the Ref. No. sequence starts.
+func openStationService(t *testing.T, st station) (*Service, *ledger.Service, *sql.DB) {
+	t.Helper()
+	return reopen(t, openSchema(t), st)
+}
+
+// reopen builds a second service over a database that already has something in
+// it, which is how a test asks what a *changed* setting does to a sequence that
+// has already begun.
+func reopen(t *testing.T, database *sql.DB, st station) (*Service, *ledger.Service, *sql.DB) {
+	t.Helper()
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	entries := ledger.New(database, st, audit.New(database, log), log)
+
+	svc := New(database, entries, st, log)
+	svc.now = func() time.Time { return time.Date(2026, 3, 2, 9, 30, 0, 0, st.Location()) }
 	return svc, entries, database
 }
 
