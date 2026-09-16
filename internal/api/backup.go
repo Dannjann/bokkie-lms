@@ -56,6 +56,15 @@ func handleListBackups(d Deps) http.HandlerFunc {
 				Error: "internal error", RequestID: RequestID(r.Context())})
 			return
 		}
+		// A folder with no backups in it yet is an empty list, never a null.
+		// Go marshals a nil slice as `null`, and a screen that reads .length
+		// off one takes the whole component down — which is how step 7's
+		// interest run with nothing to charge produced a blank page. No screen
+		// reads this yet; the contract is fixed before one does.
+		if files == nil {
+			files = []string{}
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{
 			"folder":  d.BackupFolder,
 			"backups": files,

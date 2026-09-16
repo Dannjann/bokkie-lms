@@ -172,7 +172,24 @@ recovers, a click lands on the page that was asked for rather than the one being
 left, a permanently missing chunk reloads exactly once, and a healthy session
 never reloads at all.
 
-**9. `payment.applies` is finally exercised against real interest.** Step 6 had
+**9. A run that charges nobody blanked its own screen.** Reported from the
+station's own database and reproduced exactly: Go marshals a nil slice as
+`null`, a run whose period has no balances in it has no lines, and the screen
+reading `run.lines.length` off a `null` threw — which in Vue takes the whole
+component down and leaves the shell wrapped around an empty middle. The
+breadcrumb still said *Draft interest run*, which is what made it look like a
+routing fault rather than a render one.
+
+Every walk-through had produced runs with lines on them, so the gate never saw
+it. The fix is at the source rather than in the template: a collection on the
+wire is a list, empty or not. `linesOf` returns `[]Line{}`, the identical shape
+in `advance.linesOf` is fixed alongside it — a voucher cannot have zero lines
+today, so it had never fired — and the backup list, which no screen reads yet,
+is fixed before one does. The test asserts on the raw response body, because
+decoding is exactly what hides the difference: `null` and `[]` both unmarshal
+into a nil slice in Go, and the browser is where they stop being the same.
+
+**10. `payment.applies` is finally exercised against real interest.** Step 6 had
 to write an interest entry by hand to see its own split work. The test that
 belongs to this step posts a run and then a payment: ₱1,000.00 against ₱5,000.00
 of principal and ₱150.00 of interest divides 850/150 under interest-first and

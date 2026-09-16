@@ -253,7 +253,10 @@ func linesOf(ctx context.Context, q queryExecer, voucherID int64) ([]Line, error
 	}
 	defer rows.Close()
 
-	var lines []Line
+	// Empty rather than nil, so this cannot reach a browser as `null`. A
+	// voucher with no lines is refused at the edge today, so this has never
+	// fired — but it is the same one word that cost step 7 a blank screen.
+	lines := []Line{}
 	for rows.Next() {
 		var l Line
 		if err := rows.Scan(&l.ID, &l.CustomerID, &l.CustomerCode, &l.CustomerName,

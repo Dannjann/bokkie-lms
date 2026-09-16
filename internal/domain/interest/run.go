@@ -265,7 +265,13 @@ func linesOf(ctx context.Context, q queryExecer, runID int64) ([]Line, error) {
 	}
 	defer rows.Close()
 
-	var lines []Line
+	// Empty rather than nil, and this is not a style preference: a nil slice
+	// marshals as `null`, a run that charges nobody has no lines, and the
+	// screen reading `run.lines.length` off a null took the whole component
+	// down — leaving the shell wrapped around a blank middle, from a run that
+	// was behaving perfectly correctly. A collection on the wire is a list,
+	// empty or not.
+	lines := []Line{}
 	for rows.Next() {
 		var l Line
 		if err := rows.Scan(&l.ID, &l.CustomerID, &l.CustomerCode, &l.CustomerName, &l.Base, &l.Charge); err != nil {

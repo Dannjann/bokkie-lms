@@ -440,3 +440,45 @@ func TestAPaymentAfterARunDividesByTheStationsRule(t *testing.T) {
 		})
 	}
 }
+
+// A collection must never reach the browser as null.
+//
+// Go marshals a nil slice as `null`, and a run that charges nobody has no
+// lines — so `run.lines.length` in the screen's template read a null and threw,
+// which in Vue takes the whole component down and leaves the shell wrapped
+// around an empty middle. The blank page a manager rings up about, from a run
+// that is behaving perfectly correctly.
+//
+// The assertion is on the raw body rather than on a decoded struct, because
+// decoding is exactly what hides the difference: both null and [] unmarshal
+// into a nil slice in Go, and the browser is where they stop being the same.
+func TestARunWithNothingToChargeSendsAnEmptyListNotNull(t *testing.T) {
+	f := newInterestFixture(t)
+	f.setRule(t, "monthly-on-balance", "300")
+
+	// A period long before anybody borrowed anything: a legitimate run, with
+	// nothing on it.
+	resp := request(t, f.handler, http.MethodPost, "/api/interest-runs", f.manager,
+		map[string]any{"period_from": "2020-01-01", "period_to": "2020-01-31"})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("compute a run over an empty period: status %d: %s", resp.Code, resp.Body)
+	}
+
+	var run interest.Run
+	decode(t, resp, &run)
+	if len(run.Lines) != 0 {
+		t.Fatalf("a run over an empty period has %d lines", len(run.Lines))
+	}
+
+	for _, body := range []string{
+		resp.Body.String(),
+		request(t, f.handler, http.MethodGet, "/api/interest-runs/"+itoa(run.ID), f.manager, nil).Body.String(),
+	} {
+		if strings.Contains(body, `"lines":null`) {
+			t.Errorf("lines came back as null: %s", body)
+		}
+		if !strings.Contains(body, `"lines":[]`) {
+			t.Errorf("lines are not an empty list: %s", body)
+		}
+	}
+}
