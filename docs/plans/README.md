@@ -15,8 +15,8 @@ Station**, Pintor Gamu, Isabela.
 | [02.5-install-update.md](02.5-install-update.md) | Step 2.5 — install location, signed USB updates, first inch | 🟨 Built, gate pending |
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
-| [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | 🟨 Built, gate pending |
-| [04-customers-gate.md](04-customers-gate.md) | Step 4 — the three things left to close its gate | ⬜ Not started |
+| [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | ✅ Built, gate passed |
+| [04-customers-gate.md](04-customers-gate.md) | Step 4 — two questions still owed to the owner | 🟨 Task 1 done |
 
 Steps 5–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -64,8 +64,8 @@ in the UI, which is what this step was for. See
 [03-ledger-core.md](03-ledger-core.md) for the decisions taken while building —
 two of them amend what the plan originally said.
 
-**Step 4 is built and one line of its gate is outstanding.** The system now has
-screens. The customer master is in: codes assigned by the server inside the
+**Step 4 is complete and its gate has passed.** The system now has
+screens, and they have been looked at. The customer master is in: codes assigned by the server inside the
 `INSERT` itself, so fifty simultaneous creates get fifty distinct codes;
 nothing ever deleted, so no code is handed out twice; server-side search that
 treats a typed `%` as a percent sign and finds `0917-123-4567` when somebody
@@ -74,12 +74,21 @@ dry run is not a description of the import but the import minus the commit, and
 a bad row at line 300 writes nothing at all. The import cannot post a ledger
 entry — it has no way to — so the one bulk write in the system is structurally
 unable to put a wrong number into the record. Both mutation checks hold: a
-read-then-write allocator and a deactivation that deletes are each caught. What
-is left is looking at the screens in a browser at counter-PC resolution. See
-[04-customers.md](04-customers.md) for what the gate proved and the four
+read-then-write allocator and a deactivation that deletes are each caught.
+
+Around those screens there is now a shell: a rail that lists the sections
+coming in later steps rather than hiding them, a connection light that
+distinguishes "checking" from "down", and one page header every screen shares.
+Walking it in a browser at the width the station actually runs — Edge in
+`--app` mode at about 1024px — turned up exactly one layout fault, in a 68px
+band that is invisible at any convenient width, and it is fixed. PrimeVue is
+pinned to 4: version 5 needs a commercial licence and stamps a red "Invalid
+PrimeUI License" badge over every page without one. See
+[04-customers.md](04-customers.md) for what the gate proved and the six
 decisions taken while building, and
-[04-customers-gate.md](04-customers-gate.md) for the three things left —
-looking at the screens, and two questions for the owner.
+[04-customers-gate.md](04-customers-gate.md) for the two questions still owed
+to the owner — neither blocks Step 5, and both belong on the same visit as the
+domain interview.
 
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,
@@ -108,7 +117,8 @@ Everyday commands:
 make setup      # once after cloning: activates the pre-push hook
 make web-dev    # Vite with hot reload …
 make dev        # … and bokkie proxying to it on its own port
-make release    # SPA build + all five binaries
+make install-local   # put this tree on this machine's service (ARGS='--dry-run')
+make release    # SPA build + all five binaries — refuses on an untagged commit
 make ci         # the gate
 
 go test ./internal/domain/ledger/... -race     # the ledger, including concurrent posts

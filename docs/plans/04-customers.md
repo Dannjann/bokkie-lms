@@ -1,9 +1,10 @@
 # Step 4 — Customers
 
-**Status:** 🟨 built, gate all but one item passed · **Depends on:** Step 3 · **Blocks:** Steps 5, 6, 8, 10
+**Status:** 🟨 built, gate passed · **Depends on:** Step 3 · **Blocks:** Steps 5, 6, 8, 10
 
-> The remaining work is a work order of its own:
-> [04-customers-gate.md](04-customers-gate.md).
+> Every line of the gate has now been checked, including the screens. Two
+> questions for the owner remain open — they are not gate items and do not
+> block Step 5. They live in [04-customers-gate.md](04-customers-gate.md).
 
 ---
 
@@ -30,8 +31,8 @@ row is bad.
 
 ## Where this stands
 
-All seven tasks are built. Everything the gate asks for has been checked except
-the last line of 4.7, which needs a browser and a person.
+All seven tasks are built and every line of the gate has been checked, the
+screens included.
 
 | Checked | Result |
 |---|---|
@@ -48,7 +49,14 @@ the last line of 4.7, which needs a browser and a person.
 | Import, end to end from the command line | ✅ 3 customers, one `console` audit row |
 | Re-running the same import | ✅ all three rows rejected as already on the books |
 | SPA shell and lazy chunks for every new route | ✅ served |
-| **The screens, in a browser, at counter-PC resolution** | ⬜ **outstanding** |
+| Find by code, by name, and by `0917` against a punctuated number | ✅ in a browser |
+| A typed `%` in the search box | ✅ one row, `100% Palay Trading` |
+| Create: no code before saving, next in sequence after | ✅ `BA-0009` after `BA-0008` |
+| Edit `(0928) 111-2233`, reload | ✅ comes back `09281112233` |
+| Deactivate and reactivate as a manager | ✅ both, and the screen says which |
+| An encoder's Deactivate and Import buttons | ✅ absent; `/customers/import` redirects |
+| Import a good file and one with a bad row | ✅ the rejection names the line |
+| **The screens, in a browser, at counter-PC resolution** | ✅ **see below** |
 
 **Both mutation checks hold.** A test that cannot fail reports success over
 exactly the ground it was meant to be watching, so each of the two tests
@@ -89,6 +97,25 @@ still true: the wrapper cannot tell a preview from a real import.
 `TestUnknownAPIPathReturnsJSONNotHTML` used `/api/customers` as its example of
 an unknown path, which was accurate when it was written. It now asks for a path
 that is not a route.
+
+**5. PrimeVue is pinned to 4, because 5 is licensed.** PrimeVue 5 requires a
+commercial PrimeUI licence. Without one it installs, typechecks and builds
+cleanly, renders every component correctly and logs nothing — and stamps a red
+"Invalid PrimeUI License" badge over the bottom right of every page. This was
+found by building the SPA against 5.0.1 and opening the customer list, not by
+reading a changelog, and it is the kind of thing a caret in `package.json`
+would have introduced silently on some later `npm install`. All three packages
+— `primevue`, `primeicons`, `@primeuix/themes` — are therefore pinned exactly.
+Re-testing costs one `make web-build build-all` and a look at the corner.
+
+**6. The counter PC's width was the one width the header broke at.** The page
+header's action buttons stack on top of each other in a band from 964px to
+1032px, and nowhere else: below 960px the rail becomes an overlay and the
+content gets the full width back, and above 1032px everything fits beside the
+heading. The station runs Edge in `--app` mode at about 1024px — the middle of
+the band. Nothing was visibly wrong at 1280px or on a phone, which is why this
+was worth opening at the real width rather than a convenient one. The heading
+text now gives way instead, inside the buttons as well as around them.
 
 ---
 

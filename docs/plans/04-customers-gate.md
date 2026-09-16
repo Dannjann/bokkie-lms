@@ -1,23 +1,28 @@
 # Step 4 — Closing the Gate
 
-**Status:** ⬜ not started · **Companion to:** [04-customers.md](04-customers.md)
+**Status:** 🟨 task 1 done · tasks 2 and 3 need the owner ·
+**Companion to:** [04-customers.md](04-customers.md)
 
 ---
 
 ## What this is
 
-Step 4 is built and committed. Every line of its gate has been checked except
-one, and two decisions baked into the code are worth putting in front of the
-owner before Step 5 builds on them.
+Step 4 is built and committed. **Task 1 is done** — the screens have been
+walked in a real browser against the real binary, and what it found is recorded
+below and in [04-customers.md](04-customers.md). Tasks 2 and 3 are the two
+decisions baked into the code that are worth putting in front of the owner
+before Step 5 builds on them. Neither blocks Step 5; both should be folded into
+the same visit as the [domain interview](domain-interview.md).
 
 This doc is the work order for exactly that. It is written for a session with no
 memory of building Step 4, so it repeats what it needs rather than pointing at
 the 450-line design doc. Read [04-customers.md](04-customers.md) only if a task
 here does not make sense on its own.
 
-**Nothing here is a known bug.** Task 1 is a verification that has not been
-performed; tasks 2 and 3 are business questions whose answers may or may not
-change a line of code. Do not go looking for something to fix.
+**Nothing left here is a known bug.** Tasks 2 and 3 are business questions whose
+answers may or may not change a line of code. Do not go looking for something to
+fix. Task 1 is kept below as the record of what was actually looked at, so that
+"the screens were checked" means something specific.
 
 ---
 
@@ -39,15 +44,16 @@ Built and on `develop`: commits `f6c5955`, `fffa36f`, `84595fd`, `b989748`,
 | A caller supplying a code | ✅ refused at the edge |
 | Import end to end from the command line | ✅ one `console` audit row |
 | SPA shell and lazy chunks for every new route | ✅ served |
-| **The screens, in a browser, at counter-PC resolution** | ⬜ **task 1** |
+| **The screens, in a browser, at counter-PC resolution** | ✅ **task 1, done** |
 
 ---
 
 ## Running the app locally
 
-Both tasks below need the real binary with the real embedded SPA. The Vite dev
-server is not good enough for task 1 — the thing being checked is what the
-station will actually run.
+Task 2 needs the real binary, and so did task 1. The Vite dev server is not good
+enough for looking at screens — the thing being checked is what the station will
+actually run. Kept here because it is the fastest way back to a running system
+with data in it, whatever the reason.
 
 ```bash
 make web-build build-all           # builds the SPA and embeds it in all five binaries
@@ -90,54 +96,64 @@ Clean up afterwards with `rm -rf /tmp/bokkie-check`.
 
 ---
 
-## Task 1 — Look at the screens
+## Task 1 — Look at the screens ✅
 
-**The only outstanding line of Step 4's gate.** Everything reachable without a
-browser has been verified: the shell and every lazy chunk serve for all four
-routes, and the whole flow works end to end over real HTTP against the real
-binary. What is unverified is purely how it renders.
+**Done.** The screens were walked in Chromium against the real binary with the
+real embedded SPA, signed in as a manager and again as an encoder, at 1280,
+1024, 900, 768 and 390px. What follows is what it found; the two design
+decisions it produced are recorded in
+[04-customers.md](04-customers.md) under *Decisions taken while building*.
 
-The four screens are `/customers`, `/customers/new`, `/customers/:id` and
-`/customers/import` (the last is manager-only and an encoder is redirected away
-from it).
+The everyday path holds:
 
-Walk the everyday path and check it holds together:
+- [x] Found a customer by code, by name, and by phone. `0917` finds a number
+      entered as `0917-123-4567`, and the list displays it grouped as
+      `0917 123 4567` while the database keeps bare digits.
+- [x] `%` in the search box returns exactly `100% Palay Trading`, and `_`
+      returns nothing. Both are literal, as the server tests already asserted.
+- [x] Status filter: Active 6, Deactivated 2, All 8.
+- [x] Created a customer. No code appears anywhere on the form before saving;
+      `BA-0009` was assigned on save, continuing from `BA-0008`.
+- [x] Edited the phone to `(0928) 111-2233` and saved. After a reload the
+      stored value is `09281112233`.
+- [x] Deactivated and reactivated as a manager.
+- [x] As an encoder: no Deactivate button on the detail screen, no Import CSV
+      button on the list, no "Import customers" in the rail, and typing
+      `/customers/import` redirects to `/customers`. Save changes stays
+      available, which is the counter work encoders do all day.
+- [x] Import: a good file reports what it would write and writes nothing; a
+      file with a bad row names the line — *line 3, "maybe" is not a yes or a
+      no in the active column* — and refuses the whole file.
 
-- [ ] Find a customer by code, by name, and by phone. Typing `0917` must find a
-      number displayed as `09171234567`.
-- [ ] Type `%` into the search box. It must match `100% Palay Trading` and
-      nothing else — not the whole master.
-- [ ] Switch the status filter through Active / Deactivated / All.
-- [ ] Create a customer. The code must appear only after saving, and must be the
-      next one in sequence.
-- [ ] Edit a phone number with punctuation in it and save. It should come back
-      stripped to digits.
-- [ ] Deactivate and reactivate as a manager.
-- [ ] Sign in as an encoder and confirm the Deactivate button and the Import CSV
-      button are both absent.
-- [ ] On the import screen, Check a good file and a file with a bad row. The
-      rejection table must name the line.
+And the judgement calls:
 
-**Then the part that actually needs a person**, because it is a judgement rather
-than an assertion:
+- [x] **Counter-PC width.** This is where the one real finding was. The page
+      header's buttons stacked on top of each other in a band from 964px to
+      1032px and nowhere else — the station's `--app` window at ~1024px sits in
+      the middle of it. Fixed, and the reasoning is in 04-customers.md; the
+      band was then swept again at every width from 700 to 1440px.
+- [x] **No screen scrolls sideways** at any of the five widths, signed in or
+      out, with a rejection table on screen or without one. The customer table
+      scrolls inside its own container on a phone rather than pushing the page.
+- [x] **The import rejection table** reads correctly at 390px. The code column
+      wraps `BA-0102` across two lines, which is ugly and was left alone —
+      importing a CSV is not a phone job, and the table is legible.
 
-- [ ] **Counter-PC width.** The station runs Edge in `--app` mode, so there is no
-      address bar and the window may be narrower than a browser window. Narrow
-      the window to roughly 1024px and check the DataTable does not spill and the
-      header does not wrap into something silly.
-- [ ] **A phone.** The requirement that decided the whole architecture was
-      "several PCs plus phones/tablets". Open it on one. The list and the search
-      box are what matter; the import screen is not a phone job.
-- [ ] **The import rejection table** at narrow width. It has three columns and
-      the reason column carries a full sentence, which is the most likely thing
-      on any of these screens to lay out badly.
+**Not covered by this, and still worth doing when the hardware exists:** a real
+phone on the station LAN, rather than a 390px viewport with touch emulation.
+That is the same drill Step 1's gate is waiting on — see
+[01-foundation.md](01-foundation.md) — and it belongs to that trip, not this
+one.
 
-**Done when:** a customer can be found, created, edited and deactivated from a
-browser, and nothing is unusable at 1024px or on a phone.
+**Two cosmetic things noticed and deliberately not fixed**, recorded so the next
+person does not spend time rediscovering them:
 
-If something is wrong, it is almost certainly CSS in the `<style scoped>` block
-of the page concerned — the data and the API behind these screens are already
-covered by tests.
+- The import screen prints the file's SHA-256 under the filename with no label
+  saying what the hex is. It is right that it is on screen and not only in the
+  audit log; it would read better with a word in front of it.
+- A disabled PrimeVue primary button is the full brand colour at 60% opacity,
+  which still looks pressable. The Import button is correctly disabled until a
+  check passes — verified, not assumed — but a glance would not tell you.
 
 ---
 
@@ -215,13 +231,19 @@ the business.
 
 ---
 
-## When all three are done
+## When the other two are done
 
-- Mark Step 4 ✅ in [04-customers.md](04-customers.md) and in
-  [README.md](README.md).
-- Delete this file. It is a work order, not a record — what it decided belongs
-  in 04-customers.md under *Decisions taken while building*, where the next
-  person will actually look for it.
+Step 4's gate is closed — that happened with task 1, and both
+[04-customers.md](04-customers.md) and [README.md](README.md) say so. What is
+left is bookkeeping on two answers from the owner:
+
+- Record each answer in 04-customers.md under *Decisions taken while building*,
+  whether or not it changed a line of code. "We asked, and it stays as it is"
+  is worth as much there as an amendment, because it stops the question being
+  reopened from scratch in six months.
+- Then delete this file. It is a work order, not a record, and by that point
+  everything in it that outlives the tasks will be in 04-customers.md, where
+  the next person will actually look for it.
 
 ---
 
