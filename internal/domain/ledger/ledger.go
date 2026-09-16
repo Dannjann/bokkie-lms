@@ -476,8 +476,23 @@ func (s *Service) refreshCache(ctx context.Context, tx *sql.Tx, customerID int64
 // A customer with no entries has a zero balance and no cache row; that is not
 // an error, it is a customer nothing has happened to yet.
 func (s *Service) BalanceFor(ctx context.Context, customerID int64) (Balance, error) {
+	return balanceFor(ctx, s.db, customerID)
+}
+
+// BalanceForTx is BalanceFor inside a transaction the caller already owns.
+//
+// A payment needs this: the balance it is divided against must be the one that
+// is true at the moment its entry is written, not one read on another
+// connection before a second poster's entry landed. The cache is written in the
+// same transaction as the entries behind it, so inside a transaction it is
+// exactly as current as the ledger is.
+func (s *Service) BalanceForTx(ctx context.Context, tx *sql.Tx, customerID int64) (Balance, error) {
+	return balanceFor(ctx, tx, customerID)
+}
+
+func balanceFor(ctx context.Context, q querier, customerID int64) (Balance, error) {
 	balance := Balance{CustomerID: customerID}
-	err := s.db.QueryRowContext(ctx, `
+	err := q.QueryRowContext(ctx, `
 		SELECT principal_cents, interest_cents, COALESCE(last_activity_date, '')
 		  FROM customer_balances
 		 WHERE customer_id = ?`, customerID).
@@ -662,6 +677,7 @@ type scanner interface{ Scan(dest ...any) error }
 // implementation serves a caller who has a transaction and one who does not.
 type querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 func scanEntry(row scanner) (Entry, error) {
