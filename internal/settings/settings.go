@@ -117,6 +117,20 @@ func (s *Store) Raw(d Def) string {
 // start because someone typo'd a time.
 func (s *Store) String(d Def) string { return s.Raw(d) }
 
+// Choice reads a KindChoice setting, falling back to the default if what is
+// stored is not one of the options — the same discipline as Int and Bool, and
+// for the same reason: a row edited by hand in a sqlite3 shell must not be able
+// to stop the station taking payments.
+func (s *Store) Choice(d Def) string {
+	value := strings.TrimSpace(s.Raw(d))
+	for _, option := range d.Options {
+		if value == option {
+			return value
+		}
+	}
+	return d.Default
+}
+
 func (s *Store) Int(d Def) int {
 	n, err := strconv.Atoi(strings.TrimSpace(s.Raw(d)))
 	if err != nil {
@@ -195,6 +209,14 @@ func Validate(d Def, value string) error {
 		if _, err := time.LoadLocation(value); err != nil {
 			return fmt.Errorf("%s is not a known timezone: %q", d.Key, value)
 		}
+	case KindChoice:
+		for _, option := range d.Options {
+			if value == option {
+				return nil
+			}
+		}
+		return fmt.Errorf("%s must be one of %s, got %q",
+			d.Key, strings.Join(d.Options, " or "), value)
 	case KindString:
 		if value == "" {
 			return fmt.Errorf("%s cannot be empty", d.Key)

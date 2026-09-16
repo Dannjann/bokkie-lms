@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	bokkiedb "github.com/Dannjann/bokkie-lms/internal/db"
@@ -113,6 +114,10 @@ func TestInvalidValuesAreRefused(t *testing.T) {
 		{"schedule hour is out of range", BackupSchedule, "25:00"},
 		{"timezone is invented", Timezone, "Mars/Olympus"},
 		{"enabled is not a boolean", BackupEnabled, "yes please"},
+		{"the application order is misspelled", PaymentApplies, "intrest-first"},
+		{"the application order is invented", PaymentApplies, "oldest-voucher-first"},
+		{"the application order is empty", PaymentApplies, ""},
+		{"the OR sequence starts at zero", OrNoStart, "0"},
 	}
 
 	for _, tc := range bad {
@@ -125,6 +130,78 @@ func TestInvalidValuesAreRefused(t *testing.T) {
 				t.Errorf("%s = %q after a refused write, want the default %q", tc.def.Key, got, tc.def.Default)
 			}
 		})
+	}
+}
+
+// A choice setting is the one place where falling back to the default is not
+// enough on its own: the refusal has to name the legal values, because the
+// person reading it is standing at a settings screen having just typed one.
+func TestARefusedChoiceSaysWhatIsAllowed(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t, openTestDB(t))
+
+	err := store.Set(ctx, PaymentApplies, "intrest-first")
+	if err == nil {
+		t.Fatal("a misspelled application order was accepted")
+	}
+	for _, option := range PaymentApplies.Options {
+		if !strings.Contains(err.Error(), option) {
+			t.Errorf("the refusal %q does not mention %q", err, option)
+		}
+	}
+}
+
+func TestBothApplicationOrdersAreAccepted(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t, openTestDB(t))
+
+	for _, option := range PaymentApplies.Options {
+		if err := store.Set(ctx, PaymentApplies, option); err != nil {
+			t.Fatalf("set %s = %q: %v", PaymentApplies.Key, option, err)
+		}
+		if got := store.Choice(PaymentApplies); got != option {
+			t.Errorf("%s = %q after setting it to %q", PaymentApplies.Key, got, option)
+		}
+	}
+}
+
+// The same hand-edit discipline as every other reader, on the setting where it
+// matters most: a nonsense value must mean the default, not an empty string
+// that matches neither branch of the split.
+func TestAHandEditedChoiceFallsBackToTheDefault(t *testing.T) {
+	ctx := context.Background()
+	database := openTestDB(t)
+	store := openStore(t, database)
+
+	if _, err := database.Exec(`UPDATE settings SET value = 'whatever' WHERE key = ?`, PaymentApplies.Key); err != nil {
+		t.Fatalf("corrupt setting: %v", err)
+	}
+	if err := store.Reload(ctx); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+
+	if got := store.Choice(PaymentApplies); got != PaymentApplies.Default {
+		t.Errorf("%s = %q, want the default %q", PaymentApplies.Key, got, PaymentApplies.Default)
+	}
+}
+
+// Every choice setting must be able to hold its own default, and must offer at
+// least two things to choose between. Both are the sort of mistake that is
+// invisible until somebody opens the settings screen.
+func TestEveryChoiceSettingIsCoherent(t *testing.T) {
+	for _, def := range All {
+		if def.Kind != KindChoice {
+			if len(def.Options) > 0 {
+				t.Errorf("%s is not a choice but lists options", def.Key)
+			}
+			continue
+		}
+		if len(def.Options) < 2 {
+			t.Errorf("%s is a choice between %d things", def.Key, len(def.Options))
+		}
+		if err := Validate(def, def.Default); err != nil {
+			t.Errorf("%s cannot hold its own default: %v", def.Key, err)
+		}
 	}
 }
 

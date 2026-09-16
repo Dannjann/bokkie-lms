@@ -18,6 +18,10 @@ type Def struct {
 	Kind    Kind
 	Default string
 	Doc     string
+
+	// Options is the set a KindChoice setting may hold, in the order a settings
+	// screen should offer them. Empty for every other kind.
+	Options []string
 }
 
 // Kind is the type a setting's stored text parses as. Storing everything as
@@ -32,6 +36,7 @@ const (
 	KindBool
 	KindTimeOfDay // "HH:MM" in the station's timezone
 	KindTimezone  // an IANA name, e.g. Asia/Manila
+	KindChoice    // one of a fixed list, named in Def.Options
 )
 
 func (k Kind) String() string {
@@ -44,6 +49,8 @@ func (k Kind) String() string {
 		return "time of day as HH:MM"
 	case KindTimezone:
 		return "IANA timezone name"
+	case KindChoice:
+		return "one of a fixed list"
 	default:
 		return "text"
 	}
@@ -92,6 +99,37 @@ var (
 		Doc:     "How many backup files to keep before the oldest is deleted.",
 	}
 
+	// OrNoStart is RefNoStart's twin for receipts. They are separate sequences
+	// because they are separate pads of paper, and the legacy system's last OR
+	// number goes here on the morning of the cutover. Step 6 consumes it.
+	OrNoStart = Def{
+		Key:     "orno.start",
+		Kind:    KindInt,
+		Default: "1",
+		Doc:     "First OR No. this system issues. Set at cutover to continue the legacy sequence.",
+	}
+
+	// PaymentApplies decides which half of a debt a payment clears first when a
+	// customer owes both principal and interest.
+	//
+	// This is Q5 of the domain interview, and it is unanswered. It is a setting
+	// rather than a constant so that the answer, when it comes, is a change
+	// somebody makes on a screen. Nothing charges interest until step 7, so no
+	// payment posted before then can be affected by it either way — which is
+	// exactly why settling on a default now costs nothing.
+	//
+	// It is a choice rather than a string because a typo here changes what
+	// money does. "intrest-first" must be refused at the edge, not silently
+	// read as the default by the fall-back-to-default rule every other reader
+	// relies on.
+	PaymentApplies = Def{
+		Key:     "payment.applies",
+		Kind:    KindChoice,
+		Default: "interest-first",
+		Options: []string{"interest-first", "principal-first"},
+		Doc:     "Which part of a debt a payment clears first when a customer owes both.",
+	}
+
 	// RefNoStart is the number the voucher sequence continues from at cutover.
 	// The legacy system's last Ref. No. goes here so staff see no
 	// discontinuity on the morning they switch. Step 5 consumes it.
@@ -111,6 +149,8 @@ var All = []Def{
 	BackupEnabled,
 	BackupRetention,
 	RefNoStart,
+	OrNoStart,
+	PaymentApplies,
 }
 
 // byKey indexes All for lookup by the string a request carries.

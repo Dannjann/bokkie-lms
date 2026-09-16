@@ -17,19 +17,30 @@ type settingView struct {
 	Kind    string `json:"kind"`
 	Default string `json:"default"`
 	Doc     string `json:"doc"`
+
+	// Options is what a choice setting may be set to, so the screen can offer a
+	// list rather than a text box. Absent for every other kind.
+	Options []string `json:"options,omitempty"`
+}
+
+// view is one setting as the API presents it. It exists so the list and the
+// response to an update cannot describe the same setting differently.
+func view(def settings.Def, value string) settingView {
+	return settingView{
+		Key:     def.Key,
+		Value:   value,
+		Kind:    def.Kind.String(),
+		Default: def.Default,
+		Doc:     def.Doc,
+		Options: def.Options,
+	}
 }
 
 func handleListSettings(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		views := make([]settingView, 0, len(settings.All))
 		for _, def := range settings.All {
-			views = append(views, settingView{
-				Key:     def.Key,
-				Value:   d.Settings.Raw(def),
-				Kind:    def.Kind.String(),
-				Default: def.Default,
-				Doc:     def.Doc,
-			})
+			views = append(views, view(def, d.Settings.Raw(def)))
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"settings": views})
 	}
@@ -79,7 +90,7 @@ func handleUpdateSetting(d Deps) TxHandler {
 			EntityID:    def.Key,
 			Before:      map[string]string{"value": before},
 			After:       map[string]string{"value": req.Value},
-			Body:        settingView{Key: def.Key, Value: req.Value, Kind: def.Kind.String(), Default: def.Default, Doc: def.Doc},
+			Body:        view(def, req.Value),
 			AfterCommit: d.Settings.Reload,
 		}, nil
 	}
