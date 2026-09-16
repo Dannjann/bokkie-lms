@@ -447,7 +447,7 @@ rendered in `Asia/Manila`.
 
 Steps 1–3 are the architecture and are detailed in their own docs. Steps 4–10
 are features — listed for shape only, **each gets its own plan when we reach
-it.**
+it.** Steps 4 and 5 have theirs.
 
 | Step | Scope | Doc | Depends on |
 |---|---|---|---|
@@ -457,7 +457,7 @@ it.**
 | 2.5 | **Install location, signed USB updates, first inch** | [02.5-install-update.md](02.5-install-update.md) | Step 2 |
 | 3 | **Money & ledger core** | [03-ledger-core.md](03-ledger-core.md) | Step 2 |
 | 4 | **Customers — CRUD, `BA-####` codes, search, CSV import** | [04-customers.md](04-customers.md) | Step 3 |
-| 5 | Advances — voucher + line grid, draft→posted, void via reversal | *later* | Step 4 |
+| 5 | **Advances — voucher + line grid, draft→posted, void via reversal** | [05-advances.md](05-advances.md) | Step 4 |
 | 6 | Payments — entry, allocation, customer statement | *later* | Step 5, Q5 |
 | 7 | Interest — posting run, preview, reversible | *later* | **Blocked on Q1** |
 | 8 | Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS | *later* | **Blocked on Q3/Q4** |
