@@ -21,7 +21,7 @@ export CGO_ENABLED := 0
 
 GOOSES := windows darwin linux
 
-.PHONY: all setup dev web-dev web-install web-build test vet-all build-all keygen stage-scripts sign release clean ci help
+.PHONY: all setup dev web-dev web-install web-build install-local test vet-all build-all keygen stage-scripts sign release clean ci help
 
 all: build-all
 
@@ -30,6 +30,7 @@ help:
 	@echo "dev         run the server against the Vite dev server (run web-dev too)"
 	@echo "web-dev     run the Vite dev server with hot reload"
 	@echo "web-build   build the SPA into web/dist"
+	@echo "install-local  build this tree onto this machine's service (ARGS='--dry-run')"
 	@echo "test        go test ./..."
 	@echo "vet-all     go vet once per GOOS, so build-tagged files are type-checked"
 	@echo "build-all   five binaries into dist/, embedding whatever web/dist holds"
@@ -60,6 +61,15 @@ web-install:
 # Go-only change does not need node installed.
 web-build: web-install
 	cd web && npm run build
+
+# Put this working tree on this machine's service, so a change can be seen where
+# it will actually run rather than only on the Vite dev server.
+#
+# Not a release: it builds from source and skips the signature check, which is
+# the developer's trade and nobody else's. The station's path is a signed folder
+# from `make release` and the double-click wrappers inside it.
+install-local:
+	@sh scripts/dev-install.sh $(ARGS)
 
 test: web/dist
 	go test ./...
@@ -106,8 +116,12 @@ sign:
 # The double-click wrappers travel with the binaries. Without them a release
 # folder is five executables and a JSON file, and the person it is handed to has
 # to know which one to run and how to run it with administrator rights.
+#
+# Named one by one rather than `scripts/*`: scripts/ also holds developer
+# tooling that builds from source and skips the signature check, and a glob here
+# is how that would end up on a USB stick bound for the station.
 stage-scripts: | dist
-	cp scripts/* dist/
+	cp scripts/*.cmd scripts/*.command scripts/pick-binary.sh dist/
 	@chmod +x dist/*.command dist/pick-binary.sh
 
 dist:
