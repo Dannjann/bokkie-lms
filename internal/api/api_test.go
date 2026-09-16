@@ -20,6 +20,7 @@ import (
 	bokkiedb "github.com/Dannjann/bokkie-lms/internal/db"
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
+	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
@@ -141,6 +142,7 @@ func testDeps(t *testing.T, database *sql.DB) Deps {
 		Ledger:       ledgerSvc,
 		Advances:     advance.New(database, ledgerSvc, store, log),
 		Payments:     payment.New(database, ledgerSvc, store, log),
+		Interest:     interest.New(database, ledgerSvc, store, log),
 		Users:        auth.NewUsers(database),
 		Sessions:     auth.NewSessions(database),
 		Limiter:      auth.NewLimiter(),

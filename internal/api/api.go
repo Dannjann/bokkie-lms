@@ -26,6 +26,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/backup"
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
+	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
@@ -60,6 +61,10 @@ type Deps struct {
 	// Payments is the receipt: the other document that writes to the ledger,
 	// and the only one that writes entries in the other direction.
 	Payments *payment.Service
+
+	// Interest is the run: the third document, and the only one that writes to
+	// every borrower's balance at once rather than to one farmer's.
+	Interest *interest.Service
 
 	// Backup runs the on-demand backup. It is the same scheduler that runs the
 	// nightly job, so a manual backup and a scheduled one are literally the
@@ -253,6 +258,32 @@ func registerRoutes(rt *router, d Deps) {
 
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/payments/{id}/void",
 		"payment.voided", "payment", handleVoidPayment(d))
+
+	// --- Interest -----------------------------------------------------------
+	//
+	// ManagerOnly throughout, reads included, and that is the one place this
+	// section departs from the two above. Everything else opens its everyday
+	// half to encoders because a farmer is standing at the counter and the work
+	// is theirs. Nothing about a run is counter work — nobody is standing
+	// there, it is not typed off a slip, and it changes what every farmer owes
+	// at once. The preview is held back with the rest because the preview is
+	// the dangerous artifact: it is the screen that ends in a Post button.
+
+	rt.read(ManagerOnly, "/api/interest-runs", handleListInterestRuns(d))
+	rt.read(ManagerOnly, "/api/interest-runs/{id}", handleGetInterestRun(d))
+
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/interest-runs",
+		"interest.draft.created", "interest", handleCreateInterestRun(d))
+	rt.mutate(ManagerOnly, http.MethodPut, "/api/interest-runs/{id}",
+		"interest.draft.updated", "interest", handleUpdateInterestRun(d))
+	rt.mutate(ManagerOnly, http.MethodDelete, "/api/interest-runs/{id}",
+		"interest.draft.deleted", "interest", handleDeleteInterestRun(d))
+
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/interest-runs/{id}/post",
+		"interest.posted", "interest", handlePostInterestRun(d))
+
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/interest-runs/{id}/void",
+		"interest.voided", "interest", handleVoidInterestRun(d))
 
 	// The statement hangs off the customer rather than off the ledger, because
 	// that is the question being asked: what does this farmer owe, and why.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
+	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
 )
@@ -41,8 +42,9 @@ type statementRow struct {
 	Running balanceView `json:"running"`
 
 	// Document is what a person would call the thing this entry came from —
-	// "Ref. No. 1425", "OR No. 7" — or empty for an entry with no document
-	// behind it, which today means an opening balance or an adjustment.
+	// "Ref. No. 1425", "OR No. 7", "Interest run 3" — or empty for an entry
+	// with no document behind it, which today means an opening balance or an
+	// adjustment.
 	Document string `json:"document,omitempty"`
 }
 
@@ -196,6 +198,16 @@ func documentLabels(ctx context.Context, d Deps, rows []ledger.StatementRow) (ma
 		}
 		for lineID, refNo := range refNos {
 			labels[documentKey{advance.SourceTable, lineID}] = label("Ref. No.", refNo)
+		}
+	}
+
+	if ids := byTable[interest.SourceTable]; len(ids) > 0 {
+		runNos, err := d.Interest.RunNosForLines(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for lineID, runNo := range runNos {
+			labels[documentKey{interest.SourceTable, lineID}] = label("Interest run", runNo)
 		}
 	}
 
