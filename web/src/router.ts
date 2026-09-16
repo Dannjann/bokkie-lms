@@ -82,6 +82,33 @@ export const router = createRouter({
       meta: { title: 'Voucher', parent: { label: 'Advances', to: '/advances' } },
     },
     {
+      path: '/payments',
+      name: 'payments',
+      component: () => import('@/pages/PaymentsPage.vue'),
+      meta: { title: 'Payments' },
+    },
+    {
+      path: '/payments/new',
+      name: 'payment-new',
+      component: () => import('@/pages/PaymentNewPage.vue'),
+      meta: { title: 'New payment', parent: { label: 'Payments', to: '/payments' } },
+    },
+    {
+      path: '/payments/:id(\\d+)',
+      name: 'payment',
+      component: () => import('@/pages/PaymentPage.vue'),
+      meta: { title: 'Payment', parent: { label: 'Payments', to: '/payments' } },
+    },
+    {
+      // Hangs off the customer rather than off a statements section: this is
+      // one farmer's history, reached from the farmer. The all-customers
+      // statement screen is step 8's, along with the print layout.
+      path: '/customers/:id(\\d+)/statement',
+      name: 'statement',
+      component: () => import('@/pages/StatementPage.vue'),
+      meta: { title: 'Statement', parent: { label: 'Customers', to: '/customers' } },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),

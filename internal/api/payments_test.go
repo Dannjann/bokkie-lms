@@ -307,3 +307,35 @@ func TestAStatementOfSomebodyNotOnTheBooks(t *testing.T) {
 		t.Errorf("a statement of a stranger returned %d, want 404", resp.Code)
 	}
 }
+
+// A statement that cannot be built is a fault, and must not be reported as a
+// bad date range — that is what sends somebody looking at the date pickers
+// while the real error sits unlogged. Only a range running backwards is the
+// caller's mistake.
+func TestABadStatementRangeAndABrokenOneAreDifferentAnswers(t *testing.T) {
+	f := newPaymentFixture(t)
+	statement := "/api/customers/" + itoa(f.farmer.ID) + "/statement"
+
+	backwards := request(t, f.handler, http.MethodGet,
+		statement+"?from=2026-03-31&to=2026-03-01", f.encoder, nil)
+	if backwards.Code != http.StatusBadRequest {
+		t.Errorf("a statement running backwards returned %d, want 400", backwards.Code)
+	}
+
+	// A row written by something other than this system — a hand repair in a
+	// SQLite browser is the realistic case — with a timestamp the ledger cannot
+	// read. The statement cannot be built, and that is a 500.
+	if _, err := f.db.Exec(
+		`INSERT INTO ledger_entries (customer_id, entry_date, entry_type,
+		     principal_delta_cents, interest_delta_cents, source_table, reason,
+		     created_at, created_by_username)
+		 VALUES (?, '2026-03-02', 'interest', 0, 60000, '', '', 'yesterday afternoon', 'console')`,
+		f.farmer.ID); err != nil {
+		t.Fatalf("plant an unreadable entry: %v", err)
+	}
+
+	broken := request(t, f.handler, http.MethodGet, statement, f.encoder, nil)
+	if broken.Code != http.StatusInternalServerError {
+		t.Errorf("a statement over an unreadable entry returned %d, want 500: %s", broken.Code, broken.Body)
+	}
+}

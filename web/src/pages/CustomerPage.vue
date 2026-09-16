@@ -109,6 +109,24 @@ onMounted(load)
           </h1>
         </template>
         <template #actions>
+          <!--
+            The two things somebody opens a customer to do, once there is money
+            on the record: take a payment, or read them their history. Both are
+            here rather than in the sidebar because this is where the balance
+            they are asking about is.
+          -->
+          <Button
+            label="Record payment"
+            icon="pi pi-money-bill"
+            @click="router.push({ name: 'payment-new', query: { customer: customer.id } })"
+          />
+          <Button
+            label="Statement"
+            icon="pi pi-file"
+            severity="secondary"
+            outlined
+            @click="router.push({ name: 'statement', params: { id: customer.id } })"
+          />
           <Button
             label="Back to customers"
             icon="pi pi-arrow-left"
@@ -175,6 +193,14 @@ onMounted(load)
                 : 'No advances or payments recorded yet.'
             }}
           </p>
+
+          <RouterLink
+            v-if="balance.last_activity"
+            class="balance__link"
+            :to="{ name: 'statement', params: { id: customer.id } }"
+          >
+            See the statement
+          </RouterLink>
         </section>
       </div>
     </template>
@@ -194,6 +220,10 @@ onMounted(load)
   display: grid;
   place-items: center;
   padding: 4rem 0;
+}
+
+.balance__link {
+  font-size: 0.875rem;
 }
 
 .customer__code {

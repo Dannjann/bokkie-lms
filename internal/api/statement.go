@@ -97,9 +97,21 @@ func handleGetStatement(d Deps) http.HandlerFunc {
 		}
 
 		stmt, err := d.Ledger.Statement(ctx, id, from, to)
-		if err != nil {
+		if errors.Is(err, ledger.ErrInvalidEntry) {
+			// The only thing a caller can get wrong here: a range that runs
+			// backwards. Everything else is a fault, and must not be dressed up
+			// as one — this handler used to report every failure as a bad date
+			// range, which sent the first person who hit a real one looking at
+			// the date pickers while the actual error sat unlogged.
 			writeJSON(w, http.StatusBadRequest, errorBody{
 				Error: "that date range does not make a statement", RequestID: RequestID(ctx)})
+			return
+		}
+		if err != nil {
+			d.Logger.Error("build a statement",
+				"id", RequestID(ctx), "customer", id, "error", err)
+			writeJSON(w, http.StatusInternalServerError, errorBody{
+				Error: "internal error", RequestID: RequestID(ctx)})
 			return
 		}
 
