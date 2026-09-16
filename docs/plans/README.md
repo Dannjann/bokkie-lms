@@ -18,7 +18,7 @@ Station**, Pintor Gamu, Isabela.
 | [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | ✅ Built, gate passed |
 | [04-customers-gate.md](04-customers-gate.md) | Step 4 — two questions still owed to the owner | 🟨 Task 1 done |
 | [05-advances.md](05-advances.md) | Step 5 — advance vouchers, draft→posted, void via reversal | ✅ Built, gate passed |
-| [06-payments.md](06-payments.md) | Step 6 — payments, the principal/interest split, customer statement | ⬜ Planned |
+| [06-payments.md](06-payments.md) | Step 6 — payments, the principal/interest split, customer statement | ✅ Built, gate passed |
 
 Steps 7–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -113,6 +113,37 @@ a scrolling card and dragged the page 316px wide on a phone. All three are
 fixed; see [05-advances.md](05-advances.md) for the seven decisions taken
 before building and the seven taken while building.
 
+**Step 6 is complete and its gate has passed.** Money can come back. A payment
+is one receipt for one farmer — header only, no grid, because that is what a
+counter transaction is — typed as a draft, posted once against its own OR No.
+sequence, and undone only by reversing the entry it wrote. Posting is the first
+thing in the system that genuinely has to *read*: the split between principal
+and interest depends on what the farmer owes at that moment. Step 5's rule
+survives intact, because what it requires is that the first statement be a
+write — so the order is UPDATE the number and status, read the balance, divide
+in Go, post the entry. All three mutations are caught: a read-then-write
+allocator seizes up under twenty posters, a split that clears interest without
+capping at the amount drives a half negative, and sending an overpayment's
+excess to interest fails on the first generated test.
+
+The split itself is stored on the ledger entry and nowhere else, so there is no
+second copy to disagree with the record. Which half is cleared first is the
+`payment.applies` setting, defaulting to interest-first: Q5 is unanswered and
+nothing charges interest until Step 7, so the answer is a settings change rather
+than a migration, and Q5 no longer blocks anything. Overpayment is allowed and
+warned about before posting rather than after, and a deactivated farmer can
+still pay — which inverts Step 5's check on purpose, because deactivation says
+who the station lends to today and not who owes money from last season.
+
+And a farmer can now be read their own history: a statement with an opening
+balance, every entry, a running balance computed in Go on each row, and a
+closing balance that must equal `BalanceAt` — an invariant the property tests
+check at a cut date as well as at the end. The ledger still knows nothing about
+vouchers or receipts; turning an entry's provenance into "Ref. No. 1425" happens
+above it, one query per source table. The screens turned up three faults, all
+invisible without real money on them — including a handler that reported genuine
+faults as bad date ranges. See [06-payments.md](06-payments.md).
+
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,
 backs the database up, swaps the binary, restarts, confirms `/healthz` answers
@@ -158,4 +189,8 @@ bokkie update DIR        # back up, swap, restart, verify — or roll back
 
 bokkie import-customers -check F.csv  # what the file would do, writing nothing
 bokkie import-customers F.csv         # load the customer master, all or nothing
+```
+
+```bash
+go test ./internal/domain/payment/... -race    # the receipt, the split, twenty posters
 ```

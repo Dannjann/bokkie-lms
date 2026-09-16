@@ -1,6 +1,6 @@
 # Step 6 — Payments
 
-**Status:** ⬜ planned · **Depends on:** Step 5 · **Blocks:** Steps 8, 10
+**Status:** ✅ built, gate passed · **Depends on:** Step 5 · **Blocks:** Steps 8, 10
 
 ---
 
@@ -27,6 +27,98 @@ manager can void it, after which the balance is exactly back, with both the
 payment and its reversal still on the record. And anyone can open a customer and
 read a statement whose closing balance is the balance the rest of the system
 shows.
+
+---
+
+## Where this stands
+
+All nine tasks are built and the gate has been run, screens included.
+
+| Checked | Result |
+|---|---|
+| Six property invariants over generated sequences, both rules | ✅ hold |
+| 20 concurrent posts under `-race` | ✅ 20 distinct consecutive OR Nos. |
+| Two simultaneous posts of one draft | ✅ posted once |
+| A voided payment | ✅ both halves of the balance exactly back |
+| A second void, and voiding a draft | ✅ both refused |
+| Editing or deleting a posted payment | ✅ refused by the package, the API and the database |
+| `UPDATE`/`DELETE` on a posted payment's row, by hand in SQL | ✅ refused |
+| An edit smuggled in alongside a status change | ✅ refused |
+| A `voided → draft` transition, by hand in SQL | ✅ refused |
+| A duplicate OR No., by hand in SQL | ✅ refused |
+| A rolled-back post | ✅ no entry, no cache movement, still a draft |
+| `orno.start` moved to 5000 after the sequence began | ✅ ignored, as designed |
+| A payment from a deactivated customer | ✅ accepted, and clears the debt |
+| A payment naming somebody not on the books | ✅ refused |
+| `payment.applies` set to a misspelling | ✅ refused, naming both legal values |
+| An encoder voiding | ✅ refused, refusal audited |
+| A caller supplying `or_no` or `status` | ✅ refused at the edge |
+| Overpayment | ✅ allowed, warned about before posting, credit on principal |
+| **The screens, in a browser, at counter-PC resolution** | ✅ **see below** |
+
+**Both mutations hold**, and each was checked against a deliberate break:
+
+- A read-then-write OR No. allocator fails the concurrency test, and fails
+  exactly as Step 4 predicted — `database is locked (SQLITE_BUSY)` on the
+  second of twenty posters, not two receipts sharing a number.
+- A split that clears interest without capping at the payment amount fails
+  three rows of the table test. Worth recording that the plan guessed wrong
+  about *which* invariant catches it: the halves still add up to the amount,
+  because the second half is computed as the remainder. What breaks is that one
+  of them goes negative.
+- A third, added while writing the property test: sending an overpayment's
+  excess to interest rather than to principal fails on the first generated
+  test — *"cleared 1 of interest, more than the 0 owed"*.
+
+**The screens were walked** in Chromium against the real binary with the real
+embedded SPA, signed in as a manager and again as an encoder, at 1024px and
+then swept from 700 to 1440px and at 390px. The everyday path holds: a farmer
+owing ₱5,000.00, a ₱2,000.00 payment typed, saved as a draft, posted as OR No.
+1, the balance down to ₱3,000.00, a statement showing both documents by their
+numbers and closing where the customer screen says it does, then voided with a
+reason and the balance exactly back. Nothing scrolls sideways at any width and
+no console errors appear anywhere. Three faults it found are in *Decisions and
+faults from building* below.
+
+**The interest half of the split was exercised** before Step 7 exists, by
+writing an interest entry into the ledger by hand, letting the boot-time
+self-check rebuild the cache it disagreed with — which it did, and audited — and
+posting a ₱1,000.00 payment against it. It divided on screen into −₱600.00 of
+interest and −₱400.00 of principal.
+
+---
+
+## Decisions and faults from building
+
+**1. The statement handler reported faults as bad requests.** Every failure
+from `Statement` came back as *"that date range does not make a statement"*,
+including the ones that are not the caller's fault at all. A ledger row with an
+unreadable timestamp — somebody repairing the database in a SQLite browser,
+which is the realistic case — produced that sentence and no log line, which
+would send the first person who hit it to look at the date pickers. Only
+`ErrInvalidEntry` is a 400 now; everything else is a 500 and a logged error,
+and there is a test for each answer.
+
+**2. The amount field was left-aligned beside a column of right-aligned
+pesos.** PrimeVue's `InputText` *is* the input element, so the `:deep(input)`
+selector matched nothing. Invisible until there was a balance panel next to it
+to be out of line with.
+
+**3. Every receipt said "Cleared ₱0.00 of interest".** True, and useless:
+nothing charges interest until Step 7, so that zero was on every receipt in the
+system. Only the halves that actually moved are named now.
+
+**4. `BalanceForTx` had to be added to the ledger.** Not in the plan, and
+unavoidable: the split must be made from the balance that is true inside the
+posting transaction, not one read on another connection before a second
+poster's entry landed.
+
+**5. The property test's model tracks only the combined debt.** A model that
+computed the split too would be a second copy of `Split`, and a second copy
+agrees with a wrong original. Writing the invariants as properties instead
+caught a mistake immediately — and it was in the *test*, not the code: under
+principal-first with no principal owed, a payment correctly falls through to
+interest, and the assertion said it should not.
 
 ---
 
