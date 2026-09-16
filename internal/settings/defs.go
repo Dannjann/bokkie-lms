@@ -130,6 +130,57 @@ var (
 		Doc:     "Which part of a debt a payment clears first when a customer owes both.",
 	}
 
+	// InterestMethod is how interest is computed, if at all.
+	//
+	// This is Q1 of the domain interview — the single most important question
+	// about how the business works — and it is unanswered. It is a setting
+	// rather than a constant for the reason PaymentApplies is one, except that
+	// here the stakes are higher: an interest rule implemented wrong produces
+	// numbers that look plausible and are wrong across every farmer at once.
+	//
+	// The default is "none", which charges nothing and refuses to let a run be
+	// created at all. An install nobody has configured therefore computes no
+	// interest, rather than quietly computing some — and if the answer to Q1
+	// turns out to be "that button was never used", the answer costs a settings
+	// screen and no code.
+	InterestMethod = Def{
+		Key:     "interest.method",
+		Kind:    KindChoice,
+		Default: "none",
+		Options: []string{"none", "monthly-on-balance", "flat-on-advance"},
+		Doc:     "How interest is computed: not at all, on the balance at the end of the period, or once on what was advanced during it.",
+	}
+
+	// InterestRateBps is the rate in basis points: 300 is 3%, 25 is a quarter
+	// of one percent.
+	//
+	// Basis points rather than a percentage with a decimal point, because a
+	// rate stored as "3.5" is a float waiting to be parsed into one, and
+	// internal/domain/money has a test that walks the syntax tree and fails on
+	// any float at all. An integer against a denominator of 10,000 is exact.
+	InterestRateBps = Def{
+		Key:     "interest.rate_bps",
+		Kind:    KindInt,
+		Default: "0",
+		Doc:     "The interest rate in basis points — 300 is 3%. Zero charges nothing.",
+	}
+
+	// InterestBasis is what "what they owe" means when interest is charged on
+	// a balance: the principal alone, or the principal plus interest already
+	// charged and not yet paid.
+	//
+	// That is the difference between simple and compound interest, it is a
+	// sub-question of Q1, and it changes what money does — which is why it is a
+	// choice refused at the edge rather than a bool that would leave a screen
+	// having to invent a word for each side.
+	InterestBasis = Def{
+		Key:     "interest.basis",
+		Kind:    KindChoice,
+		Default: "principal",
+		Options: []string{"principal", "principal-and-interest"},
+		Doc:     "Whether interest is charged on unpaid interest as well as on principal.",
+	}
+
 	// RefNoStart is the number the voucher sequence continues from at cutover.
 	// The legacy system's last Ref. No. goes here so staff see no
 	// discontinuity on the morning they switch. Step 5 consumes it.
@@ -151,6 +202,9 @@ var All = []Def{
 	RefNoStart,
 	OrNoStart,
 	PaymentApplies,
+	InterestMethod,
+	InterestRateBps,
+	InterestBasis,
 }
 
 // byKey indexes All for lookup by the string a request carries.
