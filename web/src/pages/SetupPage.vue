@@ -43,6 +43,11 @@ async function submit(): Promise<void> {
 
 <template>
   <form class="auth" @submit.prevent="submit">
+    <div class="auth__brand">
+      <span class="auth__mark" aria-hidden="true">B</span>
+      <span class="auth__wordmark">Bokkie</span>
+    </div>
+
     <h1 class="auth__title">Set up Bokkie</h1>
     <p class="auth__station">
       This system has no accounts yet. Create the manager account -- it can add

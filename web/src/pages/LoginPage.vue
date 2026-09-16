@@ -49,6 +49,11 @@ async function submit(): Promise<void> {
 
 <template>
   <form class="auth" @submit.prevent="submit">
+    <div class="auth__brand">
+      <span class="auth__mark" aria-hidden="true">B</span>
+      <span class="auth__wordmark">Bokkie</span>
+    </div>
+
     <h1 class="auth__title">Sign in</h1>
     <p class="auth__station">TLS Palay &amp; Corn Buying Station</p>
 
