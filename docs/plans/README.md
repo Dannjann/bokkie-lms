@@ -19,7 +19,7 @@ Station**, Pintor Gamu, Isabela.
 | [04-customers-gate.md](04-customers-gate.md) | Step 4 — two questions still owed to the owner | 🟨 Task 1 done |
 | [05-advances.md](05-advances.md) | Step 5 — advance vouchers, draft→posted, void via reversal | ✅ Built, gate passed |
 | [06-payments.md](06-payments.md) | Step 6 — payments, the principal/interest split, customer statement | ✅ Built, gate passed |
-| [07-interest.md](07-interest.md) | Step 7 — the interest run, its preview, and undoing one | ⬜ Planned |
+| [07-interest.md](07-interest.md) | Step 7 — the interest run, its preview, and undoing one | ✅ Built, gate passed |
 
 Steps 8–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -145,6 +145,38 @@ above it, one query per source table. The screens turned up three faults, all
 invisible without real money on them — including a handler that reported genuine
 faults as bad date ranges. See [06-payments.md](06-payments.md).
 
+**Step 7 is complete and its gate has passed.** The system charges interest. A
+run is a document — a header with a line per borrower, drafted, posted once,
+undone in one act — because it is computed from the record rather than typed off
+a slip, against every farmer at once, and somebody has to be accountable for it.
+Q1 is still unanswered and the step was built anyway: almost nothing that
+question decides is structure, so the rule is one pure function chosen by a
+setting whose default charges nothing, and a fresh install computes no interest
+until a manager sets a rate. Two answers would still cost code — interest
+pro-rated on early repayment, and a rate negotiated per customer — and both are
+written down where the next person will find them.
+
+The draft *is* the preview: the run minus the commit, which is Step 4's CSV rule
+restated, because a preview computed by different code than the thing it
+previews will disagree in the direction nobody checks. What a draft cannot
+promise is that the world stood still, so posting recomputes every line inside
+its own transaction and refuses on any difference, naming the farmer and both
+figures. Charging a period twice is guarded twice — a unique index for the
+identical case, and a condition inside the posting `UPDATE` for the overlapping
+one — and building it proved both halves are load-bearing: with the guard
+removed, an overlapping period charges silently and an identical one fails with
+a constraint error nobody could read.
+
+All four mutations are caught: a read-then-write allocator seizes up under
+twenty posters, rounding down instead of half-up fails three rows of the table
+test, a void that reverses only its first line leaves the second farmer charged,
+and removing the period guard charges September twice. The screens found three
+faults, one of them older than this step — every `label for` on the PrimeVue
+date pickers and selects, here and in Step 6, addressed a wrapper rather than
+the input inside it. And `payment.applies`, shipped in Step 6 with nothing to
+exercise it, finally divides a real payment against real interest. See
+[07-interest.md](07-interest.md).
+
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,
 backs the database up, swaps the binary, restarts, confirms `/healthz` answers
@@ -194,4 +226,5 @@ bokkie import-customers F.csv         # load the customer master, all or nothing
 
 ```bash
 go test ./internal/domain/payment/... -race    # the receipt, the split, twenty posters
+go test ./internal/domain/interest/... -race   # the rule, the preview, the period guard
 ```

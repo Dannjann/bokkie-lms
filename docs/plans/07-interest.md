@@ -1,6 +1,6 @@
 # Step 7 — Interest
 
-**Status:** ⬜ planned · **Depends on:** Step 6 · **Blocks:** Steps 8, 10
+**Status:** ✅ built, gate passed · **Depends on:** Step 6 · **Blocks:** Steps 8, 10
 
 > **Q1 of the [domain interview](domain-interview.md) is unanswered**, and this
 > step is built anyway. That is a decision, not an oversight, and *Building on
@@ -37,6 +37,121 @@ Posting the same period twice is refused. Voiding the run returns every one of
 those balances to the centavo. And a payment taken afterwards finally divides
 between interest and principal, which is the thing `payment.applies` was put in
 for in Step 6 and has had nothing to bite on since.
+
+---
+
+## Where this stands
+
+All nine tasks are built and the gate has been run, screens included.
+
+| Checked | Result |
+|---|---|
+| Charge against the rounding boundaries, both directions | ✅ half-up, and half-even would differ |
+| Eight property invariants over generated ledgers | ✅ hold |
+| `BalancesAt` against `BalanceAt`, per customer, at any date | ✅ cannot disagree |
+| An advance voided after the period ended | ✅ excluded from a flat charge |
+| 20 concurrent posts of 20 runs | ✅ 20 consecutive numbers, no gaps |
+| 20 simultaneous posts of one run | ✅ charged once |
+| The same period twice | ✅ refused, naming the run that covers it |
+| A period overlapping a posted one by a fortnight | ✅ refused, nothing written |
+| A payment between the preview and the post | ✅ refused, naming the farmer |
+| A new borrower between the preview and the post | ✅ refused |
+| A run with nothing to charge | ✅ refused, still a draft |
+| A rolled-back post | ✅ no entry, no cache movement, still a draft |
+| Voiding | ✅ every balance back to the centavo |
+| Voiding twice, and voiding a draft | ✅ both refused |
+| Voiding, then charging the period again | ✅ allowed, and numbered 2 |
+| Editing or deleting a posted run, by hand in SQL | ✅ refused |
+| Editing a posted run's rate, by hand in SQL | ✅ refused |
+| Two posted runs over one period, by hand in SQL | ✅ refused by the index |
+| A line charging nothing, or one farmer twice | ✅ refused |
+| A customer in credit | ✅ not charged |
+| An encoder on any of the seven routes | ✅ refused, all seven refusals audited |
+| A caller supplying lines, a number, a status or a rule | ✅ refused at the edge |
+| A payment after a run, under both `payment.applies` values | ✅ divides as the setting says |
+| **The screens, in a browser, at counter-PC resolution** | ✅ **see below** |
+
+**All four mutations hold**, and each was checked against a deliberate break:
+
+- A read-then-write `run_no` allocator fails the concurrency test exactly as
+  Step 4 predicted — `database is locked (SQLITE_BUSY)` on the first of twenty
+  posters, not two runs sharing a number.
+- Rounding down instead of half-up fails three rows of the table test, including
+  the half-centavo case that also separates half-up from half-even.
+- A void that reverses only its first line leaves the second farmer charged —
+  caught by the example test *and*, independently, by the property test, which
+  shrank it to a one-centavo counterexample.
+- Removing the period guard charges September twice over. It is worth recording
+  what the two halves of that guard did separately when it was gone: the
+  *overlapping* period went through silently, and the *identical* period was
+  refused by the unique index as `UNIQUE constraint failed:
+  interest_runs.period_from, interest_runs.period_to`. Neither half covers the
+  other.
+
+**The screens were walked** in Chromium against the real binary with the real
+embedded SPA, signed in as a manager and again as an encoder, at 1024px, then
+swept from 700 to 1440px and at 390. Two farmers owing ₱5,000.00 and ₱1,234.56;
+a 3% run previewing ₱150.00 and ₱37.04; posted as Interest run 1; the charge on
+the farmer's statement under that name; the same period refused afterwards; the
+run voided, and both balances exactly back. A third farmer, who owes nothing,
+never appears. Nothing scrolls sideways at any width, and the only console error
+anywhere is the 409 the refused post is supposed to produce.
+
+---
+
+## Decisions and faults from building
+
+**1. The period guard belongs in the posting `UPDATE`, not in a check after
+it.** The plan had it as step 3 of five, a query run after the write — and that
+is wrong in a way only the API test exposed. A run over *exactly* the same dates
+trips the unique index inside the `UPDATE` itself, so the transaction failed
+with `UNIQUE constraint failed: interest_runs.period_from…` and the handler
+turned it into a 500 before the check that would have named the run ever ran.
+The condition now lives in the statement's `WHERE` clause. Zero rows affected
+means one of three things, each with its own sentence: no such run, not a draft,
+or the period is taken — and the overlap query survives only to name the run
+that covers it.
+
+**2. The preview is compared positionally, not by lookup.** Both sides come back
+ordered by customer id, so `stale` walks them together; a farmer appearing or
+disappearing is caught at the position they would have occupied. A map lookup
+would have needed a second pass to notice the appearing case at all.
+
+**3. The rule panel lives on the interest screen, because there is no settings
+screen.** "Settings" still reads SOON in the rail. A refusal that says *choose
+how interest is computed in Settings* would have sent a manager somewhere that
+does not exist, so the three keys are edited on the interest list itself,
+through the ordinary settings API. When the settings screen does arrive it edits
+the same values and neither has to be unwound.
+
+**4. A percentage becomes basis points through `parseCentavos`.** Not a borrowed
+parser: a percentage with at most two decimal places and an integer of
+hundredths are the same thing, so "3" is 300, "2.5" is 250 and "0.25" is 25,
+with nothing passing through a float. The server is still the one that decides
+what was typed; this only decides what to send.
+
+**5. A label pointing at nothing.** PrimeVue puts the `id` given to
+`DatePicker`, `Select` and `AutoComplete` on the wrapper element rather than on
+the input inside it, so every `<label for>` on these forms addressed a `<span>`:
+clicking the label focused nothing, and a screen reader had no association to
+read. `input-id` is the prop that does what was meant. This was not new — Step
+6's payment form and the statement's date pickers had it too — and all nine
+sites are fixed.
+
+**6. The Rule column wrapped onto three lines** at 1024px, which buried the
+rate, the one figure the column exists for. The basis is now named only when it
+is `principal-and-interest`, the case that changes what money does; annotating
+every ordinary row with "principal only" cost more than it said.
+
+**7. The refusal said "already" twice** — *"that period has already been
+charged: interest run 2 already covers…"*. It is the sentence a manager reads at
+the moment they are stopped, and it now reads once.
+
+**8. `payment.applies` is finally exercised against real interest.** Step 6 had
+to write an interest entry by hand to see its own split work. The test that
+belongs to this step posts a run and then a payment: ₱1,000.00 against ₱5,000.00
+of principal and ₱150.00 of interest divides 850/150 under interest-first and
+1,000/0 under principal-first.
 
 ---
 

@@ -447,7 +447,7 @@ rendered in `Asia/Manila`.
 
 Steps 1–3 are the architecture and are detailed in their own docs. Steps 4–10
 are features — listed for shape only, **each gets its own plan when we reach
-it.** Steps 4, 5, 6 and 7 have theirs.
+it.** Steps 4 through 7 have theirs.
 
 | Step | Scope | Doc | Depends on |
 |---|---|---|---|
@@ -459,7 +459,7 @@ it.** Steps 4, 5, 6 and 7 have theirs.
 | 4 | **Customers — CRUD, `BA-####` codes, search, CSV import** | [04-customers.md](04-customers.md) | Step 3 |
 | 5 | **Advances — voucher + line grid, draft→posted, void via reversal** | [05-advances.md](05-advances.md) | Step 4 |
 | 6 | **Payments — entry, the principal/interest split, customer statement** ✅ | [06-payments.md](06-payments.md) | Step 5 |
-| 7 | **Interest — posting run, preview, reversible** | [07-interest.md](07-interest.md) | Step 6 · Q1 answered by a setting |
+| 7 | **Interest — posting run, preview, reversible** ✅ | [07-interest.md](07-interest.md) | Step 6 · Q1 answered by a setting |
 | 8 | Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS | *later* | **Blocked on Q3/Q4** |
 | 9 | Dot-matrix slips — ESC/P templates, `RawPrinter` wiring | *later* | Step 5 |
 | 10 | Cutover — opening balances, parallel run, go-live | *later* | All |
