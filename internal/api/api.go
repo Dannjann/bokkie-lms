@@ -27,6 +27,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
+	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
@@ -55,6 +56,10 @@ type Deps struct {
 	// voucher *is* a ledger write and a voucher service without one could not
 	// do the only thing it exists for.
 	Advances *advance.Service
+
+	// Payments is the receipt: the other document that writes to the ledger,
+	// and the only one that writes entries in the other direction.
+	Payments *payment.Service
 
 	// Backup runs the on-demand backup. It is the same scheduler that runs the
 	// nightly job, so a manual backup and a scheduled one are literally the
@@ -225,6 +230,33 @@ func registerRoutes(rt *router, d Deps) {
 
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/advances/{id}/void",
 		"advance.voided", "advance", handleVoidAdvance(d))
+
+	// --- Payments -----------------------------------------------------------
+	//
+	// The same shape as the advances above, and for the same reasons. Taking a
+	// payment is counter work: a farmer is standing there with cash or has just
+	// delivered palay, and posting is part of that work. Voiding is not — with
+	// voiding a voucher it is one of the two ways money leaves the record.
+
+	rt.read(Authenticated, "/api/payments", handleListPayments(d))
+	rt.read(Authenticated, "/api/payments/{id}", handleGetPayment(d))
+
+	rt.mutate(Authenticated, http.MethodPost, "/api/payments",
+		"payment.draft.created", "payment", handleCreatePayment(d))
+	rt.mutate(Authenticated, http.MethodPut, "/api/payments/{id}",
+		"payment.draft.updated", "payment", handleUpdatePayment(d))
+	rt.mutate(Authenticated, http.MethodDelete, "/api/payments/{id}",
+		"payment.draft.deleted", "payment", handleDeletePayment(d))
+
+	rt.mutate(Authenticated, http.MethodPost, "/api/payments/{id}/post",
+		"payment.posted", "payment", handlePostPayment(d))
+
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/payments/{id}/void",
+		"payment.voided", "payment", handleVoidPayment(d))
+
+	// The statement hangs off the customer rather than off the ledger, because
+	// that is the question being asked: what does this farmer owe, and why.
+	rt.read(Authenticated, "/api/customers/{id}/statement", handleGetStatement(d))
 
 	// --- Audit --------------------------------------------------------------
 	//

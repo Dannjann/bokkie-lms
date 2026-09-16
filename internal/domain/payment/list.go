@@ -194,3 +194,42 @@ func (q Query) condition() (string, []any) {
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 func escapeLike(s string) string { return likeEscaper.Replace(s) }
+
+// OrNosFor maps payment ids to their OR Nos., for the statement — the same
+// question RefNosForLines answers for vouchers, and asked here for the same
+// reason: the ledger holds the provenance and is not allowed to know what a
+// receipt is.
+//
+// A draft has no number and is absent from the result, which is consistent with
+// it having produced no entry to ask about.
+func (s *Service) OrNosFor(ctx context.Context, ids []int64) (map[int64]int64, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, or_no FROM payments WHERE id IN (`+marks+`) AND or_no IS NOT NULL`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read the OR Nos. behind a page of entries: %w", err)
+	}
+	defer rows.Close()
+
+	orNos := make(map[int64]int64, len(ids))
+	for rows.Next() {
+		var id, orNo int64
+		if err := rows.Scan(&id, &orNo); err != nil {
+			return nil, fmt.Errorf("read the OR Nos. behind a page of entries: %w", err)
+		}
+		orNos[id] = orNo
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read the OR Nos. behind a page of entries: %w", err)
+	}
+	return orNos, nil
+}

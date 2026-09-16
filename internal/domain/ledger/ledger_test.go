@@ -772,3 +772,125 @@ func entryCount(t *testing.T, database *sql.DB) int {
 	}
 	return count
 }
+
+func TestAStatementOpensWhereThePreviousOneClosed(t *testing.T) {
+	svc, _ := openTestService(t)
+	ctx := context.Background()
+
+	mustPost(t, svc, advance(1, MustDate(2026, time.January, 10), 5000))
+	mustPost(t, svc, advance(1, MustDate(2026, time.February, 14), 3000))
+	mustPost(t, svc, payment(1, MustDate(2026, time.March, 1), 2000, 0))
+
+	stmt, err := svc.Statement(ctx, 1, MustDate(2026, time.February, 1), MustDate(2026, time.March, 31))
+	if err != nil {
+		t.Fatalf("statement: %v", err)
+	}
+
+	// Without an opening balance a statement of the last month reads as though
+	// the farmer started it owing nothing.
+	if stmt.Opening.Principal.Centavos() != 500000 {
+		t.Errorf("the statement opens at %s, want the ₱5,000.00 owed before February", stmt.Opening.Principal)
+	}
+	if len(stmt.Rows) != 2 {
+		t.Fatalf("the statement has %d rows, want 2", len(stmt.Rows))
+	}
+
+	// The running balance counts everything before the window, not just the
+	// rows on the page.
+	if stmt.Rows[0].Running.Principal.Centavos() != 800000 {
+		t.Errorf("after the first row the balance runs to %s, want ₱8,000.00", stmt.Rows[0].Running.Principal)
+	}
+	if stmt.Rows[1].Running.Principal.Centavos() != 600000 {
+		t.Errorf("after the second row the balance runs to %s, want ₱6,000.00", stmt.Rows[1].Running.Principal)
+	}
+
+	// The invariant: the last line agrees with the balance the rest of the
+	// system shows.
+	at, err := svc.BalanceAt(ctx, 1, MustDate(2026, time.March, 31))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stmt.Closing.Principal != at.Principal || stmt.Closing.Interest != at.Interest {
+		t.Errorf("the statement closes at %s/%s, and BalanceAt says %s/%s",
+			stmt.Closing.Principal, stmt.Closing.Interest, at.Principal, at.Interest)
+	}
+
+	movement, err := stmt.Movement()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if movement.Principal.Centavos() != 100000 {
+		t.Errorf("the period moved %s of principal, want ₱1,000.00 — ₱3,000.00 lent less ₱2,000.00 paid",
+			movement.Principal)
+	}
+}
+
+// A window in which nothing happened still closes where it opened, rather than
+// at zero.
+func TestAnEmptyWindowStillCarriesTheBalance(t *testing.T) {
+	svc, _ := openTestService(t)
+	ctx := context.Background()
+
+	mustPost(t, svc, advance(1, MustDate(2026, time.January, 10), 5000))
+
+	stmt, err := svc.Statement(ctx, 1, MustDate(2026, time.February, 1), MustDate(2026, time.February, 28))
+	if err != nil {
+		t.Fatalf("statement: %v", err)
+	}
+	if len(stmt.Rows) != 0 {
+		t.Fatalf("a quiet February has %d rows", len(stmt.Rows))
+	}
+	if stmt.Closing.Principal.Centavos() != 500000 || stmt.Opening.Principal != stmt.Closing.Principal {
+		t.Errorf("a quiet month opened at %s and closed at %s", stmt.Opening.Principal, stmt.Closing.Principal)
+	}
+}
+
+// A customer nothing has ever happened to is an empty statement, not an error.
+func TestAStatementOfACustomerWithNoEntries(t *testing.T) {
+	svc, _ := openTestService(t)
+
+	stmt, err := svc.Statement(context.Background(), 3, Date{}, Date{})
+	if err != nil {
+		t.Fatalf("statement: %v", err)
+	}
+	if len(stmt.Rows) != 0 || !stmt.Closing.Principal.IsZero() {
+		t.Errorf("a customer with no entries has %d rows and owes %s", len(stmt.Rows), stmt.Closing.Principal)
+	}
+}
+
+// A statement that hides corrections is a statement that lies. The farmer
+// holding the paper slip is the person most entitled to see that something was
+// undone.
+func TestAStatementShowsReversals(t *testing.T) {
+	svc, _ := openTestService(t)
+	ctx := context.Background()
+
+	id := mustPost(t, svc, advance(1, MustDate(2026, time.February, 10), 5000))
+	if _, err := svc.Reverse(ctx, id, Actor{UserID: 2, Username: "manager"}, "wrong farmer"); err != nil {
+		t.Fatalf("reverse: %v", err)
+	}
+
+	stmt, err := svc.Statement(ctx, 1, Date{}, Date{})
+	if err != nil {
+		t.Fatalf("statement: %v", err)
+	}
+	if len(stmt.Rows) != 2 {
+		t.Fatalf("the statement has %d rows, want the advance and its reversal", len(stmt.Rows))
+	}
+	if !stmt.Rows[1].Entry.IsReversal() || stmt.Rows[1].Entry.Reason != "wrong farmer" {
+		t.Errorf("the second row is a %s for %q", stmt.Rows[1].Entry.Type, stmt.Rows[1].Entry.Reason)
+	}
+	if !stmt.Closing.Principal.IsZero() {
+		t.Errorf("after a reversal the statement closes at %s, want nothing", stmt.Closing.Principal)
+	}
+}
+
+func TestAStatementCannotRunBackwards(t *testing.T) {
+	svc, _ := openTestService(t)
+
+	_, err := svc.Statement(context.Background(), 1,
+		MustDate(2026, time.March, 31), MustDate(2026, time.March, 1))
+	if err == nil {
+		t.Error("a statement ran from March 31 back to March 1")
+	}
+}

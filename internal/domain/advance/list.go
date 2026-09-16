@@ -230,3 +230,49 @@ func (q Query) condition() (string, []any) {
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 func escapeLike(s string) string { return likeEscaper.Replace(s) }
+
+// RefNosForLines maps line ids to the Ref. No. of the voucher they belong to.
+//
+// It exists for the customer statement, which holds ledger entries carrying the
+// id of the line that produced them and needs to print the number staff say out
+// loud. The ledger cannot answer that — it is not allowed to know vouchers
+// exist — so the question is asked here, of the package that owns them, in one
+// query for a whole page rather than one per row.
+//
+// A line whose voucher is still a draft has no number and is simply absent from
+// the result: a draft has produced no ledger entry either, so nothing can ask
+// about it.
+func (s *Service) RefNosForLines(ctx context.Context, lineIDs []int64) (map[int64]int64, error) {
+	if len(lineIDs) == 0 {
+		return nil, nil
+	}
+
+	args := make([]any, 0, len(lineIDs))
+	for _, id := range lineIDs {
+		args = append(args, id)
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?, ", len(lineIDs)), ", ")
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT l.id, v.ref_no
+		   FROM advance_lines l
+		   JOIN advance_vouchers v ON v.id = l.voucher_id
+		  WHERE l.id IN (`+marks+`) AND v.ref_no IS NOT NULL`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read the Ref. Nos. behind a page of entries: %w", err)
+	}
+	defer rows.Close()
+
+	refNos := make(map[int64]int64, len(lineIDs))
+	for rows.Next() {
+		var lineID, refNo int64
+		if err := rows.Scan(&lineID, &refNo); err != nil {
+			return nil, fmt.Errorf("read the Ref. Nos. behind a page of entries: %w", err)
+		}
+		refNos[lineID] = refNo
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read the Ref. Nos. behind a page of entries: %w", err)
+	}
+	return refNos, nil
+}
