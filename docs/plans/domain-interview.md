@@ -1,6 +1,6 @@
 # Step 0 — Domain Interview
 
-**Status:** not started · **Blocks:** Steps 6, 7, 8 · **Runs:** in parallel with
+**Status:** not started · **Blocks:** Steps 7, 8 · **Runs:** in parallel with
 Steps 1–3, from day one
 
 ---
@@ -86,10 +86,17 @@ as reversing entries rather than edits.
 
 ---
 
-### Q5 — Payment application order ⚠️ affects Step 6
+### Q5 — Payment application order ⚠️ no longer blocking
 
 When a payment arrives and the customer owes both principal and interest, which
 is cleared first? Is it consistent, or does it depend on the arrangement?
+
+Step 6 does not wait for the answer: the rule is the `payment.applies` setting,
+defaulting to `interest-first`. Nothing in the system charges interest until
+Step 7, so no payment posted before then can be affected by the answer — when it
+comes, it is a settings change and applies from that moment on. If the answer is
+"it depends on the arrangement", that is a different shape — a per-customer
+override — and it is worth knowing before Step 7 rather than after.
 
 **Answer:**
 
