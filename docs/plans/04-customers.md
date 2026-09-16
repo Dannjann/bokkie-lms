@@ -2,6 +2,9 @@
 
 **Status:** 🟨 built, gate all but one item passed · **Depends on:** Step 3 · **Blocks:** Steps 5, 6, 8, 10
 
+> The remaining work is a work order of its own:
+> [04-customers-gate.md](04-customers-gate.md).
+
 ---
 
 ## Goal

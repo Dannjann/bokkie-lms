@@ -16,6 +16,7 @@ Station**, Pintor Gamu, Isabela.
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
 | [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | 🟨 Built, gate pending |
+| [04-customers-gate.md](04-customers-gate.md) | Step 4 — the three things left to close its gate | ⬜ Not started |
 
 Steps 5–10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -76,7 +77,9 @@ unable to put a wrong number into the record. Both mutation checks hold: a
 read-then-write allocator and a deactivation that deletes are each caught. What
 is left is looking at the screens in a browser at counter-PC resolution. See
 [04-customers.md](04-customers.md) for what the gate proved and the four
-decisions taken while building.
+decisions taken while building, and
+[04-customers-gate.md](04-customers-gate.md) for the three things left —
+looking at the screens, and two questions for the owner.
 
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,
