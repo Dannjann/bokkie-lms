@@ -24,6 +24,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/audit"
 	"github.com/Dannjann/bokkie-lms/internal/auth"
 	"github.com/Dannjann/bokkie-lms/internal/backup"
+	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
@@ -48,6 +49,12 @@ type Deps struct {
 	// other.
 	Customers *customer.Service
 	Ledger    *ledger.Service
+
+	// Advances is the voucher: the one document that writes to the ledger.
+	// Unlike the two above it holds the ledger itself, because posting a
+	// voucher *is* a ledger write and a voucher service without one could not
+	// do the only thing it exists for.
+	Advances *advance.Service
 
 	// Backup runs the on-demand backup. It is the same scheduler that runs the
 	// nightly job, so a manual backup and a scheduled one are literally the
@@ -191,6 +198,33 @@ func registerRoutes(rt *router, d Deps) {
 
 	rt.mutateSelfAudited(ManagerOnly, http.MethodPost, "/api/customers/import",
 		auditImportRoute, handleImportCustomers(d))
+
+	// --- Advances -----------------------------------------------------------
+	//
+	// Entering an advance is counter work, the same as adding a farmer: a
+	// farmer is standing there and a slip is being written. Posting is part of
+	// that work and so is open to encoders. Voiding is not — it is the only way
+	// money leaves the record, and it is a manager's.
+	//
+	// Deleting is the one deletion in the system, and it is open to encoders
+	// for the reason that makes it uninteresting: a draft moved no money, and
+	// what it said survives in the audit entry's before_json.
+
+	rt.read(Authenticated, "/api/advances", handleListAdvances(d))
+	rt.read(Authenticated, "/api/advances/{id}", handleGetAdvance(d))
+
+	rt.mutate(Authenticated, http.MethodPost, "/api/advances",
+		"advance.draft.created", "advance", handleCreateAdvance(d))
+	rt.mutate(Authenticated, http.MethodPut, "/api/advances/{id}",
+		"advance.draft.updated", "advance", handleUpdateAdvance(d))
+	rt.mutate(Authenticated, http.MethodDelete, "/api/advances/{id}",
+		"advance.draft.deleted", "advance", handleDeleteAdvance(d))
+
+	rt.mutate(Authenticated, http.MethodPost, "/api/advances/{id}/post",
+		"advance.posted", "advance", handlePostAdvance(d))
+
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/advances/{id}/void",
+		"advance.voided", "advance", handleVoidAdvance(d))
 
 	// --- Audit --------------------------------------------------------------
 	//
