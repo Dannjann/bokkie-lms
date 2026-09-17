@@ -197,6 +197,27 @@ func registerRoutes(rt *router, d Deps) {
 	rt.read(ManagerOnly, "/api/users", handleListUsers(d))
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/users", "user.created", "user", handleCreateUser(d))
 
+	// The three transitions. Each takes effect on the target's next request —
+	// withSession re-reads the account every time — except the password, which
+	// ends the account's sessions itself because a changed hash does not.
+	//
+	// "user.activated" is the registered default and the handler overrides it
+	// with "user.deactivated" on the way off, so the audit screen's action
+	// filter can tell the two apart.
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/users/{id}/active",
+		"user.activated", "user", handleSetUserActive(d))
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/users/{id}/role",
+		"user.role.changed", "user", handleSetUserRole(d))
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/users/{id}/password",
+		"user.password.reset", "user", handleResetUserPassword(d))
+
+	// Changing your own password is not a management action and is not gated
+	// on one. It hangs off the session rather than off /api/users/{id} because
+	// it identifies its target by who is asking, and an endpoint that takes an
+	// id invites somebody to pass a different one.
+	rt.mutate(Authenticated, http.MethodPost, "/api/session/password",
+		"user.password.changed", "user", handleChangeOwnPassword(d))
+
 	// --- Settings -----------------------------------------------------------
 	//
 	// Readable by anyone logged in — the slip layout and the timezone are

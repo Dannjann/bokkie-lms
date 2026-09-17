@@ -453,12 +453,13 @@ func updateUserTx(ctx context.Context, tx *sql.Tx, id int64, query string, args 
 	if n == 0 {
 		return User{}, ErrNoSuchUser
 	}
-	return userByIDTx(ctx, tx, id)
+	return UserByIDTx(ctx, tx, id)
 }
 
-// userByIDTx is ByID against a transaction, so a transition reads back what it
-// just wrote rather than what another connection can see.
-func userByIDTx(ctx context.Context, tx *sql.Tx, id int64) (User, error) {
+// UserByIDTx is ByID against a transaction, so a transition reads back what it
+// just wrote rather than what another connection can see — and so a handler can
+// capture the "before" state inside the transaction that is about to change it.
+func UserByIDTx(ctx context.Context, tx *sql.Tx, id int64) (User, error) {
 	var (
 		user      User
 		createdAt string

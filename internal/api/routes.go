@@ -89,6 +89,18 @@ type Change struct {
 	Before   any // state before, marshalled to before_json; nil for a creation
 	After    any // state after; nil for a deletion
 
+	// Action overrides the action the route was registered with, for the
+	// handler whose one endpoint does two things worth telling apart in the
+	// log. Turning an account off and turning one back on go through the same
+	// route and must not share a name: the audit screen's action filter is a
+	// list of what happened, and "somebody disabled an account" is a different
+	// question from "somebody re-enabled one".
+	//
+	// The route still declares a default, so a route cannot be registered
+	// without naming an action and the coverage test still has something to
+	// check.
+	Action string
+
 	Status int // response status; 200 when zero
 	Body   any // response body; no body when nil
 
@@ -288,6 +300,9 @@ func (rt *router) afterCommit(ctx context.Context, action string, change Change)
 }
 
 func (rt *router) entry(r *http.Request, action, entity string, change Change) audit.Entry {
+	if change.Action != "" {
+		action = change.Action
+	}
 	e := audit.Entry{
 		Action:    action,
 		Entity:    entity,
