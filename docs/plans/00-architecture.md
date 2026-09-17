@@ -388,6 +388,16 @@ still prompt once on first launch — warn whoever installs it). Forgetting this
 is the single most likely "it doesn't work from the other PC" support call, on
 any OS.
 
+**Network access is a setting, not a start-up decision.** `network.lan_access`
+decides whether a request from anywhere but the host machine is served at all,
+and a manager moves it from the dashboard without a restart — switching it off
+also withdraws `bokkie.local`, so the other machines stop being told where to
+find a server that will now refuse them. It is a policy control rather than a
+security boundary: the listener stays on `0.0.0.0` either way, a source address
+on a LAN with no TLS is a claim and not a proof, and the switch is refused
+anywhere but the host, because turning it off from a counter PC would take away
+the app and the switch in the same click.
+
 **macOS gotcha.** An unsigned binary copied onto a Mac is quarantined by
 Gatekeeper and refuses to run with an unhelpful error. Fix at build time with an
 ad-hoc signature (`codesign -s - bokkie`) or at install time with

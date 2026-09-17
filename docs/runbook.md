@@ -69,6 +69,29 @@ A line containing `"status":"ok"` means the server and its database are fine.
 Only a manager can create users. If you are locked out of every manager account,
 call the developer; there is no password reset built into the app.
 
+### Letting the other computers in, or keeping them out
+
+On the dashboard, under **This server**, a manager can switch **Network access**
+on or off.
+
+- **On** (normal) — the counter PCs and the phones on the station WiFi can reach
+  the app, at `http://bokkie.local:8080`.
+- **Off** — only the host computer can. Every other machine gets a page saying
+  the station is set to the host machine only, and `bokkie.local` stops
+  resolving until it is switched back on.
+
+Three things worth knowing:
+
+- **The switch only works at the host computer.** That is deliberate: switching
+  it off from a counter PC would take away the app and the switch in the same
+  click, and nobody would be able to put it back except at the host.
+- **It takes effect immediately.** Nothing needs restarting, in either
+  direction. Anyone mid-screen on another PC will find their next click refused.
+- **It is not a lock.** It decides who is served, not who can reach the machine
+  — the port stays open. It is the right tool for "the counter PCs should not be
+  in here today", not for keeping out somebody who should not be on the station
+  network in the first place. That is what the WiFi password is for.
+
 ### If someone is locked out
 
 After five wrong passwords, that username is refused for fifteen minutes even if

@@ -209,6 +209,25 @@ faults that do not exist on a screen — the topbar, a title printed twice, blue
 links on paper, columns aligning one way in print and another on screen, and
 grey ink that barely prints. See [08-reports.md](08-reports.md).
 
+**The station can shut the door, and that is not a step.** Between Step 8 and
+Step 9 the app grew one control the roadmap never asked for, because the need
+turned up before the roadmap did: a manager can switch network access off and
+have this machine be the only one the app answers. It is a setting, so it moves
+without a restart; switching it off withdraws `bokkie.local` as well, because a
+phone that resolves the name and is then refused looks like a fault while a
+phone that cannot find the name looks like what it is. The switch itself is
+host-only — pressing it from a counter PC would take away the app and the switch
+in one click — and the copy says plainly that it decides who is served rather
+than who can reach the machine. The port stays open either way; that door is the
+WiFi password's job. See the runbook for the owner's version, and
+[00-architecture.md](00-architecture.md) under Operations for what it is and is
+not.
+
+The customer record gained its history in the same pass: the last ten movements
+with their running balance, read from the same statement the statement screen
+reads, because a shorter list computed a different way is a list that can
+disagree with the paper a farmer is holding.
+
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,
 backs the database up, swaps the binary, restarts, confirms `/healthz` answers
