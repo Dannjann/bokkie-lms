@@ -356,4 +356,8 @@ func registerRoutes(rt *router, d Deps) {
 	// one at the database.
 
 	rt.read(ManagerOnly, "/api/audit", handleListAudit(d))
+
+	// What the filter bar offers to narrow by, read from the table rather than
+	// from a list written down anywhere. See handleAuditFacets.
+	rt.read(ManagerOnly, "/api/audit/facets", handleAuditFacets(d))
 }
