@@ -1,6 +1,6 @@
 # Step 0 — Domain Interview
 
-**Status:** not started · **Blocks:** Step 8 · **Runs:** in parallel with
+**Status:** not started · **Blocks:** nothing · **Runs:** in parallel with
 Steps 1–3, from day one
 
 ---
@@ -10,9 +10,11 @@ Steps 1–3, from day one
 Three things about how the business actually works are unknown, and two of them
 shape *behaviour*, not just report layout. The architecture is deliberately
 designed so this ignorance costs nothing up front — the ledger can express any
-of the likely answers — but Step 8 (reports) **cannot be started** until Q3 and
-Q4 are answered. Q1 and Q5 no longer block: each became a setting whose default
-does nothing, and each records below what an answer could still cost.
+of the likely answers. **None of these questions blocks a step any more**, and
+that is a deliberate choice rather than a discovery: Q1 and Q5 became settings
+whose defaults do nothing, and Q3 and Q4 became assumptions built in the open.
+Each question below records what was assumed and what an answer would still
+cost — which is the part that matters when the answers finally come.
 
 Guessing here is the expensive failure mode. An interest rule implemented wrong
 produces numbers that look plausible and are wrong, and nobody notices until a
@@ -74,7 +76,7 @@ repays early**, and **a rate negotiated per customer**. Both are recorded in
 
 ---
 
-### Q3 — What is on the "Return of Investment Status" report? ⚠️ blocks Step 8
+### Q3 — What is on the "Return of Investment Status" report? ⚠️ no longer blocking
 
 Get the printout. Then confirm:
 
@@ -83,17 +85,34 @@ Get the printout. Then confirm:
 - What period does it cover — all time, a season, a date range?
 - Who reads it, and what decision do they make from it?
 
+Step 8 does not wait for the answer. It assumes a portfolio block — capital
+deployed, repaid, interest charged and collected, still outstanding — with a row
+per farmer beneath it, on the reasoning that the two are the same query at two
+groupings and the cheaper mistake is to build both. If the owner means only one
+of them, the other is deleted rather than rebuilt.
+
+Two answers would still cost real work: **per-cropping-season** rather than a
+date range, which needs a season defined; and **cost of capital**, which is a
+figure this system has never been told. Both are recorded in
+[08-reports.md](08-reports.md).
+
 **Answer:**
 
 ---
 
-### Q4 — What does "Recall Liquidated Transaction" do? ⚠️ blocks Step 8
+### Q4 — What does "Recall Liquidated Transaction" do? ⚠️ no longer blocking
 
 - Does it *view* a settled account, or *reopen* one?
 - If it reopens: what happens to the balances — is that a correction workflow?
 
 This matters more than it looks. "Reopen" implies a mutation path we must model
 as reversing entries rather than edits.
+
+Step 8 assumes **view**, and builds it so that it structurally cannot be
+anything else: the report package has no write path at all. The system already
+has two sanctioned ways to move a settled balance — void the document, or post
+an adjustment with a reason — so if the answer is "it reopens", what gets built
+is a deliberate correction workflow rather than a door left ajar in a report.
 
 **Answer:**
 

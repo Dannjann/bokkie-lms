@@ -20,8 +20,9 @@ Station**, Pintor Gamu, Isabela.
 | [05-advances.md](05-advances.md) | Step 5 — advance vouchers, draft→posted, void via reversal | ✅ Built, gate passed |
 | [06-payments.md](06-payments.md) | Step 6 — payments, the principal/interest split, customer statement | ✅ Built, gate passed |
 | [07-interest.md](07-interest.md) | Step 7 — the interest run, its preview, and undoing one | ✅ Built, gate passed |
+| [08-reports.md](08-reports.md) | Step 8 — the four reports, and the page that leaves the room | ⬜ Planned |
 
-Steps 8–10 are **features**. They are listed in the roadmap in
+Steps 9 and 10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
 we reach it, not now.
 

@@ -447,7 +447,7 @@ rendered in `Asia/Manila`.
 
 Steps 1–3 are the architecture and are detailed in their own docs. Steps 4–10
 are features — listed for shape only, **each gets its own plan when we reach
-it.** Steps 4 through 7 have theirs.
+it.** Steps 4 through 8 have theirs.
 
 | Step | Scope | Doc | Depends on |
 |---|---|---|---|
@@ -460,7 +460,7 @@ it.** Steps 4 through 7 have theirs.
 | 5 | **Advances — voucher + line grid, draft→posted, void via reversal** | [05-advances.md](05-advances.md) | Step 4 |
 | 6 | **Payments — entry, the principal/interest split, customer statement** ✅ | [06-payments.md](06-payments.md) | Step 5 |
 | 7 | **Interest — posting run, preview, reversible** ✅ | [07-interest.md](07-interest.md) | Step 6 · Q1 answered by a setting |
-| 8 | Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS | *later* | **Blocked on Q3/Q4** |
+| 8 | **Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS** | [08-reports.md](08-reports.md) | Step 7 · Q3/Q4 assumed, and recorded |
 | 9 | Dot-matrix slips — ESC/P templates, `RawPrinter` wiring | *later* | Step 5 |
 | 10 | Cutover — opening balances, parallel run, go-live | *later* | All |
 
@@ -475,9 +475,10 @@ it.** Steps 4 through 7 have theirs.
 ## Open questions
 
 - **Interest rule, repayment mechanism, ROI report contents** → the domain
-  interview. Runs in parallel. It no longer blocks Step 7: the rule is a
-  setting whose default charges nothing, and what an answer could still cost is
-  recorded in [07-interest.md](07-interest.md). It still blocks Step 8.
+  interview. Runs in parallel, and no longer blocks anything. Q1 became a
+  setting whose default charges nothing; Q3 and Q4 became assumptions built in
+  the open. What each answer could still cost is recorded in
+  [07-interest.md](07-interest.md) and [08-reports.md](08-reports.md).
 - **Whether a second counter needs its own local dot-matrix** → defer; build the
   print agent only if asked.
 - **Which host the station actually uses** → blocks nothing. Build all targets
