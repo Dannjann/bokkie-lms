@@ -7,6 +7,8 @@ import Message from 'primevue/message'
 import ToggleSwitch from 'primevue/toggleswitch'
 import PageHeader from '@/components/PageHeader.vue'
 import { listCustomers } from '@/api/customers'
+import { getCurrentAdvances } from '@/api/reports'
+import { formatPesos } from '@/format'
 import { lanAccessKey, listSettings, updateSetting } from '@/api/settings'
 import { ApiError } from '@/api/client'
 import { useHealthStore } from '@/stores/health'
@@ -41,6 +43,44 @@ async function loadCounts(): Promise<void> {
     active.value = null
     inactive.value = null
     countsFailed.value = true
+  }
+}
+
+/**
+ * What the station is owed right now, and how many farmers owe it.
+ *
+ * It is the same figure and the same read as the Current Advances report this
+ * tile sits above a link to, rather than a second way of arriving at it: a
+ * dashboard that disagrees with the report it summarises is worse than a
+ * dashboard with no figure on it. Null until it is read, and left null if it
+ * cannot be — the tile says so rather than showing a zero, because a zero here
+ * is a claim that nobody is in debt.
+ *
+ * Manager-only, like every other portfolio view in the system. An encoder's
+ * question is about the farmer in front of them, which the customer screen and
+ * the statement already answer.
+ */
+const outstanding = ref<string | null>(null)
+const debtors = ref(0)
+const outstandingFailed = ref(false)
+
+const outstandingNote = computed(() => {
+  if (outstandingFailed.value) return 'Could not be read — this is blank, not zero.'
+  if (outstanding.value === null) return 'Checking…'
+  if (debtors.value === 0) return 'Nobody owes anything today.'
+  return `Owed by ${debtors.value} ${debtors.value === 1 ? 'farmer' : 'farmers'}, as at today.`
+})
+
+async function loadOutstanding(): Promise<void> {
+  if (!isManager.value) return
+  outstandingFailed.value = false
+  try {
+    const report = await getCurrentAdvances()
+    outstanding.value = report.total
+    debtors.value = report.rows.length
+  } catch {
+    outstanding.value = null
+    outstandingFailed.value = true
   }
 }
 
@@ -160,6 +200,7 @@ const upcoming = [
 
 onMounted(() => {
   void loadCounts()
+  void loadOutstanding()
   void loadLanAccess()
 })
 </script>
@@ -185,10 +226,13 @@ onMounted(() => {
         <p class="tile__note">Kept, never deleted — their codes stay theirs.</p>
       </article>
 
-      <article class="card card--padded tile">
+      <article v-if="isManager" class="card card--padded tile">
         <p class="label">Outstanding</p>
-        <p class="tile__value numeric tile__value--muted">₱0.00</p>
-        <p class="tile__note">Nothing can be owed until advances exist.</p>
+        <p v-if="outstanding !== null" class="tile__value numeric">
+          {{ formatPesos(outstanding) }}
+        </p>
+        <p v-else class="tile__value numeric tile__value--muted">—</p>
+        <p class="tile__note">{{ outstandingNote }}</p>
       </article>
     </section>
 
