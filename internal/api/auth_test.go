@@ -345,6 +345,17 @@ func login(t *testing.T, handler http.Handler, username, password string) []*htt
 func request(t *testing.T, handler http.Handler, method, path string, cookies []*http.Cookie, body any) *httptest.ResponseRecorder {
 	t.Helper()
 
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, buildRequest(t, method, path, cookies, body))
+	return rec
+}
+
+// buildRequest is request's other half, split out so a test that needs to say
+// which machine a request came from can set RemoteAddr before it is served
+// rather than growing a second copy of the encoding.
+func buildRequest(t *testing.T, method, path string, cookies []*http.Cookie, body any) *http.Request {
+	t.Helper()
+
 	var reader *strings.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -361,10 +372,7 @@ func request(t *testing.T, handler http.Handler, method, path string, cookies []
 	for _, c := range cookies {
 		req.AddCookie(c)
 	}
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	return rec
+	return req
 }
 
 func decode(t *testing.T, resp *httptest.ResponseRecorder, into any) {

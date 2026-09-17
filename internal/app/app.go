@@ -11,7 +11,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -58,7 +57,12 @@ type App struct {
 
 	listener net.Listener
 	serveErr chan error
-	mdns     io.Closer
+
+	// store and discovery are held because LAN access is a setting now, not a
+	// start-up decision: Start has to ask what it currently is, and the API has
+	// to be able to move the LAN name when it changes.
+	store     *settings.Store
+	discovery *discovery.Publisher
 }
 
 // Options are the run-time choices that are not configuration: things decided
@@ -118,6 +122,8 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		log.Error("could not verify the ledger cache at startup", "error", err)
 	}
 
+	publisher := discovery.NewPublisher(log, cfg.MDNS.Hostname, cfg.Port, cfg.MDNS.Enabled)
+
 	handler := api.NewHandler(api.Deps{
 		Logger:       log,
 		DB:           database,
@@ -133,6 +139,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		Limiter:      auth.NewLimiter(),
 		Audit:        auditLog,
 		Settings:     store,
+		Discovery:    publisher,
 		Backup:       backups,
 		BackupFolder: cfg.Backup.Folder,
 		SPA:          spa,
@@ -143,6 +150,8 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		cfg:          cfg,
 		log:          log,
 		db:           database,
+		store:        store,
+		discovery:    publisher,
 		backups:      backups,
 		ledgerChecks: ledger.NewChecker(ledgerSvc, log),
 		srv: &http.Server{
@@ -184,23 +193,24 @@ func (a *App) Start() error {
 	return nil
 }
 
-// startDiscovery publishes the LAN name. A failure here is logged and
-// tolerated, never fatal: the app is still perfectly reachable by IP address,
-// and refusing to serve the station because a name could not be advertised
-// would be a worse outcome than the inconvenience it prevents.
+// startDiscovery publishes the LAN name, if the station is currently letting
+// the other machines in at all. A failure here is logged and tolerated, never
+// fatal: the app is still perfectly reachable by IP address, and refusing to
+// serve the station because a name could not be advertised would be a worse
+// outcome than the inconvenience it prevents.
+//
+// Starting with LAN access off deliberately publishes nothing. Advertising a
+// name that every machine but this one will be refused at would send people
+// looking for a fault instead of for the switch.
 func (a *App) startDiscovery() {
-	if !a.cfg.MDNS.Enabled {
-		a.log.Info("mDNS advertising is disabled; reach the server by IP address")
-		return
+	lanAccess := a.store.Bool(settings.LANAccess)
+	if !lanAccess {
+		a.log.Info("network access is set to this machine only; not advertising a LAN name")
 	}
-
-	closer, err := discovery.Advertise(a.log, a.cfg.MDNS.Hostname, a.cfg.Port)
-	if err != nil {
+	if err := a.discovery.SetPublished(lanAccess); err != nil {
 		a.log.Warn("could not advertise over mDNS; reach the server by IP address instead",
 			"hostname", a.cfg.MDNS.Hostname, "error", err)
-		return
 	}
-	a.mdns = closer
 }
 
 // Stop drains in-flight requests, then closes the database. Requests are
@@ -211,11 +221,8 @@ func (a *App) Stop(ctx context.Context) error {
 
 	// Withdraw the LAN name first: for the rest of the shutdown the station
 	// should be sent to a server that is still answering, not to this one.
-	if a.mdns != nil {
-		if err := a.mdns.Close(); err != nil {
-			a.log.Warn("could not withdraw the mDNS records", "error", err)
-		}
-		a.mdns = nil
+	if err := a.discovery.Close(); err != nil {
+		a.log.Warn("could not withdraw the mDNS records", "error", err)
 	}
 
 	// Stop the nightly job before draining requests. A backup interrupted

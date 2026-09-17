@@ -77,6 +77,16 @@ func handleUpdateSetting(d Deps) TxHandler {
 		if err := settings.Validate(def, req.Value); err != nil {
 			return Change{}, badRequest("%s", err.Error())
 		}
+		if def.Key == settings.LANAccess.Key && !isHostRequest(r) {
+			// The lockout this prevents is not hypothetical: a manager at a
+			// counter PC who switches LAN access off loses the app mid-click,
+			// along with the only screen that could switch it back on. Holding
+			// the switch at the host machine means the person flipping it is
+			// standing at the one machine that is certain to still work
+			// afterwards.
+			return Change{}, forbidden(
+				"network access can only be changed at the host machine itself")
+		}
 
 		before := d.Settings.Raw(def)
 		if _, err := tx.ExecContext(ctx,
@@ -91,7 +101,25 @@ func handleUpdateSetting(d Deps) TxHandler {
 			Before:      map[string]string{"value": before},
 			After:       map[string]string{"value": req.Value},
 			Body:        view(def, req.Value),
-			AfterCommit: d.Settings.Reload,
+			AfterCommit: afterSettingChange(d, def),
 		}, nil
+	}
+}
+
+// afterSettingChange is the work a changed setting implies once it is durable.
+//
+// Reloading the cache is what makes every setting take effect without a
+// restart. LAN access needs one thing more: the name on the network has to
+// follow the switch, so that turning access off stops advertising a server that
+// will refuse, and turning it back on publishes it again.
+func afterSettingChange(d Deps, def settings.Def) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := d.Settings.Reload(ctx); err != nil {
+			return err
+		}
+		if def.Key != settings.LANAccess.Key || d.Discovery == nil {
+			return nil
+		}
+		return d.Discovery.SetPublished(d.Settings.Bool(settings.LANAccess))
 	}
 }

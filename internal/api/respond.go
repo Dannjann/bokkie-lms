@@ -58,6 +58,13 @@ func conflict(format string, args ...any) statusError {
 	return statusError{http.StatusConflict, fmt.Sprintf(format, args...)}
 }
 
+// forbidden is for a request that is understood, authenticated and still not
+// allowed — as distinct from the router's own manager check, which refuses on
+// role alone and audits as an access denial.
+func forbidden(format string, args ...any) statusError {
+	return statusError{http.StatusForbidden, fmt.Sprintf(format, args...)}
+}
+
 func tooManyRequests(format string, args ...any) statusError {
 	return statusError{http.StatusTooManyRequests, fmt.Sprintf(format, args...)}
 }

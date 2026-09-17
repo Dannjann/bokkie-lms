@@ -61,6 +61,24 @@ type sessionResponse struct {
 	// LockedUser is the username a Lock action left behind, so the login form
 	// can prefill it and the person only has to type a password.
 	LockedUser string `json:"locked_user,omitempty"`
+
+	// Host says this browser is on the machine bokkie runs on. The dashboard
+	// needs it to know whether the network switch is its to touch: that switch
+	// is host-only, and a control that refuses when pressed is worse than one
+	// that says up front whose it is.
+	Host bool `json:"host"`
+}
+
+// writeSession is the one way a session answer leaves this package.
+//
+// Four handlers answer with a sessionResponse, and Host has to be right in all
+// of them: the dashboard reads it after a login just as it does on a page load,
+// and a field that three handlers set and the fourth forgets would show the
+// switch as somebody else's on the very machine that owns it. Stamping it here
+// means no handler has to remember.
+func writeSession(w http.ResponseWriter, r *http.Request, status int, resp sessionResponse) {
+	resp.Host = isHostRequest(r)
+	writeJSON(w, status, resp)
 }
 
 // handleSession answers "who am I".
@@ -85,7 +103,7 @@ func handleSession(d Deps) http.HandlerFunc {
 		if c, err := r.Cookie(lockedUserCookie); err == nil {
 			resp.LockedUser = c.Value
 		}
-		writeJSON(w, http.StatusOK, resp)
+		writeSession(w, r, http.StatusOK, resp)
 	}
 }
 
@@ -175,7 +193,7 @@ func handleLogin(d Deps) http.HandlerFunc {
 			d.Logger.Warn("could not record last login", "id", RequestID(ctx), "error", err)
 		}
 
-		writeJSON(w, http.StatusOK, sessionResponse{User: &user})
+		writeSession(w, r, http.StatusOK, sessionResponse{User: &user})
 	}
 }
 
@@ -257,7 +275,7 @@ func endSession(d Deps, action string, remember bool) http.HandlerFunc {
 		if remember && hasUser {
 			resp.LockedUser = user.Username
 		}
-		writeJSON(w, http.StatusOK, resp)
+		writeSession(w, r, http.StatusOK, resp)
 	}
 }
 
@@ -334,7 +352,7 @@ func handleSetup(d Deps) http.HandlerFunc {
 		})
 		d.Logger.Info("first administrator created", "username", user.Username)
 
-		writeJSON(w, http.StatusCreated, sessionResponse{User: &user})
+		writeSession(w, r, http.StatusCreated, sessionResponse{User: &user})
 	}
 }
 

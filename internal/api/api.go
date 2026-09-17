@@ -78,6 +78,15 @@ type Deps struct {
 	Backup       *backup.Scheduler
 	BackupFolder string
 
+	// Discovery publishes the station's LAN name. The API holds it so that
+	// switching LAN access off can withdraw the name in the same breath, rather
+	// than leaving the network pointed at a server that will now refuse it.
+	//
+	// It is an interface, and nil is a legitimate value: a test changing a
+	// setting must not need a working mDNS responder, and an install with mDNS
+	// switched off in config.yaml has no name to withdraw.
+	Discovery Discovery
+
 	// SPA is the built frontend, embedded in the binary. Ignored when DevProxy
 	// is set.
 	SPA fs.FS
@@ -86,6 +95,14 @@ type Deps struct {
 	// server instead of serving SPA. This is the one flag that switches
 	// between development and production serving.
 	DevProxy *url.URL
+}
+
+// Discovery is the part of LAN-name publishing the API needs: the ability to
+// bring the name up or take it down. Keeping it this narrow is what lets
+// internal/api stay ignorant of mDNS, which is three platform-specific files
+// nothing here should have an opinion about.
+type Discovery interface {
+	SetPublished(published bool) error
 }
 
 // Handler is the built router plus the routes it registered. The route list is
@@ -101,9 +118,10 @@ type Handler struct {
 // The chain is ordered outermost first: every request gets an ID before
 // anything can log it, the log line is written even for a request that panics,
 // the panic recovery sits close enough to the handler that a panic cannot
-// escape into the server's own goroutine, and the session is resolved last so
-// it is inside the recovery — a malformed cookie must not take the process
-// down.
+// escape into the server's own goroutine, the network gate decides whether this
+// machine is allowed in at all before any work is done on its behalf, and the
+// session is resolved last so it is inside the recovery — a malformed cookie
+// must not take the process down.
 func NewHandler(d Deps) *Handler {
 	rt := newRouter(d)
 	registerRoutes(rt, d)
@@ -133,7 +151,8 @@ func NewHandler(d Deps) *Handler {
 	handler := withRequestID(
 		withRequestLog(d.Logger,
 			withPanicRecovery(d.Logger,
-				withSession(d, mux))))
+				withNetworkGate(d,
+					withSession(d, mux)))))
 
 	return &Handler{Handler: handler, Routes: rt.routes}
 }

@@ -70,6 +70,25 @@ var (
 		Doc:     "Timezone business dates are rendered and totalled in.",
 	}
 
+	// LANAccess decides whether the other machines on the station network may
+	// reach this app, or only the host itself.
+	//
+	// It is a setting rather than a config.yaml key because it is the one
+	// network choice the person at the station makes rather than the person who
+	// installed the machine. "Let the counter PCs in" and "just this machine
+	// while I sort something out" are both ordinary Tuesday answers, and moving
+	// between them must not mean editing a file and restarting a service.
+	//
+	// Turning it off does not close the port. The listener stays on 0.0.0.0 and
+	// requests from anywhere else are refused with an explanation — see
+	// internal/api/network.go, which says plainly what that is and is not.
+	LANAccess = Def{
+		Key:     "network.lan_access",
+		Kind:    KindBool,
+		Default: "true",
+		Doc:     "Whether the other machines on the station network may reach this app, or only the host itself.",
+	}
+
 	// BackupSchedule is when the nightly backup runs. 21:00 is after the
 	// station closes and long before anyone arrives, so a backup never
 	// competes with someone posting a payment.
@@ -196,6 +215,7 @@ var (
 // Seeding and the settings API both read this, so there is one list.
 var All = []Def{
 	Timezone,
+	LANAccess,
 	BackupSchedule,
 	BackupEnabled,
 	BackupRetention,
