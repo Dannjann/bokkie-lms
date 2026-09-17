@@ -128,6 +128,49 @@ export const router = createRouter({
       },
     },
     {
+      // The four reports. Manager-only in the UI and at the server, reads
+      // included: they are portfolio views, and what an encoder needs about one
+      // farmer is on the customer screen and the statement.
+      path: '/reports/current-advances',
+      name: 'report-current-advances',
+      component: () => import('@/pages/CurrentAdvancesPage.vue'),
+      meta: {
+        title: 'Current Advances',
+        parent: { label: 'Reports', to: '/reports/current-advances' },
+        manager: true,
+      },
+    },
+    {
+      path: '/reports/roi',
+      name: 'report-roi',
+      component: () => import('@/pages/ROIPage.vue'),
+      meta: {
+        title: 'Return of Investment',
+        parent: { label: 'Reports', to: '/reports/current-advances' },
+        manager: true,
+      },
+    },
+    {
+      path: '/reports/aging',
+      name: 'report-aging',
+      component: () => import('@/pages/AgingPage.vue'),
+      meta: {
+        title: 'Aging',
+        parent: { label: 'Reports', to: '/reports/current-advances' },
+        manager: true,
+      },
+    },
+    {
+      path: '/reports/liquidated',
+      name: 'report-liquidated',
+      component: () => import('@/pages/LiquidatedPage.vue'),
+      meta: {
+        title: 'Liquidated',
+        parent: { label: 'Reports', to: '/reports/current-advances' },
+        manager: true,
+      },
+    },
+    {
       // Hangs off the customer rather than off a statements section: this is
       // one farmer's history, reached from the farmer. The all-customers
       // statement screen is step 8's, along with the print layout.

@@ -1,0 +1,171 @@
+/*
+ * What a report looks like on paper.
+ *
+ * These pages are the first thing this system produces that leaves the
+ * building. A statement is read off a monitor to the farmer standing there; a
+ * Current Advances report goes in somebody's bag and is read a week later by
+ * somebody who was not in the room. So the printed page has to say what it is,
+ * what it covers and when it was taken — and it has to do that without the
+ * application around it.
+ *
+ * Everything here is inside @media print. Nothing in this file can change what
+ * a screen looks like.
+ */
+
+@media print {
+  /* The application is not the report. The rail, the topbar, every button and
+     every date picker exist to ask the question; the paper only carries the
+     answer. */
+  .shell__sidebar,
+  .shell__scrim,
+  .topbar,
+  .report__controls,
+  .report__actions,
+  .p-button {
+    display: none !important;
+  }
+
+  /* The screen's page header says the same thing the printed head says, one
+     line above it. On paper that is the title printed twice, and the second one
+     carries a sentence explaining the report to somebody who is holding it. */
+  .page-header {
+    display: none !important;
+  }
+
+  /* A link is a screen thing. On paper the blue and the underline are noise
+     around a farmer's name, and the name is what is being read. */
+  a {
+    color: #000 !important;
+    text-decoration: none !important;
+  }
+
+  /* The shell's scroll containers and background fight the printer: a page
+     break cannot happen inside something with its own scrollbar, so a long
+     report would print its first screenful and stop. */
+  html,
+  body,
+  .shell,
+  .shell__body,
+  .shell__content,
+  .shell__well {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .card {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
+  /* The head, which only exists on paper: on screen the same facts are in the
+     topbar and the pickers. */
+  .report__head {
+    display: block !important;
+    margin-bottom: 0.6cm;
+    border-bottom: 1pt solid #000;
+    padding-bottom: 0.2cm;
+  }
+
+  .report__station {
+    font-size: 10pt;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .report__title {
+    font-size: 15pt;
+    font-weight: 700;
+    margin: 0.1cm 0;
+  }
+
+  .report__meta {
+    font-size: 9pt;
+    color: #000;
+  }
+
+  /* Figures line up on the decimal point, which is the whole reason a column of
+     money is legible at all. The screens already do this; the print rules must
+     not undo it. */
+  .report__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+  }
+
+  .report__table th,
+  .report__table td {
+    padding: 2pt 4pt;
+    border-bottom: 0.5pt solid #999;
+  }
+
+  /* Only the money columns are right-aligned. `.numeric` is on the codes and
+     dates too — it is there for the tabular figures, not for the alignment —
+     and right-aligning those on paper alone would make the printed page
+     disagree with the screen it was taken from. */
+  .report__table .report__amount {
+    text-align: right;
+  }
+
+  .report__table .numeric {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Ink is not a screen. Every shade this application uses to push something
+     into the background — a muted column, a table head — is a light grey that
+     prints faint or not at all, so on paper everything is black and the
+     hierarchy is carried by weight instead. */
+  /* !important because the table styles are imported into scoped component
+     blocks, which Vue rewrites with a [data-v-…] attribute — and that outranks
+     a plain class selector from a global sheet. Without it the heads print in
+     the screen's light grey, which on paper is barely there. */
+  .report__table th {
+    color: #000 !important;
+    font-weight: 700 !important;
+  }
+
+  .report__muted,
+  .report__table .report__muted {
+    color: #000 !important;
+  }
+
+  /* A table that breaks across pages repeats its head, and no row is split in
+     half down the middle. */
+  .report__table thead {
+    display: table-header-group;
+  }
+
+  .report__table tr {
+    break-inside: avoid;
+  }
+
+  .report__table tfoot {
+    display: table-footer-group;
+    font-weight: 700;
+  }
+
+  .report__totals td {
+    border-top: 1pt solid #000;
+    font-weight: 700;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 1.4cm 1.2cm;
+  }
+}
+
+/* The printed head is paper-only. Hidden on screen rather than absent from the
+   DOM, so that what prints is what the screen was showing — there is no second
+   render path that could disagree with the first. */
+.report__head {
+  display: none;
+}

@@ -1,0 +1,53 @@
+/*
+ * How a table of figures reads, on screen and on paper.
+ *
+ * Shared by all four reports rather than repeated in each, because the thing
+ * that makes a column of money legible — the digits lining up on the decimal
+ * point — is the same everywhere, and four copies of it is four chances for one
+ * to drift.
+ */
+.report__table {
+  width: 100%;
+  min-width: 40rem;
+  border-collapse: collapse;
+}
+
+.report__table th {
+  padding: 0.6rem 0.5rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--shell-muted);
+  border-bottom: 1px solid var(--shell-border);
+  white-space: nowrap;
+}
+
+.report__table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.report__code {
+  white-space: nowrap;
+}
+
+.report__amount {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.report__table th.report__amount {
+  text-align: right;
+}
+
+.report__table tfoot td {
+  border-bottom: none;
+  border-top: 1px solid var(--shell-border);
+  font-weight: 600;
+  padding-top: 0.6rem;
+}
+
+.report__muted {
+  color: var(--shell-muted);
+}

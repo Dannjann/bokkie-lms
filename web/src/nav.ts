@@ -43,11 +43,16 @@ export const navigation: NavSection[] = [
   {
     label: 'Insight',
     items: [
-      { label: 'Reports', icon: 'pi pi-chart-bar', soon: true },
-      // Step 6 built the per-customer statement, which is reached from the
-      // customer rather than from here. This stays disabled until step 8 gives
-      // it something of its own: statements across customers, and the print
-      // layout that makes one worth handing over.
+      // Four reports rather than one "Reports" screen with a picker on it: each
+      // answers a different question, and a manager who wants the aging does
+      // not want to arrive somewhere else first and choose.
+      { label: 'Current Advances', icon: 'pi pi-chart-bar', to: '/reports/current-advances', manager: true },
+      { label: 'Return of Investment', icon: 'pi pi-percentage', to: '/reports/roi', manager: true },
+      { label: 'Aging', icon: 'pi pi-hourglass', to: '/reports/aging', manager: true },
+      { label: 'Liquidated', icon: 'pi pi-check-circle', to: '/reports/liquidated', manager: true },
+      // The per-customer statement is reached from the customer. This stays
+      // disabled until there is something of its own to show: statements across
+      // customers, printed in one run.
       { label: 'Statements', icon: 'pi pi-file', soon: true },
     ],
   },

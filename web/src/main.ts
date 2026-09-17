@@ -7,6 +7,7 @@ import App from '@/App.vue'
 import { router } from '@/router'
 import { BokkiePreset } from '@/theme'
 import '@/styles/app.css'
+import '@/styles/print.css'
 
 createApp(App)
   .use(createPinia())
