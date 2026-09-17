@@ -204,8 +204,8 @@ func registerRoutes(rt *router, d Deps) {
 	// "user.activated" is the registered default and the handler overrides it
 	// with "user.deactivated" on the way off, so the audit screen's action
 	// filter can tell the two apart.
-	rt.mutate(ManagerOnly, http.MethodPost, "/api/users/{id}/active",
-		"user.activated", "user", handleSetUserActive(d))
+	rt.mutateAlso(ManagerOnly, http.MethodPost, "/api/users/{id}/active",
+		"user.activated", []string{"user.deactivated"}, "user", handleSetUserActive(d))
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/users/{id}/role",
 		"user.role.changed", "user", handleSetUserRole(d))
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/users/{id}/password",

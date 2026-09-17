@@ -188,6 +188,14 @@ export const router = createRouter({
       meta: { title: 'Users', manager: true },
     },
     {
+      // Manager-only. The log records who did what to the money, and an encoder
+      // reading their colleagues' movements is not what it is for.
+      path: '/audit',
+      name: 'audit',
+      component: () => import('@/pages/AuditPage.vue'),
+      meta: { title: 'Audit log', manager: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),

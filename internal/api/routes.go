@@ -60,6 +60,12 @@ type Route struct {
 	Action  string // the audit action, for wrapper-audited routes
 	Entity  string
 
+	// AlsoWrites are the other actions this route's handler can record through
+	// Change.Action. Declaring them keeps the registry the whole answer to
+	// "what can end up in audit_log" — which the audit screen's vocabulary
+	// test depends on, and which the override would otherwise quietly break.
+	AlsoWrites []string
+
 	audit auditStyle
 	why   string // for auditBySelf: why the wrapper is not doing it
 }
@@ -144,6 +150,16 @@ func (rt *router) read(access Access, pattern string, h http.HandlerFunc) {
 func (rt *router) mutate(access Access, method, pattern, action, entity string, h TxHandler) {
 	rt.register(
 		Route{Method: method, Pattern: pattern, Access: access, Action: action, Entity: entity, audit: auditByWrapper},
+		rt.guard(access, rt.runTx(action, entity, h)))
+}
+
+// mutateAlso is mutate for a handler that chooses between actions with
+// Change.Action. Every action it can write is named here, so the registry stays
+// the complete list of what this system can put in the audit log.
+func (rt *router) mutateAlso(access Access, method, pattern, action string, alsoWrites []string, entity string, h TxHandler) {
+	rt.register(
+		Route{Method: method, Pattern: pattern, Access: access, Action: action,
+			Entity: entity, AlsoWrites: alsoWrites, audit: auditByWrapper},
 		rt.guard(access, rt.runTx(action, entity, h)))
 }
 
