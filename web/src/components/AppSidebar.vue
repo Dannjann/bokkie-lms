@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { navigation, type NavItem } from '@/nav'
 import { useSessionStore } from '@/stores/session'
+import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 
 const session = useSessionStore()
 const { user, isManager } = storeToRefs(session)
@@ -54,6 +55,12 @@ const initials = computed(() => {
 })
 
 const busy = ref(false)
+
+// Changing your own password lives here rather than on the Users screen,
+// because everybody has one and only a manager has that screen. The dialog
+// asks for the current password — the server insists, since a session is not
+// proof of the password behind it.
+const passwordOpen = ref(false)
 
 // Lock, not a timeout. The station PC is signed in from opening to closing --
 // that is the real usage -- so the way to leave it safely is a one-click action
@@ -130,6 +137,16 @@ async function signOut(): Promise<void> {
       <button
         type="button"
         class="sidebar__action"
+        title="Change your password"
+        aria-label="Change your password"
+        :disabled="busy"
+        @click="passwordOpen = true"
+      >
+        <i class="pi pi-key" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="sidebar__action"
         title="Lock — keeps you signed in, asks for your password to come back"
         aria-label="Lock"
         :disabled="busy"
@@ -148,6 +165,8 @@ async function signOut(): Promise<void> {
         <i class="pi pi-sign-out" aria-hidden="true" />
       </button>
     </div>
+
+    <ChangePasswordDialog v-model="passwordOpen" />
   </div>
 </template>
 

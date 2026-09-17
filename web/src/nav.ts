@@ -60,7 +60,7 @@ export const navigation: NavSection[] = [
     label: 'Administration',
     items: [
       { label: 'Import customers', icon: 'pi pi-upload', to: '/customers/import', manager: true },
-      { label: 'Users', icon: 'pi pi-id-card', manager: true, soon: true },
+      { label: 'Users', icon: 'pi pi-id-card', to: '/users', manager: true },
       { label: 'Audit log', icon: 'pi pi-history', manager: true, soon: true },
       { label: 'Settings', icon: 'pi pi-cog', manager: true, soon: true },
     ],

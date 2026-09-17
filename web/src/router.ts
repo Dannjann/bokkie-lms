@@ -180,6 +180,14 @@ export const router = createRouter({
       meta: { title: 'Statement', parent: { label: 'Customers', to: '/customers' } },
     },
     {
+      // Manager-only in the UI and at the server. The roster is a management
+      // question, and an encoder has no use for it.
+      path: '/users',
+      name: 'users',
+      component: () => import('@/pages/UsersPage.vue'),
+      meta: { title: 'Users', manager: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),
