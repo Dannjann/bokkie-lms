@@ -152,6 +152,28 @@ func (s *Sessions) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// DeleteSessionsForUserTx ends every session an account holds, optionally
+// sparing one.
+//
+// This is what a password change has to call. Deactivation and role changes do
+// not need it — withSession re-reads the account on every request and ends the
+// session itself — but a changed hash leaves the session rows untouched, so an
+// account whose password was just reset would otherwise stay signed in on
+// whatever machine prompted the reset.
+//
+// `spare` is the id of a session to keep, for the self-service change: the
+// person is standing at that tab and signing them out of it as a consequence of
+// choosing a new password reads as a failure. Pass "" to end every one.
+func DeleteSessionsForUserTx(ctx context.Context, tx *sql.Tx, userID int64, spare string) (int64, error) {
+	res, err := tx.ExecContext(ctx,
+		`DELETE FROM sessions WHERE user_id = ? AND id <> ?`, userID, spare)
+	if err != nil {
+		return 0, fmt.Errorf("delete sessions for user %d: %w", userID, err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // DeleteExpired removes dead rows. Called at startup: cheap, and it keeps the
 // table from growing without bound on a machine that runs for years.
 func (s *Sessions) DeleteExpired(ctx context.Context) (int64, error) {

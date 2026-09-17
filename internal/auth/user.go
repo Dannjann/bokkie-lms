@@ -334,3 +334,160 @@ func parseTime(s string) time.Time {
 	}
 	return t.UTC()
 }
+
+// The account transitions, all Tx-only.
+//
+// Every one of these is audited, and the audit entry has to commit with the
+// change rather than after it — so there is deliberately no non-Tx variant to
+// reach for. The route wrapper in internal/api hands the transaction down.
+
+var (
+	// ErrLastManager is the refusal that keeps the station able to administer
+	// itself. Undoing a demotion or a deactivation needs a manager, and if the
+	// last one is the account being changed there is nobody left to do it —
+	// the fix is a sqlite3 shell on the host, held by whoever least wants it.
+	ErrLastManager = errors.New("this is the last active manager")
+
+	// ErrSelfChange covers deactivating or demoting yourself. Distinct from
+	// ErrLastManager because the sentence a person needs to read is different:
+	// one says "somebody else has to do this", the other "you cannot do this
+	// to yourself".
+	ErrSelfChange = errors.New("an account cannot do this to itself")
+)
+
+// SetActiveTx turns an account on or off and returns it as it now stands.
+//
+// Deactivation takes effect on the deactivated user's *next request*, with no
+// session sweeping here: withSession in internal/api re-reads the account on
+// every request and ends the session when it finds it inactive. That is a
+// deliberate design in Step 2 and this function depends on it.
+func SetActiveTx(ctx context.Context, tx *sql.Tx, id int64, active bool) (User, error) {
+	return updateUserTx(ctx, tx, id, `UPDATE users SET active = ? WHERE id = ?`, boolToInt(active), id)
+}
+
+// SetRoleTx changes an account's role and returns it as it now stands. Like
+// deactivation, it takes effect on the next request, because Role is re-read
+// from the database on that same path.
+func SetRoleTx(ctx context.Context, tx *sql.Tx, id int64, role Role) (User, error) {
+	if !role.Valid() {
+		return User{}, ValidationError{Field: "role", Message: fmt.Sprintf("%q is not a role", role)}
+	}
+	return updateUserTx(ctx, tx, id, `UPDATE users SET role = ? WHERE id = ?`, string(role), id)
+}
+
+// SetPasswordTx replaces an account's password.
+//
+// This is the one transition that does *not* ride on withSession re-reading the
+// account: the hash changes and the session rows do not, so a caller must also
+// delete the sessions it means to end. DeleteSessionsForUserTx is next door,
+// and the API routes call both.
+func SetPasswordTx(ctx context.Context, tx *sql.Tx, id int64, password string) (User, error) {
+	if err := ValidatePassword(password); err != nil {
+		return User{}, err
+	}
+	hash, err := HashPassword(password)
+	if err != nil {
+		return User{}, err
+	}
+	return updateUserTx(ctx, tx, id, `UPDATE users SET password_hash = ? WHERE id = ?`, hash, id)
+}
+
+// VerifyPasswordTx reports whether password is the account's current one. It
+// exists for the self-service change, which requires the current password so
+// that a hijacked session cannot lock the owner out of their own account.
+//
+// A missing account and a wrong password are separate errors here and are
+// deliberately not separated by the route that calls this.
+func VerifyPasswordTx(ctx context.Context, tx *sql.Tx, id int64, password string) error {
+	var hash string
+	err := tx.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id = ?`, id).Scan(&hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoSuchUser
+	}
+	if err != nil {
+		return fmt.Errorf("look up user %d: %w", id, err)
+	}
+	ok, err := VerifyPassword(hash, password)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrWrongPassword
+	}
+	return nil
+}
+
+// CountActiveManagersTx counts the accounts that can still administer this
+// system.
+//
+// **Call this after the UPDATE, inside the same transaction, never before it.**
+// A count taken first is a read-then-write, and two managers demoting each
+// other at the same moment would each read "two" and each succeed, leaving
+// zero. Writing first is what makes the second transaction fail as SQLITE_BUSY
+// instead — the ordering Step 5 established and Step 7 restated.
+func CountActiveManagersTx(ctx context.Context, tx *sql.Tx) (int, error) {
+	var count int
+	err := tx.QueryRowContext(ctx,
+		`SELECT count(*) FROM users WHERE active = 1 AND role = ?`, string(RoleManager)).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count active managers: %w", err)
+	}
+	return count, nil
+}
+
+// updateUserTx runs one single-column UPDATE and reads the account back, so
+// every transition returns the same fully-populated User and no caller has to
+// assemble one from what it happened to pass in.
+func updateUserTx(ctx context.Context, tx *sql.Tx, id int64, query string, args ...any) (User, error) {
+	res, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return User{}, fmt.Errorf("update user %d: %w", id, err)
+	}
+	// A row count of zero is the only way to tell "no such account" from
+	// "changed it to what it already was", and the caller needs that
+	// distinction to answer 404 rather than 200.
+	n, err := res.RowsAffected()
+	if err != nil {
+		return User{}, fmt.Errorf("update user %d: %w", id, err)
+	}
+	if n == 0 {
+		return User{}, ErrNoSuchUser
+	}
+	return userByIDTx(ctx, tx, id)
+}
+
+// userByIDTx is ByID against a transaction, so a transition reads back what it
+// just wrote rather than what another connection can see.
+func userByIDTx(ctx context.Context, tx *sql.Tx, id int64) (User, error) {
+	var (
+		user      User
+		createdAt string
+		lastLogin sql.NullString
+		active    int
+	)
+	err := tx.QueryRowContext(ctx,
+		`SELECT id, username, display_name, role, active, created_at, last_login_at
+		   FROM users WHERE id = ?`, id,
+	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.Role, &active, &createdAt, &lastLogin)
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, ErrNoSuchUser
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("look up user %d: %w", id, err)
+	}
+
+	user.Active = active == 1
+	user.CreatedAt = parseTime(createdAt)
+	if lastLogin.Valid {
+		t := parseTime(lastLogin.String)
+		user.LastLoginAt = &t
+	}
+	return user, nil
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
