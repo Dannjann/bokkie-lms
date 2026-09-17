@@ -30,6 +30,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
+	"github.com/Dannjann/bokkie-lms/internal/domain/report"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 	"github.com/Dannjann/bokkie-lms/web"
 )
@@ -125,6 +126,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		Advances:     advance.New(database, ledgerSvc, store, log),
 		Payments:     payment.New(database, ledgerSvc, store, log),
 		Interest:     interest.New(database, ledgerSvc, store, log),
+		Reports:      report.New(database, ledgerSvc, log),
 		Ledger:       ledgerSvc,
 		Users:        auth.NewUsers(database),
 		Sessions:     sessions,

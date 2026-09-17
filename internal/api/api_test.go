@@ -23,6 +23,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
+	"github.com/Dannjann/bokkie-lms/internal/domain/report"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
@@ -143,6 +144,7 @@ func testDeps(t *testing.T, database *sql.DB) Deps {
 		Advances:     advance.New(database, ledgerSvc, store, log),
 		Payments:     payment.New(database, ledgerSvc, store, log),
 		Interest:     interest.New(database, ledgerSvc, store, log),
+		Reports:      report.New(database, ledgerSvc, log),
 		Users:        auth.NewUsers(database),
 		Sessions:     auth.NewSessions(database),
 		Limiter:      auth.NewLimiter(),

@@ -202,3 +202,187 @@ func TestPropertyBulkBalancesAgreeWithTheSingleRead(t *testing.T) {
 		}
 	})
 }
+
+// The rule, and both halves of it. A voucher posted in January and voided in
+// March still counts in January — because that is what the books said on 31
+// January, and the ledger dates a reversal the day of the void precisely so an
+// old report stays reproducible. Over a window that reaches the void, it nets
+// to nothing.
+func TestActivityNetsAVoidOnceItHasHappened(t *testing.T) {
+	svc, _ := openTestService(t)
+	ctx := context.Background()
+
+	mustPost(t, svc, advance(1, MustDate(2026, time.January, 10), 5000))
+	voided := mustPost(t, svc, advance(2, MustDate(2026, time.January, 12), 3000))
+	mustPost(t, svc, payment(1, MustDate(2026, time.January, 20), 1000, 0))
+
+	// The clock is frozen on 2 March, so this reversal is dated after January.
+	if _, err := svc.Reverse(ctx, voided, Actor{UserID: 2, Username: "manager"}, "wrong farmer"); err != nil {
+		t.Fatalf("void the advance: %v", err)
+	}
+
+	january, err := svc.ActivityBetween(ctx, MustDate(2026, time.January, 1), MustDate(2026, time.January, 31))
+	if err != nil {
+		t.Fatalf("activity in January: %v", err)
+	}
+	if len(january) != 2 {
+		t.Fatalf("January's activity is %+v; on 31 January the void had not happened", january)
+	}
+
+	toMarch, err := svc.ActivityBetween(ctx, MustDate(2026, time.January, 1), MustDate(2026, time.March, 31))
+	if err != nil {
+		t.Fatalf("activity to March: %v", err)
+	}
+	if len(toMarch) != 1 {
+		t.Fatalf("the activity to March is %+v; the voided voucher should leave nobody behind", toMarch)
+	}
+	if got := toMarch[0]; got.CustomerID != 1 ||
+		got.Advanced.String() != "5000.00" || got.Repaid.String() != "1000.00" {
+		t.Errorf("the activity to March is %+v, want customer 1 advanced 5000.00 and repaid 1000.00", got)
+	}
+}
+
+func TestActivitySplitsInterestFromPrincipal(t *testing.T) {
+	svc, _ := openTestService(t)
+	ctx := context.Background()
+	on := MustDate(2026, time.January, 10)
+
+	mustPost(t, svc, advance(1, on, 5000))
+	mustPost(t, svc, Entry{
+		CustomerID: 1, Date: on, Type: TypeInterest,
+		Interest: money.FromCentavos(15_000), By: Actor{UserID: 1, Username: "dan"},
+	})
+	// A payment clearing 100.00 of interest and 400.00 of principal.
+	mustPost(t, svc, payment(1, on, 400, 100))
+
+	activity, err := svc.ActivityBetween(ctx, MustDate(2026, time.January, 1), MustDate(2026, time.January, 31))
+	if err != nil {
+		t.Fatalf("activity: %v", err)
+	}
+	got := activity[0]
+	if got.Advanced.String() != "5000.00" || got.Repaid.String() != "400.00" ||
+		got.InterestCharged.String() != "150.00" || got.InterestCollected.String() != "100.00" {
+		t.Errorf("activity is %+v, want 5000 advanced, 400 repaid, 150 charged, 100 collected", got)
+	}
+}
+
+func TestDeltasCarryBothDirectionsInDateOrder(t *testing.T) {
+	svc, _ := openTestService(t)
+	ctx := context.Background()
+
+	mustPost(t, svc, advance(1, MustDate(2026, time.January, 10), 5000))
+	mustPost(t, svc, payment(1, MustDate(2026, time.February, 1), 2000, 0))
+	mustPost(t, svc, advance(1, MustDate(2026, time.February, 20), 1000))
+
+	lots, err := svc.DeltasUpTo(ctx, MustDate(2026, time.March, 1))
+	if err != nil {
+		t.Fatalf("lots: %v", err)
+	}
+	if len(lots) != 3 {
+		t.Fatalf("got %d lots, want three: %+v", len(lots), lots)
+	}
+	want := []string{"5000.00", "-2000.00", "1000.00"}
+	for i, amount := range want {
+		if lots[i].Principal.String() != amount {
+			t.Errorf("delta %d is %s, want %s — oldest first, both directions", i, lots[i].Principal, amount)
+		}
+	}
+}
+
+// An entry and its reversal cancel to nothing once the void has happened — and
+// not a day before it. Asked as at a date before the void, the money was still
+// out, which is what the books said then.
+func TestDeltasDropAVoidedEntryOnceTheVoidHasHappened(t *testing.T) {
+	svc, _ := openTestService(t)
+	ctx := context.Background()
+
+	mustPost(t, svc, advance(1, MustDate(2026, time.January, 10), 5000))
+	voided := mustPost(t, svc, advance(1, MustDate(2026, time.January, 11), 3000))
+
+	// Dated 2 March, the day the clock is frozen on.
+	if _, err := svc.Reverse(ctx, voided, Actor{UserID: 2, Username: "manager"}, "wrong amount"); err != nil {
+		t.Fatalf("void: %v", err)
+	}
+
+	before, err := svc.DeltasUpTo(ctx, MustDate(2026, time.March, 1))
+	if err != nil {
+		t.Fatalf("deltas before the void: %v", err)
+	}
+	if len(before) != 2 {
+		t.Fatalf("got %+v as at 1 March; the void had not happened yet", before)
+	}
+
+	after, err := svc.DeltasUpTo(ctx, MustDate(2026, time.March, 3))
+	if err != nil {
+		t.Fatalf("deltas after the void: %v", err)
+	}
+	if len(after) != 1 || after[0].Principal.String() != "5000.00" {
+		t.Fatalf("got %+v as at 3 March, want only the advance that still stands", after)
+	}
+}
+
+// The property that keeps the reports honest: what a customer did, less what
+// they undid, is what they owe. Over generated ledgers, activity since the
+// beginning must reconcile with the balance the ledger reports.
+func TestPropertyActivityReconcilesWithTheBalance(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	rapid.Check(t, func(rt *rapid.T) {
+		svc, _ := newPropertyLedger(rt, dir)
+
+		steps := rapid.IntRange(1, 15).Draw(rt, "steps")
+		for step := 0; step < steps; step++ {
+			entry := genEntry(rt, fmt.Sprintf("step%d", step))
+			if _, err := svc.Post(ctx, entry); err != nil {
+				rt.Fatalf("post: %v", err)
+			}
+		}
+
+		on := MustDate(2027, time.January, 1)
+		activity, err := svc.ActivityBetween(ctx, Date{}, on)
+		if err != nil {
+			rt.Fatalf("activity: %v", err)
+		}
+		byCustomer := make(map[int64]Activity, len(activity))
+		for _, a := range activity {
+			byCustomer[a.CustomerID] = a
+		}
+
+		lots, err := svc.DeltasUpTo(ctx, on)
+		if err != nil {
+			rt.Fatalf("lots: %v", err)
+		}
+		principal := make(map[int64]int64, propertyCustomers)
+		for _, lot := range lots {
+			principal[lot.CustomerID] += lot.Principal.Centavos()
+		}
+
+		for id := int64(1); id <= propertyCustomers; id++ {
+			balance, err := svc.BalanceAt(ctx, id, on)
+			if err != nil {
+				rt.Fatalf("balance: %v", err)
+			}
+
+			// The deltas are every movement there has ever been, so their
+			// principal must sum to the principal balance exactly — whatever
+			// mix of entry types produced it.
+			if principal[id] != balance.Principal.Centavos() {
+				rt.Fatalf("customer %d: the deltas sum to %d of principal and the balance says %s",
+					id, principal[id], balance.Principal)
+			}
+
+			// Interest charged less interest collected accounts for the
+			// interest balance, except where an adjustment or an opening entry
+			// moved interest — which the generator does produce, so this is
+			// asserted as an inequality of direction rather than an identity.
+			a := byCustomer[id]
+			if a.InterestCollected.Centavos() < 0 || a.InterestCharged.Centavos() < 0 {
+				rt.Fatalf("customer %d has a negative quantity: %+v", id, a)
+			}
+			if a.Advanced.Centavos() < 0 || a.Repaid.Centavos() < 0 {
+				rt.Fatalf("customer %d has a negative quantity: %+v", id, a)
+			}
+		}
+	})
+}

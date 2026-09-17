@@ -29,6 +29,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
+	"github.com/Dannjann/bokkie-lms/internal/domain/report"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
@@ -65,6 +66,11 @@ type Deps struct {
 	// Interest is the run: the third document, and the only one that writes to
 	// every borrower's balance at once rather than to one farmer's.
 	Interest *interest.Service
+
+	// Reports is the only one of these that cannot write. It has no
+	// transaction, no INSERT and no method that takes one, which is Q4 of the
+	// domain interview answered in code rather than in a comment.
+	Reports *report.Service
 
 	// Backup runs the on-demand backup. It is the same scheduler that runs the
 	// nightly job, so a manual backup and a scheduled one are literally the
@@ -288,6 +294,20 @@ func registerRoutes(rt *router, d Deps) {
 	// The statement hangs off the customer rather than off the ledger, because
 	// that is the question being asked: what does this farmer owe, and why.
 	rt.read(Authenticated, "/api/customers/{id}/statement", handleGetStatement(d))
+
+	// --- Reports ------------------------------------------------------------
+	//
+	// Portfolio views, so manager-only like the interest run. What an encoder
+	// needs about one farmer is on the customer screen and on the statement,
+	// both of which are already open to them.
+	//
+	// Read-only, and not merely by convention: the package behind these has no
+	// write path at all.
+
+	rt.read(ManagerOnly, "/api/reports/current-advances", handleCurrentAdvances(d))
+	rt.read(ManagerOnly, "/api/reports/roi", handleROI(d))
+	rt.read(ManagerOnly, "/api/reports/aging", handleAging(d))
+	rt.read(ManagerOnly, "/api/reports/liquidated", handleLiquidated(d))
 
 	// --- Audit --------------------------------------------------------------
 	//

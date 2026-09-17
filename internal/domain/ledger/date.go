@@ -90,6 +90,28 @@ func (d Date) AddDays(n int) Date {
 	return DateOf(d.Time(time.UTC).AddDate(0, 0, n))
 }
 
+// Year, Month and Day open the parts up for the callers that build a date from
+// one of them — the first of this year, the end of last month — without letting
+// anybody assemble a Date that ParseDate would have refused.
+func (d Date) Year() int         { return d.year }
+func (d Date) Month() time.Month { return d.month }
+func (d Date) Day() int          { return d.day }
+
+// DaysSince is how many whole calendar days lie between earlier and d.
+//
+// Computed in UTC on both sides, which is not a timezone decision but the
+// absence of one: both dates are already calendar days with no instant behind
+// them, and using the same zone for each makes the subtraction exact. Doing it
+// in a zone with daylight saving would make some days 23 hours long and round a
+// 30-day-old debt into the wrong bucket twice a year.
+//
+// Negative when earlier is after d, which the callers clamp; it is not this
+// type's business to decide what a date in the future means.
+func (d Date) DaysSince(earlier Date) int {
+	hours := d.Time(time.UTC).Sub(earlier.Time(time.UTC)).Hours()
+	return int(hours) / 24
+}
+
 // MarshalJSON and UnmarshalJSON use the same text as the database, so a date
 // looks identical in a row, in a log line and on the wire.
 func (d Date) MarshalJSON() ([]byte, error) {
