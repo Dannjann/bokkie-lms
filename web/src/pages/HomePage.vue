@@ -4,15 +4,18 @@ import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
+import ToggleSwitch from 'primevue/toggleswitch'
 import PageHeader from '@/components/PageHeader.vue'
 import { listCustomers } from '@/api/customers'
+import { lanAccessKey, listSettings, updateSetting } from '@/api/settings'
+import { ApiError } from '@/api/client'
 import { useHealthStore } from '@/stores/health'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
 const health = useHealthStore()
 const { health: server, error: serverError } = storeToRefs(health)
-const { user, isManager } = storeToRefs(useSessionStore())
+const { user, isManager, isHost } = storeToRefs(useSessionStore())
 
 const active = ref<number | null>(null)
 const inactive = ref<number | null>(null)
@@ -41,6 +44,66 @@ async function loadCounts(): Promise<void> {
   }
 }
 
+/**
+ * Whether the other machines on the station network may reach this app.
+ *
+ * Null while it is being read, and left null if it cannot be — a switch that
+ * shows "off" because a request failed would be a lie about the one thing on
+ * this screen that decides who can work.
+ */
+const lanAccess = ref<boolean | null>(null)
+const lanBusy = ref(false)
+const lanError = ref<string | null>(null)
+
+/**
+ * Turning access off is a two-step click. The effect is immediate and reaches
+ * every other machine at once, so the person doing it should have said so on
+ * purpose. Turning it back on needs no ceremony: it only ever gives access
+ * back.
+ */
+const confirming = ref(false)
+
+const lanNote = computed(() => {
+  if (lanAccess.value === null) return 'Checking…'
+  return lanAccess.value
+    ? 'Counter PCs and phones on the station network can reach this app.'
+    : 'Only this machine can reach the app. Everything else is refused.'
+})
+
+async function loadLanAccess(): Promise<void> {
+  if (!isManager.value) return
+  lanError.value = null
+  try {
+    const { settings } = await listSettings()
+    lanAccess.value = settings.find((s) => s.key === lanAccessKey)?.value === 'true'
+  } catch {
+    lanAccess.value = null
+    lanError.value = 'Could not read the network setting.'
+  }
+}
+
+function onToggle(next: boolean): void {
+  if (next) {
+    void setLanAccess(true)
+    return
+  }
+  confirming.value = true
+}
+
+async function setLanAccess(value: boolean): Promise<void> {
+  lanBusy.value = true
+  lanError.value = null
+  try {
+    const setting = await updateSetting(lanAccessKey, value ? 'true' : 'false')
+    lanAccess.value = setting.value === 'true'
+    confirming.value = false
+  } catch (err) {
+    lanError.value = err instanceof ApiError ? err.message : String(err)
+  } finally {
+    lanBusy.value = false
+  }
+}
+
 const greeting = computed(() => {
   const hour = new Date().getHours()
   const part = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
@@ -64,7 +127,10 @@ const upcoming = [
   { label: 'Slips', note: 'Vouchers and receipts on the dot-matrix, on continuous form.' },
 ]
 
-onMounted(loadCounts)
+onMounted(() => {
+  void loadCounts()
+  void loadLanAccess()
+})
 </script>
 
 <template>
@@ -156,6 +222,57 @@ onMounted(loadCounts)
         </dl>
 
         <p v-else class="tile__note">Checking…</p>
+
+        <!--
+          Who is allowed in. It lives on the dashboard rather than behind a
+          settings screen because it is switched for a reason that turns up
+          without warning — a visitor on the WiFi, a machine nobody trusts
+          today — and hunting for it is not what that moment needs.
+        -->
+        <section v-if="isManager" class="network" aria-labelledby="network-heading">
+          <div class="network__row">
+            <div>
+              <p id="network-heading" class="label">Network access</p>
+              <p class="tile__note">{{ lanNote }}</p>
+            </div>
+            <ToggleSwitch
+              :model-value="lanAccess === true"
+              :disabled="lanAccess === null || lanBusy || !isHost"
+              aria-labelledby="network-heading"
+              @update:model-value="onToggle"
+            />
+          </div>
+
+          <p v-if="!isHost" class="tile__note network__note">
+            This can only be changed at the host machine — the one bokkie is installed on.
+          </p>
+
+          <div v-if="confirming" class="network__confirm">
+            <p class="network__confirm-text">
+              Turn network access off? Every other machine loses the app immediately. This
+              one keeps it, and this switch turns it back on.
+            </p>
+            <div class="network__confirm-actions">
+              <Button
+                label="Cancel"
+                severity="secondary"
+                text
+                size="small"
+                :disabled="lanBusy"
+                @click="confirming = false"
+              />
+              <Button
+                label="Turn off"
+                severity="danger"
+                size="small"
+                :loading="lanBusy"
+                @click="setLanAccess(false)"
+              />
+            </div>
+          </div>
+
+          <p v-if="lanError" role="alert" class="dashboard__down network__note">{{ lanError }}</p>
+        </section>
 
         <Button
           label="Check again"
@@ -277,6 +394,43 @@ onMounted(loadCounts)
   margin: 0;
   font-size: 0.875rem;
   color: #b91c1c;
+}
+
+.network {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--shell-border);
+}
+
+.network__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.network__note {
+  margin-top: 0.5rem;
+}
+
+.network__confirm {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--shell-border);
+  border-radius: 6px;
+  background: var(--p-surface-50);
+}
+
+.network__confirm-text {
+  margin: 0 0 0.6rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.network__confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
 }
 
 .dashboard__recheck {

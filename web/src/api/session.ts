@@ -18,6 +18,12 @@ export interface SessionState {
   user?: User
   /** Left behind by Lock so the login form can prefill the username. */
   locked_user?: string
+  /**
+   * True when this browser is on the machine bokkie runs on. The network
+   * switch is host-only, so the dashboard needs this to show whose switch it
+   * is rather than letting someone press one that will refuse.
+   */
+  host: boolean
 }
 
 /** Who am I. The app's first call on every load. */

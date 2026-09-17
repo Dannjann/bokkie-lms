@@ -25,3 +25,12 @@ export function updateSetting(key: string, value: string): Promise<Setting> {
 
 /** The three that make up the interest rule, in the order a form should ask. */
 export const interestKeys = ['interest.method', 'interest.rate_bps', 'interest.basis'] as const
+
+/**
+ * Whether the other machines on the station network may reach the app.
+ *
+ * Writable only from the host machine itself — the server refuses this one key
+ * from anywhere else, because switching it off from a counter PC would take
+ * away the app and the switch in the same click.
+ */
+export const lanAccessKey = 'network.lan_access'

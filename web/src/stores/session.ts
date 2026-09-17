@@ -17,6 +17,9 @@ export const useSessionStore = defineStore('session', () => {
   const needsSetup = ref(false)
   const lockedUser = ref('')
 
+  /** Whether this browser is the host machine. See SessionState.host. */
+  const isHost = ref(false)
+
   /** Null until the first fetchSession resolves, so the router can wait for it. */
   const loaded = ref(false)
 
@@ -27,6 +30,7 @@ export const useSessionStore = defineStore('session', () => {
     user.value = state.user ?? null
     needsSetup.value = state.needs_setup
     lockedUser.value = state.locked_user ?? ''
+    isHost.value = state.host ?? false
     loaded.value = true
   }
 
@@ -37,7 +41,9 @@ export const useSessionStore = defineStore('session', () => {
       // The server is unreachable. Treat it as logged out rather than
       // pretending otherwise — every subsequent call would fail anyway, and
       // the login screen at least says something honest.
-      apply({ needs_setup: false })
+      // host: false because we no longer know. Claiming to be the host while
+      // the server is unreachable would offer a switch that cannot be pressed.
+      apply({ needs_setup: false, host: false })
     }
   }
 
@@ -67,6 +73,7 @@ export const useSessionStore = defineStore('session', () => {
     user,
     needsSetup,
     lockedUser,
+    isHost,
     loaded,
     isLoggedIn,
     isManager,
