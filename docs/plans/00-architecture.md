@@ -460,7 +460,7 @@ it.** Steps 4 through 8 have theirs.
 | 5 | **Advances — voucher + line grid, draft→posted, void via reversal** | [05-advances.md](05-advances.md) | Step 4 |
 | 6 | **Payments — entry, the principal/interest split, customer statement** ✅ | [06-payments.md](06-payments.md) | Step 5 |
 | 7 | **Interest — posting run, preview, reversible** ✅ | [07-interest.md](07-interest.md) | Step 6 · Q1 answered by a setting |
-| 8 | **Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS** | [08-reports.md](08-reports.md) | Step 7 · Q3/Q4 assumed, and recorded |
+| 8 | **Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS** ✅ | [08-reports.md](08-reports.md) | Step 7 · Q3/Q4 assumed, and recorded |
 | 9 | Dot-matrix slips — ESC/P templates, `RawPrinter` wiring | *later* | Step 5 |
 | 10 | Cutover — opening balances, parallel run, go-live | *later* | All |
 

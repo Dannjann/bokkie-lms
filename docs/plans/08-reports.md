@@ -1,6 +1,6 @@
 # Step 8 — Reports
 
-**Status:** ⬜ planned · **Depends on:** Step 7 · **Blocks:** Step 10
+**Status:** ✅ built, gate passed · **Depends on:** Step 7 · **Blocks:** Step 10
 
 > **Q3 and Q4 are unanswered, and this step is built anyway** — the same
 > decision taken in Step 7, and a riskier one. An interest rule guessed wrong is
@@ -31,6 +31,119 @@ printed it and when — with no rail, no buttons and no scrollbars on the paper.
 Every figure on every report is computed on the server, the per-farmer rows add
 up to the totals above them to the centavo, and a voided voucher leaves no trace
 in any of the four.
+
+---
+
+## Where this stands
+
+All five tasks are built and the gate has been run, printing included.
+
+| Checked | Result |
+|---|---|
+| The FIFO walk against hand-worked cases | ✅ including every bucket boundary |
+| 30 days vs 31, 60 vs 61, 90 vs 91 | ✅ each lands where it should |
+| A payment clearing a lot exactly, and one spanning two | ✅ oldest first |
+| A payment larger than everything ever lent | ✅ no negative bucket |
+| An overpayment followed by a fresh advance | ✅ the credit is spent on it |
+| An opening balance at cutover | ✅ ages from its own date |
+| An interest charge | ✅ not aged, and shown beside the buckets |
+| Five property invariants over generated ledgers | ✅ hold |
+| Current Advances against `BalanceAt`, per farmer | ✅ cannot disagree |
+| ROI's rows against its portfolio block | ✅ sum exactly |
+| ROI's outstanding against Current Advances' total | ✅ the same figure |
+| The aging buckets against the outstanding principal | ✅ sum exactly |
+| Anybody reported as settled while still owing | ✅ none, over generated ledgers |
+| A farmer who settles and then borrows again | ✅ not settled |
+| A farmer who has never borrowed | ✅ not settled |
+| A voided voucher, in all four reports | ✅ gone, once the void has happened |
+| A voided voucher, in a report that stops before the void | ✅ still there, as the books read that day |
+| A credit | ✅ shown, not hidden |
+| A recovery rate with nothing lent | ✅ blank, not 0.0% |
+| A bad date, on each of the four routes | ✅ 400, naming the parameter |
+| A period that runs backwards | ✅ 400, its own sentence |
+| An encoder on any of the four | ✅ refused, all four refusals audited |
+| **The screens, in a browser, at counter-PC resolution** | ✅ **see below** |
+| **The pages, printed at A4** | ✅ **see below** |
+
+**Both mutations hold:**
+
+- Counting a reversal twice turns *advanced* negative — −₱3,000.00 where
+  ₱0.00 belongs — and fails in the ledger's tests and again in the report's.
+  The loudest possible failure, which is what a double-count deserves.
+- Moving a bucket boundary by one day fails the `exactly 30 days` case and
+  nothing else, which is the point of having written the boundaries down.
+
+**The screens were walked** in Chromium against the real binary at 1024px, swept
+700–1440 and at 390, on a seeded book with money of four different ages on it.
+The figures reconcile three ways: Current Advances totals ₱54,300.78, ROI says
+the same is outstanding, and the aging buckets sum to ₱52,340.56 of principal
+beside ₱1,960.22 of interest. An encoder sees none of the four in the rail and
+is redirected off all four routes.
+
+**The pages were printed**, which is where the faults were — five of them, all
+in *Decisions and faults from building* below, and none of them visible on a
+screen.
+
+---
+
+## Decisions and faults from building
+
+**1. The ledger's second read grew a column, and the plan said two reads.** It
+still is two, but `PrincipalLotsUpTo` became `DeltasUpTo` carrying both
+principal and interest. Aging needs the principal; working out the day somebody
+finished paying needs the total. One query, walked twice, rather than two
+queries over the same rows.
+
+**2. When a void counts is not what the plan assumed, and this is the important
+one.** The plan said to net reversals by what they undo and never by when they
+happened — which is what Step 7 does for interest, and which is wrong for a
+report. `Reverse` dates a reversal the day of the void *precisely so* that "a
+statement printed in February still says in March what it said in February", and
+netting a March void out of February's figures breaks that from the other side.
+
+So the report reads bound the reversal join by their own cut-off: a report over
+a period reads as the books read at the end of it. That is also what keeps
+*Deployed* and *Outstanding* on one page telling one story, since Outstanding
+comes from `BalancesAt`, which has always worked this way.
+
+`AdvancedBetween` keeps its unbounded join, and the difference is deliberate
+rather than an oversight: it feeds an interest charge rather than a report, and
+charging a farmer interest on money that has since been handed back is
+indefensible whenever the handing back happened. Both functions now say so.
+
+**3. The property test found a centavo, and it was a real bug.** An
+overpayment's credit was being discarded at the moment it arose rather than
+carried, so a farmer who overpaid and then borrowed again had the whole new
+advance aged while their balance was net of the credit. It shrank the
+counterexample to one centavo owed and two aged — exactly the size of error
+nobody would ever notice on a printed page, and exactly the size that makes a
+farmer's dispute unanswerable.
+
+**4. A percentage is integer arithmetic and text.** The numerator is scaled by a
+thousand before dividing, which gives tenths of a percent exactly. A recovery
+rate arrived at by float division is a number nobody can reproduce by hand, and
+this one is read by somebody deciding whether the lending works. Nothing lent
+reports no rate at all rather than 0.0%, which would be a different claim.
+
+**5. Five faults that only exist on paper.** The topbar printed, breadcrumb and
+connection light and all. The screen's page header printed above the printed
+head, so the title appeared twice and the second one explained the report to
+somebody already holding it. Farmer names printed as blue underlined links.
+Codes and dates right-aligned on paper while left-aligning on screen, because
+the print rule caught `.numeric` — which is on those columns for tabular figures
+rather than for alignment. And the table heads and the muted interest column
+printed in the screen's light grey, which on paper is barely there.
+
+The last needed `!important`, which is worth recording rather than apologising
+for: the shared table styles are imported into scoped component blocks, Vue
+rewrites those with a `[data-v-…]` attribute, and that outranks a plain class
+selector from a global sheet.
+
+**6. The aging report was one column too wide for the station's window.** Six
+columns of figures plus a name overflowed 1024px and the interest column was cut
+off the right edge — worse than omitting it, because nothing says it is missing.
+The per-row principal was the column to drop: it is the four buckets beside it
+added up, and the eye cannot use both. It is said in words in the totals row.
 
 ---
 

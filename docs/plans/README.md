@@ -20,7 +20,7 @@ Station**, Pintor Gamu, Isabela.
 | [05-advances.md](05-advances.md) | Step 5 — advance vouchers, draft→posted, void via reversal | ✅ Built, gate passed |
 | [06-payments.md](06-payments.md) | Step 6 — payments, the principal/interest split, customer statement | ✅ Built, gate passed |
 | [07-interest.md](07-interest.md) | Step 7 — the interest run, its preview, and undoing one | ✅ Built, gate passed |
-| [08-reports.md](08-reports.md) | Step 8 — the four reports, and the page that leaves the room | ⬜ Planned |
+| [08-reports.md](08-reports.md) | Step 8 — the four reports, and the page that leaves the room | ✅ Built, gate passed |
 
 Steps 9 and 10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -178,6 +178,37 @@ the input inside it. And `payment.applies`, shipped in Step 6 with nothing to
 exercise it, finally divides a real payment against real interest. See
 [07-interest.md](07-interest.md).
 
+**Step 8 is complete and its gate has passed.** The system produces paper. Four
+reports — who owes money, whether the lending is working, how old the debt is,
+and who has finished paying — each a date question, all manager-only, all
+printed through the browser. Q3 and Q4 were unanswered and were answered by
+assumption in the open: ROI is a portfolio block with a per-farmer table under
+it, and Liquidated is a view built so it structurally cannot be anything else —
+the report package has no write path at all.
+
+Building it corrected the plan on the point that matters. Netting a voided
+document by *what* it undid rather than by *when* — which is right for an
+interest charge, and what Step 7 does — is wrong for a report: the ledger dates
+a reversal the day of the void precisely so an old statement stays reproducible,
+and netting a March void out of February's figures breaks that from the other
+side. The report reads bound the reversal to their own cut-off, so a report over
+a period reads as the books read at the end of it, and Deployed and Outstanding
+on the same page tell the same story.
+
+Aging is derived at read time and stored nowhere, taking every positive
+principal movement as a lot and applying every negative one FIFO — so an opening
+balance at cutover ages from its own date and no entry type can fall silently
+outside it. The property test earned its keep immediately, finding that an
+overpayment's credit was discarded rather than carried, at a counterexample of
+one centavo owed and two aged.
+
+Both mutations are caught: counting a reversal twice turns the amount advanced
+negative, and a bucket boundary moved by a day fails the thirty-day case alone.
+The screens reconcile three ways on a seeded book, and printing them found five
+faults that do not exist on a screen — the topbar, a title printed twice, blue
+links on paper, columns aligning one way in print and another on screen, and
+grey ink that barely prints. See [08-reports.md](08-reports.md).
+
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,
 backs the database up, swaps the binary, restarts, confirms `/healthz` answers
@@ -228,4 +259,5 @@ bokkie import-customers F.csv         # load the customer master, all or nothing
 ```bash
 go test ./internal/domain/payment/... -race    # the receipt, the split, twenty posters
 go test ./internal/domain/interest/... -race   # the rule, the preview, the period guard
+go test ./internal/domain/report/... -race     # the four reports, and the FIFO walk
 ```
