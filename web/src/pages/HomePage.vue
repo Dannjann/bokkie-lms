@@ -56,12 +56,32 @@ const lanBusy = ref(false)
 const lanError = ref<string | null>(null)
 
 /**
+ * What the switch is currently showing, which is not always what the server
+ * says: between pressing it and confirming, it shows the position being asked
+ * about. It is a separate ref because PrimeVue's switch keeps its own copy of
+ * the value and only re-reads the prop when the prop *changes* — so a parent
+ * that declines the change by leaving lanAccess alone leaves the switch showing
+ * the position it refused. Every path that declines or fails calls showServerState
+ * to put it back, which is a real change and does re-sync it.
+ */
+const switchOn = ref(false)
+
+function showServerState(): void {
+  switchOn.value = lanAccess.value === true
+}
+
+/**
  * Turning access off is a two-step click. The effect is immediate and reaches
  * every other machine at once, so the person doing it should have said so on
  * purpose. Turning it back on needs no ceremony: it only ever gives access
  * back.
  */
 const confirming = ref(false)
+
+function cancelConfirm(): void {
+  confirming.value = false
+  showServerState()
+}
 
 const lanNote = computed(() => {
   if (lanAccess.value === null) return 'Checking…'
@@ -80,9 +100,11 @@ async function loadLanAccess(): Promise<void> {
     lanAccess.value = null
     lanError.value = 'Could not read the network setting.'
   }
+  showServerState()
 }
 
 function onToggle(next: boolean): void {
+  switchOn.value = next
   if (next) {
     void setLanAccess(true)
     return
@@ -98,8 +120,17 @@ async function setLanAccess(value: boolean): Promise<void> {
     lanAccess.value = setting.value === 'true'
     confirming.value = false
   } catch (err) {
-    lanError.value = err instanceof ApiError ? err.message : String(err)
+    // A sentence, not an exception. String(err) on a dropped connection reads
+    // "TypeError: Failed to fetch", which tells a manager at the counter
+    // nothing they can act on — and this is the screen they are on when the
+    // network is the thing going wrong.
+    lanError.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
+    // The change did not happen, so the switch must stop claiming it did.
+    // Leaving it on the refused position is how somebody ends up believing
+    // the counter PCs are locked out when they are not.
+    confirming.value = false
   } finally {
+    showServerState()
     lanBusy.value = false
   }
 }
@@ -236,7 +267,8 @@ onMounted(() => {
               <p class="tile__note">{{ lanNote }}</p>
             </div>
             <ToggleSwitch
-              :model-value="lanAccess === true"
+              class="network__switch"
+              :model-value="switchOn"
               :disabled="lanAccess === null || lanBusy || !isHost"
               aria-labelledby="network-heading"
               @update:model-value="onToggle"
@@ -259,7 +291,7 @@ onMounted(() => {
                 text
                 size="small"
                 :disabled="lanBusy"
-                @click="confirming = false"
+                @click="cancelConfirm"
               />
               <Button
                 label="Turn off"
@@ -407,6 +439,15 @@ onMounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+}
+
+/* The switch is a fixed-size control, not something to be squeezed. Without
+   this the sentence beside it shrinks the track to a 22px blob that no longer
+   reads as a switch at all, let alone as one that is on — and this is the
+   control that decides who can use the app. The text wraps instead, which is
+   what text is for. */
+.network__switch {
+  flex-shrink: 0;
 }
 
 .network__note {
