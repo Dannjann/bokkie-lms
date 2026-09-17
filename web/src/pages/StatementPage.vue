@@ -17,7 +17,7 @@ import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
-import { getStatement, type Statement } from '@/api/payments'
+import { entryLabel, getStatement, type Statement } from '@/api/payments'
 import { formatPesos, toISODate } from '@/format'
 import { setPageTitle } from '@/pageTitle'
 
@@ -66,26 +66,6 @@ watch([from, to], () => {
 function clearRange(): void {
   from.value = null
   to.value = null
-}
-
-/** What an entry is called on a statement, in the words the station uses. */
-function entryLabel(type: string): string {
-  switch (type) {
-    case 'advance':
-      return 'Advance'
-    case 'payment':
-      return 'Payment'
-    case 'interest':
-      return 'Interest'
-    case 'reversal':
-      return 'Reversal'
-    case 'opening':
-      return 'Opening balance'
-    case 'adjustment':
-      return 'Adjustment'
-    default:
-      return type
-  }
 }
 
 onMounted(load)

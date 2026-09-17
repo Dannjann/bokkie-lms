@@ -156,6 +156,32 @@ export function methodLabel(method: PaymentMethod): string {
 }
 
 /**
+ * What a ledger entry is called on screen, in the words the station uses.
+ *
+ * It lives here rather than on the statement screen because the customer record
+ * names the same entries: two copies of this list is two chances for a payment
+ * to be called one thing on one screen and another on the next.
+ */
+export function entryLabel(type: string): string {
+  switch (type) {
+    case 'advance':
+      return 'Advance'
+    case 'payment':
+      return 'Payment'
+    case 'interest':
+      return 'Interest'
+    case 'reversal':
+      return 'Reversal'
+    case 'opening':
+      return 'Opening balance'
+    case 'adjustment':
+      return 'Adjustment'
+    default:
+      return type
+  }
+}
+
+/**
  * One row of a statement: an entry, the balance it left behind, and the number
  * staff say out loud for the document it came from.
  */

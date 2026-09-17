@@ -17,6 +17,7 @@ import {
   type Customer,
   type CustomerDraft,
 } from '@/api/customers'
+import { entryLabel, getStatement, type StatementRow } from '@/api/payments'
 import { formatPesos } from '@/format'
 import { useSessionStore } from '@/stores/session'
 import { setPageTitle } from '@/pageTitle'
@@ -35,6 +36,25 @@ const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
 const saved = ref(false)
+
+/**
+ * What has happened to this customer's account, read from the same statement
+ * the statement screen reads. There is no second endpoint for "recent
+ * transactions": a shorter list computed a different way is a list that can
+ * disagree with the statement, and the statement is what the farmer is shown.
+ */
+const entries = ref<StatementRow[]>([])
+const entriesLoading = ref(true)
+const entriesError = ref('')
+
+/** How many fit on a record card before it stops being a summary. */
+const recentLimit = 10
+
+// The server returns a statement in the order it happened, oldest first, which
+// is how a statement is read. A record card is not: the question asked at the
+// counter is what moved last.
+const recent = computed(() => entries.value.slice(-recentLimit).reverse())
+const olderCount = computed(() => Math.max(0, entries.value.length - recentLimit))
 
 function adopt(loaded: Customer): void {
   customer.value = loaded
@@ -58,6 +78,23 @@ async function load(): Promise<void> {
     error.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * Loaded on its own rather than with the customer: a statement that cannot be
+ * built is a reason to show an empty transactions card, not a reason to hide
+ * the record and the balance behind an error.
+ */
+async function loadEntries(): Promise<void> {
+  entriesLoading.value = true
+  entriesError.value = ''
+  try {
+    entries.value = (await getStatement(id.value)).rows
+  } catch (err) {
+    entriesError.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
+  } finally {
+    entriesLoading.value = false
   }
 }
 
@@ -90,7 +127,10 @@ async function toggleActive(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadEntries()
+})
 </script>
 
 <template>
@@ -203,6 +243,82 @@ onMounted(load)
           </RouterLink>
         </section>
       </div>
+
+      <!--
+        The history, on the record itself. Somebody standing at the counter with
+        the farmer in front of them asks "what did I pay last month" far more
+        often than they want a full statement printed, and sending them to
+        another screen to answer it loses the balance they were just reading.
+        Every figure here is the server's, including the running balance.
+      -->
+      <section class="card ledger">
+        <div class="ledger__head">
+          <h2 class="customer__heading ledger__heading">Transactions</h2>
+          <RouterLink
+            class="ledger__link"
+            :to="{ name: 'statement', params: { id: customer.id } }"
+          >
+            Full statement
+          </RouterLink>
+        </div>
+
+        <div v-if="entriesLoading" class="ledger__loading">
+          <ProgressSpinner style="width: 2rem; height: 2rem" />
+        </div>
+
+        <Message v-else-if="entriesError" severity="error" :closable="false">
+          {{ entriesError }}
+        </Message>
+
+        <p v-else-if="recent.length === 0" class="ledger__empty">
+          Nothing has been advanced to or paid by this customer yet.
+        </p>
+
+        <template v-else>
+          <div class="ledger__scroll">
+            <table class="ledger__table">
+              <thead>
+                <tr>
+                  <th class="ledger__date">Date</th>
+                  <th>Entry</th>
+                  <th>Document</th>
+                  <th class="ledger__amount">Principal</th>
+                  <th class="ledger__amount">Interest</th>
+                  <th class="ledger__amount">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in recent" :key="row.entry.id">
+                  <td class="ledger__date numeric">{{ row.entry.date }}</td>
+                  <td>
+                    {{ entryLabel(row.entry.type) }}
+                    <span v-if="row.entry.reason" class="ledger__reason">
+                      — {{ row.entry.reason }}
+                    </span>
+                  </td>
+                  <td class="ledger__document">{{ row.document ?? '—' }}</td>
+                  <td class="ledger__amount numeric">{{ formatPesos(row.entry.principal) }}</td>
+                  <td class="ledger__amount numeric">{{ formatPesos(row.entry.interest) }}</td>
+                  <td class="ledger__amount numeric">{{ formatPesos(row.running.total) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!--
+            Said plainly rather than left to be inferred from the row count: a
+            card showing the last ten of forty movements must not read as the
+            whole history.
+          -->
+          <p v-if="olderCount > 0" class="ledger__more">
+            The {{ recentLimit }} most recent of
+            <span class="numeric">{{ entries.length }}</span> entries.
+            <RouterLink :to="{ name: 'statement', params: { id: customer.id } }">
+              See them all on the statement
+            </RouterLink>
+          </p>
+        </template>
+      </section>
     </template>
 
     <Message v-else severity="error" :closable="false">{{ error || 'No such customer.' }}</Message>
@@ -305,6 +421,98 @@ onMounted(load)
 
 .balance__note {
   margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--shell-muted);
+}
+
+.ledger__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.75rem 0;
+}
+
+.ledger__heading {
+  margin: 0;
+}
+
+.ledger__link {
+  font-size: 0.875rem;
+}
+
+.ledger__loading {
+  display: grid;
+  place-items: center;
+  padding: 2rem 0;
+}
+
+.ledger__empty {
+  margin: 0;
+  padding: 1.5rem 0.75rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--shell-muted);
+}
+
+/* Six columns of figures do not fit on a phone. The table scrolls inside its
+   own card rather than dragging the page sideways with it, and min-width: 0 is
+   what makes the overflow contain anything at all. */
+.ledger__scroll {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.75rem;
+}
+
+.ledger__table {
+  width: 100%;
+  min-width: 44rem;
+  border-collapse: collapse;
+}
+
+.ledger__table th {
+  padding: 0.6rem 0.5rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--shell-muted);
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.ledger__table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.ledger__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ledger__date {
+  white-space: nowrap;
+}
+
+.ledger__document,
+.ledger__reason {
+  color: var(--shell-muted);
+}
+
+.ledger__document {
+  white-space: nowrap;
+}
+
+.ledger__amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ledger__table th.ledger__amount {
+  text-align: right;
+}
+
+.ledger__more {
+  margin: 0;
+  padding: 0 0.75rem 0.75rem;
   font-size: 0.8125rem;
   color: var(--shell-muted);
 }
