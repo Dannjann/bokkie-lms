@@ -335,6 +335,11 @@ func registerRoutes(rt *router, d Deps) {
 	// that is the question being asked: what does this farmer owe, and why.
 	rt.read(Authenticated, "/api/customers/{id}/statement", handleGetStatement(d))
 
+	// The index over those statements. Authenticated rather than ManagerOnly,
+	// which departs from the four reports on purpose — the reasoning is on
+	// handleListStatements, where the next person to question it will look.
+	rt.read(Authenticated, "/api/statements", handleListStatements(d))
+
 	// --- Reports ------------------------------------------------------------
 	//
 	// Portfolio views, so manager-only like the interest run. What an encoder

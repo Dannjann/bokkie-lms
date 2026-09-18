@@ -171,9 +171,18 @@ export const router = createRouter({
       },
     },
     {
-      // Hangs off the customer rather than off a statements section: this is
-      // one farmer's history, reached from the farmer. The all-customers
-      // statement screen is step 8's, along with the print layout.
+      // The index over every farmer's statement. Not manager-gated, unlike the
+      // four reports — the encoder at the counter is the person who has to tell
+      // a farmer what they owe.
+      path: '/statements',
+      name: 'statements',
+      component: () => import('@/pages/StatementsPage.vue'),
+      meta: { title: 'Statements' },
+    },
+    {
+      // Hangs off the customer as well as off the index: this is one farmer's
+      // history and both ways in are legitimate. The crumb points back to
+      // Customers because that is where the record lives.
       path: '/customers/:id(\\d+)/statement',
       name: 'statement',
       component: () => import('@/pages/StatementPage.vue'),

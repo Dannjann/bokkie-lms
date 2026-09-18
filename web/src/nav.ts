@@ -50,10 +50,11 @@ export const navigation: NavSection[] = [
       { label: 'Return of Investment', icon: 'pi pi-percentage', to: '/reports/roi', manager: true },
       { label: 'Aging', icon: 'pi pi-hourglass', to: '/reports/aging', manager: true },
       { label: 'Liquidated', icon: 'pi pi-check-circle', to: '/reports/liquidated', manager: true },
-      // The per-customer statement is reached from the customer. This stays
-      // disabled until there is something of its own to show: statements across
-      // customers, printed in one run.
-      { label: 'Statements', icon: 'pi pi-file', soon: true },
+      // An index over the per-customer statements, which are also still
+      // reachable from the customer. Not a batch print: a statement is one
+      // farmer's history and is printed from their own page. This entry carries
+      // no `manager` flag, and that is deliberate — see handleListStatements.
+      { label: 'Statements', icon: 'pi pi-file', to: '/statements' },
     ],
   },
   {
