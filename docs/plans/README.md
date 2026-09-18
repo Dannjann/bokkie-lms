@@ -21,7 +21,7 @@ Station**, Pintor Gamu, Isabela.
 | [06-payments.md](06-payments.md) | Step 6 — payments, the principal/interest split, customer statement | ✅ Built, gate passed |
 | [07-interest.md](07-interest.md) | Step 7 — the interest run, its preview, and undoing one | ✅ Built, gate passed |
 | [08-reports.md](08-reports.md) | Step 8 — the four reports, and the page that leaves the room | ✅ Built, gate passed |
-| [08.5-admin-screens.md](08.5-admin-screens.md) | Step 8.5 — users, audit log, settings, statements index | 🟨 Planned |
+| [08.5-admin-screens.md](08.5-admin-screens.md) | Step 8.5 — users, audit log, settings, statements index | ✅ Built, gate passed |
 
 Steps 9 and 10 are **features**. They are listed in the roadmap in
 `00-architecture.md` for shape only — each gets its own plan doc, written when
@@ -228,6 +228,71 @@ The customer record gained its history in the same pass: the last ten movements
 with their running balance, read from the same statement the statement screen
 reads, because a shorter list computed a different way is a list that can
 disagree with the paper a farmer is holding.
+
+**Step 8.5 is complete and its gate has passed.** The system can be
+administered from inside itself. The four rail entries that had been greyed out
+since Step 4 are live: a roster where an account can be created, turned off,
+promoted, demoted and given a new password; the audit log — the record the whole
+of Step 2 was built to produce — read through a browser at last, narrowed by
+person, action, record or week, each row opening to show what changed; the
+eleven settings with the backup folder under them; and an index over the
+per-customer statements.
+
+Two findings shrank the work before it started. `withSession` already re-reads
+the account on every request and ends the session when it finds it inactive, so
+deactivation and role changes need no session sweeping — only a password change
+does, because a changed hash leaves session rows untouched. And
+`routes_test.go` already refuses a mutating route that has not chosen an audit
+style, so every new endpoint is audited by construction.
+
+**The plan predicted the wrong mutation and the build corrected it.** Counting
+the managers before the `UPDATE` rather than after does not lose the last one:
+inside a transaction that is a read-then-write, and WAL hands the second writer
+a snapshot conflict it cannot recover from. It is safe but unusable — nineteen
+of twenty writers die on the conflict, which the API could only report as a 500.
+What actually loses the station its manager is taking the count *outside* the
+transaction, and held open at a barrier that loses both managers on every run.
+The write-first ordering stays for the second reason as well as the first: it is
+the only shape that turns the losers into a sentence somebody can read.
+
+The audit filters turned up a subtler one. `at` is written with
+`time.RFC3339Nano`, which drops trailing zeros from the fraction, so comparing a
+filtered day against a full RFC3339 midnight is wrong in the direction nobody
+checks — `.` sorts before `Z`, and two of the first three entries of a day
+silently vanish. And the `LIKE` mutation is not the one it looks like: a dot is
+literal in SQL `LIKE`, so the first version of that test passed against the bug.
+What `LIKE` leaks is `_` and ASCII case.
+
+**Seven faults were found by walking the screens and none by a test**, which is
+the pattern every step since 5 has repeated. Three text buttons in a row clipped
+"Deactivate" off the card at 1024px — the width the station actually runs — and
+a page-overflow check sees nothing, because the table clips inside the card
+rather than making the document wider. The same CSS mistake was made twice:
+`flex: 1 1 18rem` written for a row is a width, and the moment a narrow-width
+rule turns that row into a column the identical declaration is a *height*. And a
+backup's file name is UTC by decision so that it sorts in any file manager,
+while the panel printed its modification time beside it — eight hours apart, on
+the one screen whose job is to say whether last night's backup ran. Modification
+time was the wrong source anyway, as `backup.List` already said in a comment: a
+file copied off a USB stick and back records the copy, not the backup.
+
+Two of those are now tests rather than promises. The audit and settings
+vocabularies are read out of the TypeScript and checked against the route
+registry and `settings.All` in both directions — a Go test parsing a `.ts` file,
+in the spirit of the ledger's no-floats test. The first caught a real gap
+immediately: the `Change.Action` override meant `user.deactivated` was written
+by a handler and appeared nowhere in the registry, so `Route.AlsoWrites` now
+declares it.
+
+One decision is worth knowing about. **The statements index is registered
+`Authenticated`, not `ManagerOnly`, which departs from the four reports.** They
+are gated because they are portfolio views and an index across every farmer's
+balance is arguably one too; it is open because the person who has to tell a
+farmer what they owe is the encoder at the counter, and any single farmer's
+balance is already one click away on the customer screen. The reasoning is on
+the handler and the decision is pinned by a test that also checks the aging
+report is still shut, so it cannot pass because the gate came off entirely. See
+[08.5-admin-screens.md](08.5-admin-screens.md).
 
 **Step 2.5 is built and its gate is pending.** The host now installs to one
 fixed path, and `bokkie update` takes a signed release folder, verifies it,

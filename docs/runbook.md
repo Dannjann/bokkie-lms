@@ -62,12 +62,42 @@ A line containing `"status":"ok"` means the server and its database are fine.
 ### Two kinds of user
 
 - **Encoder** — the everyday counter role.
-- **Manager** — an encoder, plus: adding users, changing settings, running and
-  listing backups, reading the audit log, and (from a later version) voiding a
-  posted voucher.
+- **Manager** — an encoder, plus: managing users, changing settings, running and
+  listing backups, reading the audit log, running interest, reading the four
+  reports, and voiding a posted voucher or receipt.
 
-Only a manager can create users. If you are locked out of every manager account,
-call the developer; there is no password reset built into the app.
+Under **Administration** in the sidebar, a manager will find **Users**,
+**Audit log** and **Settings**.
+
+### Managing accounts
+
+On the **Users** screen, the ⋮ at the end of a row offers:
+
+- **Make manager** / **Make encoder** — takes effect on that person's next
+  click. They do not need to sign out.
+- **Reset password…** — for somebody who has forgotten theirs. You do not need
+  their old password. They are signed out of every machine and will need the new
+  password to get back in. Tell them in person; do not write it on a note.
+- **Deactivate** — the nearest thing to removing an account. They are signed out
+  within a click and cannot sign back in. Nothing they did is removed, and the
+  audit log still shows their name against it. **Accounts are never deleted**,
+  so use this when somebody leaves.
+
+Anyone can change their own password from the key icon at the bottom of the
+sidebar, next to the lock and sign-out buttons. That one asks for the current
+password first, and leaves you signed in where you are.
+
+**Two things the app will refuse, on purpose:**
+
+- You cannot deactivate or demote **yourself**. That click would take away both
+  the screen and the way back, so somebody else has to do it.
+- You cannot deactivate or demote the **last manager**. If you try, the app says
+  so and tells you to make somebody else a manager first.
+
+Between them, those two mean it should not be possible to lock the station out
+of its own administration. If it somehow happens anyway — every manager account
+deactivated, or none left — nobody inside the app can fix it and you will need
+to call the developer.
 
 ### Letting the other computers in, or keeping them out
 
@@ -103,8 +133,15 @@ the password is then typed correctly. Either wait it out, or restart the service
 ## Backups
 
 A backup runs automatically every night at **21:00** station time, and keeps the
-**14 most recent** copies. A manager can change both from the app's settings;
-the change takes effect the same evening, with no restart.
+**14 most recent** copies. A manager can change both under **Settings →
+Backup**; the change takes effect the same evening, with no restart.
+
+The same screen lists what is in the backup folder, with the size of each file
+and the time it was taken. The time shown is station time. **The timestamp
+inside the file name is UTC** — eight hours behind — because the names have to
+sort correctly in Windows Explorer and on any machine you plug the stick into.
+So `bokkie-20260918-022238.db` is the backup the screen shows as 10:22 AM on 18
+September. They are the same moment.
 
 Each backup is checked the moment it is written — the program reopens the new
 file and counts its rows against the live database. A backup that fails that
@@ -112,7 +149,7 @@ check is deleted rather than left looking like a good one.
 
 ### Take a backup right now
 
-From the app, as a manager: **Backup now**.
+From the app, as a manager: **Settings → Backups → Back up now**.
 
 From the command line on the host:
 
@@ -262,7 +299,15 @@ too, so a restored copy brings them back.
 ## The audit log
 
 Every change, every refused action, and every failed login is recorded with who
-did it, when, and from which computer. Managers can read it in the app.
+did it, when, and from which computer. Managers can read it under
+**Administration → Audit log**.
+
+Narrow it by person, by what happened, by which record, or by a range of dates —
+the dropdowns only offer things that have actually happened, so an empty list
+means an empty list and not a typo. The arrow at the end of a row opens it to
+show what the value was before and what it became, with the request number and
+the computer's address underneath. **Load older** goes further back; the log
+holds everything since the day the system was installed.
 
 Nothing is ever removed from it. It is not possible to edit or delete an entry —
 not from the app, and not by anyone typing SQL at the database; the database

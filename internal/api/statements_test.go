@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/auth"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
+	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 )
 
 // statementFixture is a handler with staff, some farmers, and real money on the
@@ -72,6 +74,33 @@ func (f *statementFixture) lend(t *testing.T, c customer.Customer, pesos string)
 		fmt.Sprintf("/api/advances/%d/post", voucher.ID), f.encoder, nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("post a voucher: %d %s", resp.Code, resp.Body)
+	}
+}
+
+// lendOn is lend with the voucher dated, for the days that are not today.
+func (f *statementFixture) lendOn(t *testing.T, c customer.Customer, pesos, date string) {
+	t.Helper()
+
+	body := map[string]any{
+		"date":  date,
+		"notes": "",
+		"lines": []map[string]any{
+			{"customer_id": c.ID, "particular": "palay advance", "amount": pesos},
+		},
+	}
+	resp := request(t, f.handler, http.MethodPost, "/api/advances", f.encoder, body)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("draft a voucher dated %s: %d %s", date, resp.Code, resp.Body)
+	}
+	var voucher struct {
+		ID int64 `json:"id"`
+	}
+	decode(t, resp, &voucher)
+
+	resp = request(t, f.handler, http.MethodPost,
+		fmt.Sprintf("/api/advances/%d/post", voucher.ID), f.encoder, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("post a voucher dated %s: %d %s", date, resp.Code, resp.Body)
 	}
 }
 
@@ -151,6 +180,51 @@ func TestEveryRowAgreesWithThatFarmersOwnStatement(t *testing.T) {
 			t.Errorf("%s: interest %s vs %s",
 				row.Customer.Code, row.Balance.Interest, statement.Closing.Interest)
 		}
+	}
+}
+
+// The as-at date has to actually mean something. Nothing else in these tests
+// asks for a day other than today, so without this the index could ignore the
+// parameter entirely and every one of them would still pass.
+func TestTheIndexAnswersForTheDayItIsAsked(t *testing.T) {
+	f := newStatementFixture(t, "Juan dela Cruz")
+	juan := f.farmers[0]
+
+	station := time.FixedZone("PHT", 8*60*60)
+	yesterday := ledger.DateOf(time.Now().In(station).AddDate(0, 0, -1))
+	dayBefore := ledger.DateOf(time.Now().In(station).AddDate(0, 0, -2))
+
+	f.lendOn(t, juan, "4000.00", yesterday.String())
+
+	// On the day of the advance, it is there.
+	onTheDay := f.index(t, f.encoder, url.Values{"as_of": {yesterday.String()}})
+	if got := onTheDay.Rows[0].Balance.Total; got != "4000.00" {
+		t.Errorf("as at %s the balance reads %q, want 4000.00", yesterday, got)
+	}
+
+	// The day before it, it is not — and this is what fails if the handler
+	// computes today's balance whatever it was asked for.
+	before := f.index(t, f.encoder, url.Values{"as_of": {dayBefore.String()}})
+	if got := before.Rows[0].Balance.Total; got != "0.00" {
+		t.Errorf("as at %s — before the advance — the balance reads %q, want 0.00; "+
+			"the as_of parameter is being ignored", dayBefore, got)
+	}
+	if before.AsOf != dayBefore.String() {
+		t.Errorf("the response says as_of %q, want %q", before.AsOf, dayBefore)
+	}
+
+	// And it agrees with the statement cut at the same date, which is the
+	// invariant the whole screen rests on, checked away from today.
+	var statement statementResponse
+	resp := request(t, f.handler, http.MethodGet,
+		fmt.Sprintf("/api/customers/%d/statement?to=%s", juan.ID, dayBefore), f.encoder, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("statement: %d %s", resp.Code, resp.Body)
+	}
+	decode(t, resp, &statement)
+	if before.Rows[0].Balance.Total != statement.Closing.Total {
+		t.Errorf("as at %s the index says %s and the statement closes at %s",
+			dayBefore, before.Rows[0].Balance.Total, statement.Closing.Total)
 	}
 }
 
