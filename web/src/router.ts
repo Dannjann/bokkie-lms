@@ -196,6 +196,14 @@ export const router = createRouter({
       meta: { title: 'Audit log', manager: true },
     },
     {
+      // Manager-only to change, and manager-only to look at: the Ref. No. start
+      // and the interest rule are not things to be browsed mid-shift.
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/pages/SettingsPage.vue'),
+      meta: { title: 'Settings', manager: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),

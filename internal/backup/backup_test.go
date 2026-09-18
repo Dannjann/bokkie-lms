@@ -343,3 +343,55 @@ func openAt(t *testing.T, path string) *sql.DB {
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
+
+// The displayed time of a backup comes from its name, not from the filesystem.
+//
+// A file copied off a USB stick and back has a modification time recording the
+// copy; the name records the backup. The two disagree by however long the file
+// sat on the stick, and the one somebody is asking about is the backup.
+func TestTakenAtReadsTheInstantOutOfTheName(t *testing.T) {
+	at, ok := TakenAt("/anywhere/bokkie-20260918-022238.db")
+	if !ok {
+		t.Fatal("a name this package writes was not recognised")
+	}
+	want := time.Date(2026, 9, 18, 2, 22, 38, 0, time.UTC)
+	if !at.Equal(want) {
+		t.Errorf("TakenAt = %s, want %s", at, want)
+	}
+	if at.Location() != time.UTC {
+		t.Errorf("TakenAt is in %s; the name is UTC and must be read as UTC, or every "+
+			"backup is shown offset by the host's own timezone", at.Location())
+	}
+
+	for _, name := range []string{
+		"notes.db",                       // not ours
+		"bokkie-nonsense.db",             // ours, unparseable
+		"bokkie-20260918-022238.db.part", // a half-written copy
+		"bokkie-20261318-022238.db",      // month 13
+	} {
+		if _, ok := TakenAt(name); ok {
+			t.Errorf("TakenAt(%q) claimed to recognise it", name)
+		}
+	}
+}
+
+// And it must agree with what the writer actually produced, rather than with a
+// layout string typed twice.
+func TestTakenAtRoundTripsWhatTheWriterNames(t *testing.T) {
+	folder := t.TempDir()
+	database := openTestDB(t)
+
+	result, err := Run(context.Background(), database, Options{Folder: folder, Retention: 5})
+	if err != nil {
+		t.Fatalf("run backup: %v", err)
+	}
+
+	at, ok := TakenAt(result.Path)
+	if !ok {
+		t.Fatalf("the writer produced %q, which TakenAt does not recognise", result.Path)
+	}
+	// Whole seconds: the name has no sub-second part to carry.
+	if diff := at.Sub(time.Now().UTC()); diff > time.Minute || diff < -time.Minute {
+		t.Errorf("TakenAt = %s, which is not close to now", at)
+	}
+}

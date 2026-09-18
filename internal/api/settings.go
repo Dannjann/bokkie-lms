@@ -12,11 +12,14 @@ import (
 // settingView is one setting as the UI shows it: the value, plus enough
 // description to render an editor without hard-coding a form per setting.
 type settingView struct {
-	Key     string `json:"key"`
-	Value   string `json:"value"`
-	Kind    string `json:"kind"`
-	Default string `json:"default"`
-	Doc     string `json:"doc"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	// Kind is the sentence shown under the field; KindSlug is the token the
+	// screen branches on. Two fields on purpose — see settings.Kind.Slug.
+	Kind     string `json:"kind"`
+	KindSlug string `json:"kind_slug"`
+	Default  string `json:"default"`
+	Doc      string `json:"doc"`
 
 	// Options is what a choice setting may be set to, so the screen can offer a
 	// list rather than a text box. Absent for every other kind.
@@ -27,12 +30,13 @@ type settingView struct {
 // response to an update cannot describe the same setting differently.
 func view(def settings.Def, value string) settingView {
 	return settingView{
-		Key:     def.Key,
-		Value:   value,
-		Kind:    def.Kind.String(),
-		Default: def.Default,
-		Doc:     def.Doc,
-		Options: def.Options,
+		Key:      def.Key,
+		Value:    value,
+		Kind:     def.Kind.String(),
+		KindSlug: def.Kind.Slug(),
+		Default:  def.Default,
+		Doc:      def.Doc,
+		Options:  def.Options,
 	}
 }
 

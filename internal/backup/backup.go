@@ -35,6 +35,26 @@ const (
 	fileTimeLayout = "20060102-150405"
 )
 
+// TakenAt reads back the instant a backup file was written, from its name.
+//
+// The name is the only trustworthy source for this. A file's modification time
+// says when those bytes last landed on that filesystem, which for a backup
+// copied off a USB stick and back is the moment of the copy and not the moment
+// of the backup — the same reason List sorts on the name. The second return is
+// false for a name this package did not write.
+func TakenAt(name string) (time.Time, bool) {
+	base := filepath.Base(name)
+	if !strings.HasPrefix(base, FilePrefix) || !strings.HasSuffix(base, FileSuffix) {
+		return time.Time{}, false
+	}
+	stamp := base[len(FilePrefix) : len(base)-len(FileSuffix)]
+	at, err := time.ParseInLocation(fileTimeLayout, stamp, time.UTC)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return at, true
+}
+
 // verifiedTables are counted in the source and again in the backup. Any
 // mismatch means the copy is not the database we meant to copy.
 //

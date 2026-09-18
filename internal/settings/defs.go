@@ -39,6 +39,8 @@ const (
 	KindChoice    // one of a fixed list, named in Def.Options
 )
 
+// String is the phrase that goes in an error message a person reads. It is
+// prose and it is allowed to change; nothing should branch on it.
 func (k Kind) String() string {
 	switch k {
 	case KindInt:
@@ -53,6 +55,30 @@ func (k Kind) String() string {
 		return "one of a fixed list"
 	default:
 		return "text"
+	}
+}
+
+// Slug is the same kind as a stable token, for code that has to branch on it —
+// the settings screen picking which control to render, above all.
+//
+// It exists because String returns prose. A screen keyed off "one of a fixed
+// list" would break the day somebody improves that sentence, and the break
+// would be a settings form silently falling back to a text box for every
+// choice setting, which is not a failure anyone would notice quickly.
+func (k Kind) Slug() string {
+	switch k {
+	case KindInt:
+		return "int"
+	case KindBool:
+		return "bool"
+	case KindTimeOfDay:
+		return "time_of_day"
+	case KindTimezone:
+		return "timezone"
+	case KindChoice:
+		return "choice"
+	default:
+		return "string"
 	}
 }
 
