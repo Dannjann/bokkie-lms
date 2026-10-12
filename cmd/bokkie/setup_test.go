@@ -1,10 +1,20 @@
 package main
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/Dannjann/bokkie-lms/internal/release"
 )
 
 func actions(choices []setupChoice) []setupAction {
@@ -128,4 +138,108 @@ func TestProgramEntryPointsAtTheInstalledBinary(t *testing.T) {
 	if want := `"` + exe + `" uninstall --from-control-panel`; got.Values()["UninstallString"] != want {
 		t.Errorf("UninstallString = %q, want %q", got.Values()["UninstallString"], want)
 	}
+}
+
+func TestASelfCheckFailureNeverReplacesAWorkingStation(t *testing.T) {
+	proceed, message := selfCheckOutcome(true, false, errors.New("no such host"))
+	if proceed {
+		t.Fatal("an unverified file was allowed to update an installed station")
+	}
+	if !strings.Contains(message, "Nothing has been changed") {
+		t.Errorf("the refusal did not say the machine is untouched:\n%s", message)
+	}
+	if !strings.Contains(message, "USB stick") {
+		t.Errorf("the refusal did not offer the way that still works:\n%s", message)
+	}
+}
+
+// Review Focus 3: the offline station is the reason the USB path still exists,
+// and refusing a first install for having no internet makes it uninstallable.
+func TestAnOfflineFirstInstallProceedsAndSaysSo(t *testing.T) {
+	proceed, message := selfCheckOutcome(false, false, errors.New("dial tcp: i/o timeout"))
+	if !proceed {
+		t.Fatal("a first install was refused for having no internet, which makes an offline station uninstallable")
+	}
+	if !strings.Contains(message, "could not be checked") {
+		t.Errorf("the install did not admit it was unchecked:\n%s", message)
+	}
+}
+
+func TestAVerifiedFileIsNotTalkedAbout(t *testing.T) {
+	proceed, message := selfCheckOutcome(true, true, nil)
+	if !proceed || message != "" {
+		t.Errorf("a verified file produced proceed=%v message=%q, want a silent yes", proceed, message)
+	}
+}
+
+// Review Focus 2: an out-of-date download in the Downloads folder is the
+// ordinary mistake, and "altered or corrupted" is the wrong thing to say about
+// it — it sends a person looking for an attacker rather than for the button.
+func TestAnOlderDownloadIsNotReportedAsTampering(t *testing.T) {
+	dir, file := signedRelease(t, "v1.1.0")
+	server := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	defer server.Close()
+
+	// This binary reports itself as v1.0.0 while the release says v1.1.0.
+	check, err := verifySelf(context.Background(), server.Client(), server.URL+"/", file, "v1.0.0")
+	if err != nil {
+		t.Fatalf("verifySelfAgainst: %v", err)
+	}
+	if check.OK {
+		t.Fatal("a v1.0.0 file was accepted as the v1.1.0 release")
+	}
+	if strings.Contains(check.Reason, "altered") || strings.Contains(check.Reason, "corrupted") {
+		t.Errorf("an out-of-date download was reported as tampering:\n%s", check.Reason)
+	}
+	if !strings.Contains(check.Reason, "v1.1.0") {
+		t.Errorf("the reason does not name the version to download:\n%s", check.Reason)
+	}
+}
+
+// signedRelease writes a release folder signed by a throwaway key, points this
+// build's PublicKey at it, and returns the folder and the binary inside it.
+func signedRelease(t *testing.T, version string) (dir, binary string) {
+	t.Helper()
+
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	previous := release.PublicKey
+	release.PublicKey = base64.StdEncoding.EncodeToString(public)
+	t.Cleanup(func() { release.PublicKey = previous })
+
+	dir = t.TempDir()
+	name := "BokkieSetup.exe"
+	binary = filepath.Join(dir, name)
+	if err := os.WriteFile(binary, []byte("the bytes of a bokkie release"), 0o755); err != nil {
+		t.Fatalf("write binary: %v", err)
+	}
+	info, err := os.Stat(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum, err := release.SHA256File(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := json.MarshalIndent(release.Manifest{
+		Version:   version,
+		Released:  "2026-01-01T00:00:00Z",
+		Artifacts: []release.Artifact{{Platform: release.Platform(), File: name, Size: info.Size(), SHA256: sum}},
+	}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(filepath.Join(dir, release.ManifestName), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	signature := base64.StdEncoding.EncodeToString(ed25519.Sign(private, data)) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, release.SignatureName), []byte(signature), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir, binary
 }

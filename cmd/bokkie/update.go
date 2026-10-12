@@ -45,21 +45,41 @@ func cmdUpdate(args []string) error {
 
 	ctx := context.Background()
 
-	cfg, log, closeLog, err := bootstrap(*dataDir, true)
+	result, err := applyRelease(ctx, dir, *dataDir, *force)
 	if err != nil {
 		return err
+	}
+
+	fmt.Printf("updated %s → %s\n", result.From, result.To)
+	if result.Notes != "" {
+		fmt.Printf("  %s\n", result.Notes)
+	}
+	fmt.Printf("  the database was backed up first: %s\n", result.BackupPath)
+	fmt.Printf("  open http://bokkie.local:%d and check the version on the home page\n", result.Port)
+	return nil
+}
+
+// applyRelease is the body of the update, shared by the CLI verb and the setup
+// window. Both arrive at the same place — a folder holding binaries, a manifest
+// and a signature — and from there the sequence must be identical, because the
+// backup, the swap, the health check and the rollback are what make an update
+// survivable and there must not be a second copy of them.
+func applyRelease(ctx context.Context, dir, dataDir string, force bool) (releaseResult, error) {
+	cfg, log, closeLog, err := bootstrap(dataDir, true)
+	if err != nil {
+		return releaseResult{}, err
 	}
 	defer closeLog.Close()
 
 	database, err := db.Open(ctx, cfg.DatabasePath())
 	if err != nil {
-		return err
+		return releaseResult{}, err
 	}
 	defer database.Close()
 
 	store, err := settings.Open(ctx, database)
 	if err != nil {
-		return err
+		return releaseResult{}, err
 	}
 
 	result, err := update.Apply(ctx, log, update.Options{
@@ -75,19 +95,16 @@ func cmdUpdate(args []string) error {
 		},
 		Database: database,
 		Audit:    audit.New(database, log),
-		Force:    *force,
+		Force:    force,
 	})
-	if err != nil {
-		return err
-	}
+	return releaseResult{Result: result, Port: cfg.Port}, err
+}
 
-	fmt.Printf("updated %s → %s\n", result.From, result.To)
-	if result.Notes != "" {
-		fmt.Printf("  %s\n", result.Notes)
-	}
-	fmt.Printf("  the database was backed up first: %s\n", result.BackupPath)
-	fmt.Printf("  open http://bokkie.local:%d and check the version on the home page\n", cfg.Port)
-	return nil
+// releaseResult is update.Result plus the port, which the caller needs for the
+// line telling somebody where to go and look.
+type releaseResult struct {
+	update.Result
+	Port int
 }
 
 // describeRelease verifies a release folder and prints what it contains.

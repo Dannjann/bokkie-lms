@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/Dannjann/bokkie-lms/internal/buildinfo"
+	"github.com/Dannjann/bokkie-lms/internal/release"
 	"github.com/Dannjann/bokkie-lms/internal/service"
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
@@ -224,4 +227,78 @@ func programEntry(installedPath string) winsetup.Program {
 // window resolves the same data directory and port they do.
 func setupOptions() (service.Options, *slog.Logger, io.Closer, error) {
 	return serviceCommand("setup", nil)
+}
+
+// selfCheck is what this file turned out to be when it was weighed against a
+// signed manifest.
+type selfCheck struct {
+	OK       bool
+	Manifest release.Manifest
+	// Reason is why not, in words for the person reading the window. Empty
+	// when OK.
+	Reason string
+}
+
+// verifySelf weighs this executable's own bytes against the current release.
+//
+// It hashes the file it is running from, which is the only honest thing to
+// weigh: a check of some other file says nothing about the code doing the
+// checking.
+//
+// Everything it depends on is a parameter rather than a global — the server to
+// ask, the file to weigh, the version to claim — because the behaviour worth
+// testing here is what it says about a file that does not match, and none of
+// those three can be arranged from outside otherwise.
+func verifySelf(ctx context.Context, client *http.Client, base, exe, thisVersion string) (selfCheck, error) {
+	manifest, err := release.Fetch(ctx, client, base)
+	if err != nil {
+		return selfCheck{}, err
+	}
+
+	// An older file is the ordinary mistake — somebody kept BokkieSetup.exe in
+	// Downloads and ran it again a release later. Saying "altered or corrupted"
+	// about it is both wrong and alarming, so the versions are compared before
+	// the hashes, which is the only place that distinction still exists.
+	if manifest.Version != thisVersion {
+		return selfCheck{Manifest: manifest, Reason: fmt.Sprintf(
+			"This file is Bokkie %s, and the current release is %s.\n"+
+				"Download the current one from the Bokkie downloads page.",
+			thisVersion, manifest.Version)}, nil
+	}
+
+	artifact, err := manifest.ForHost()
+	if err != nil {
+		return selfCheck{Manifest: manifest, Reason: err.Error()}, nil
+	}
+	if err := artifact.Verify(exe); err != nil {
+		return selfCheck{Manifest: manifest, Reason: err.Error()}, nil
+	}
+	return selfCheck{OK: true, Manifest: manifest}, nil
+}
+
+// selfCheckOutcome decides what to do when this file could not be checked
+// against a signed manifest.
+//
+// The asymmetry is deliberate. Replacing a working station on the strength of a
+// file nobody could verify is the thing the signing key exists to prevent.
+// Refusing a *first* install for the same reason would mean a station with no
+// internet cannot be installed at all — which is the fallback's whole purpose —
+// so it proceeds, and says plainly that it could not be checked.
+func selfCheckOutcome(installed, verified bool, failure error) (proceed bool, message string) {
+	if verified {
+		return true, ""
+	}
+	why := ""
+	if failure != nil {
+		why = "\n\n" + failure.Error()
+	}
+	if installed {
+		return false, "This file could not be checked against the Bokkie release key, so it will not\n" +
+			"replace the working system on this computer. Nothing has been changed.\n\n" +
+			"Download it again from the Bokkie downloads page, or update from the USB stick." + why
+	}
+	return true, "This file could not be checked against the Bokkie release key — this computer\n" +
+		"may have no internet connection. Installing anyway, because there is nothing\n" +
+		"on this computer to lose.\n\n" +
+		"If you did not get this file from the Bokkie downloads page, close this window." + why
 }

@@ -36,11 +36,6 @@ var ErrNoKey = fmt.Errorf("this build has no release key compiled into it, so it
 // succeeded — the version, the file names and the checksums are all only as
 // believable as the signature over them.
 func Load(dir string) (Manifest, error) {
-	key, err := publicKey()
-	if err != nil {
-		return Manifest{}, err
-	}
-
 	manifestPath := filepath.Join(dir, ManifestName)
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -51,13 +46,36 @@ func Load(dir string) (Manifest, error) {
 		return Manifest{}, err
 	}
 
+	manifest, err := LoadBytes(data, signature)
+	if err != nil {
+		// Naming the file is most of the value of the message when the folder
+		// came off a USB stick and there may be more than one of them.
+		return Manifest{}, fmt.Errorf("%s: %w", manifestPath, err)
+	}
+	return manifest, nil
+}
+
+// LoadBytes verifies a manifest and its signature as bytes, wherever they came
+// from — a folder on a USB stick, or an HTTPS response.
+//
+// This is the seam this package's comment promised: "if that ever becomes an
+// HTTPS fetch, the manifest, the signature, and every check in this package
+// stay exactly as they are and only the thing that produces the bytes changes."
+func LoadBytes(data, signature []byte) (Manifest, error) {
+	key, err := publicKey()
+	if err != nil {
+		return Manifest{}, err
+	}
 	if !ed25519.Verify(key, data, signature) {
 		return Manifest{}, fmt.Errorf(
-			"%s is not signed by the bokkie release key: it was not produced by this project, or it has been altered since it was",
-			manifestPath)
+			"not signed by the bokkie release key: it was not produced by this project, or it has been altered since it was")
 	}
 	return ParseManifest(data)
 }
+
+// DecodeSignature reads the base64 a .sig file holds. Exported for the fetch,
+// which has the bytes but no file to read them from.
+func DecodeSignature(encoded []byte) ([]byte, error) { return decodeSignature(encoded, SignatureName) }
 
 func publicKey() (ed25519.PublicKey, error) {
 	if PublicKey == "" {
@@ -78,12 +96,16 @@ func readSignature(path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read the release signature: %w", err)
 	}
+	return decodeSignature(encoded, filepath.Base(path))
+}
+
+func decodeSignature(encoded []byte, name string) ([]byte, error) {
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(encoded)))
 	if err != nil {
-		return nil, fmt.Errorf("%s is not valid base64: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf("%s is not valid base64: %w", name, err)
 	}
 	if len(raw) != ed25519.SignatureSize {
-		return nil, fmt.Errorf("%s is %d bytes, want a %d-byte signature", filepath.Base(path), len(raw), ed25519.SignatureSize)
+		return nil, fmt.Errorf("%s is %d bytes, want a %d-byte signature", name, len(raw), ed25519.SignatureSize)
 	}
 	return raw, nil
 }
