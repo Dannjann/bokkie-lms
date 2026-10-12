@@ -194,29 +194,62 @@ It prints the row counts, or explains what is wrong with the file.
 
 ## Installing on a new computer
 
-The developer hands over a folder — on a USB stick, or copied onto the machine.
-Copy the whole folder onto the computer first; do not run it from the stick.
+### Windows — one file
 
-- **Windows:** double-click **Install Bokkie.cmd**. Windows will say *"Windows
-  protected your PC"* — this is expected, because the program is not signed by
-  a certificate we pay a yearly fee for. Click **More info**, then **Run
-  anyway**. Then approve the administrator prompt.
-- **macOS:** double-click **Install Bokkie.command** and type the computer's
-  password when asked.
+1. On the computer that will be the host, open
+   **https://dannjann.github.io/bokkie-lms/** and click
+   **Download Bokkie for Windows**. That is one file, `BokkieSetup.exe`.
+2. Double-click it. Windows will say *"Windows protected your PC"* — **this is
+   expected**, because the program is not signed by a certificate we pay a
+   yearly fee for. Click **More info**, then **Run anyway**.
+3. Approve the administrator prompt.
+4. A window opens and asks what you want to do. Choose **Install Bokkie on this
+   computer**.
+5. When it finishes it prints the address to open. If it does not finish,
+   nothing has been removed — send the developer everything on the screen.
 
-It prints the address to open when it finishes. If it does not finish, nothing
-has been removed — send the developer everything on the screen.
+You do not need to copy a folder anywhere. The file installs itself to
+`C:\Program Files\Bokkie` and starts with the computer from then on.
 
-On each counter PC, double-click **Create Bokkie Shortcut.cmd** once. That puts
-a **Bokkie** icon on the desktop which opens the system in its own window, with
-no address bar and no tabs.
+### The counter computers
+
+Run **the same file** on each counter PC and choose **Put a Bokkie shortcut on
+this computer's desktop**. It asks for no administrator password and installs
+nothing — it only puts a **Bokkie** icon on the desktop, which opens the system
+in its own window with no address bar and no tabs.
+
+If `bokkie.local` does not work on that PC, it will offer to use an address you
+type instead, for example `http://192.168.1.50:8080`.
+
+### macOS or Linux host
+
+Download the release folder from
+[the releases page](https://github.com/Dannjann/bokkie-lms/releases/latest),
+copy the whole folder onto the computer, and double-click **Install
+Bokkie.command**. Type the computer's password when asked.
+
+### If the station has no internet
+
+Everything above needs a connection once, to download one file. If the station
+has none, do the download on a computer that does, copy the whole release folder
+onto a USB stick, copy that folder onto the host computer — do not run it from
+the stick — and double-click **Install Bokkie.cmd** inside it. The rest is the
+same, warning and all.
+
+### Removing it
+
+Bokkie appears in **Add/Remove Programs** like any other program. Removing it
+there stops the service and takes it off the computer, and **leaves the data
+folder and every backup in it exactly where they are**. Nothing is deleted.
 
 ---
 
 ## Updating to a new version
 
-The developer hands over a new folder the same way. Updating is one
-double-click, and the program does the careful part itself.
+Download the new `BokkieSetup.exe` from
+**https://dannjann.github.io/bokkie-lms/** and double-click it on the host
+computer. It sees that Bokkie is already installed and offers to update it.
+Updating is one double-click, and the program does the careful part itself.
 
 **What it does, in this order:** checks the folder really is a genuine bokkie
 release and has not been altered; takes a full backup of the database and
@@ -224,6 +257,16 @@ verifies it; stops the service; puts the new version in place; starts it again;
 and confirms the new version is answering. **If the new version does not come
 up, it puts the old one back and starts that** — the station keeps working and
 the update can wait for the developer.
+
+It also checks **the file you downloaded** against the release, before it
+touches anything. If it cannot — no internet, or a file that does not match —
+**it refuses and changes nothing**, and tells you to download it again. A
+working station is never replaced by a file that could not be checked.
+
+If one of the numbers it shows you does not look right, or it says the file is
+an older version than the one installed, stop and call the developer.
+
+**From a USB stick instead,** when the station has no internet:
 
 1. Copy the new folder onto the host computer.
 2. **Windows:** double-click **Update Bokkie.cmd**. **macOS:** double-click

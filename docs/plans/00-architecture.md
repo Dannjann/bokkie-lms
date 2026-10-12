@@ -465,6 +465,7 @@ it.** Steps 4 through 8 have theirs.
 | 1 | **Build & runtime foundation** | [01-foundation.md](01-foundation.md) | — |
 | 2 | **Identity, audit, backup** | [02-identity-audit.md](02-identity-audit.md) | Step 1 |
 | 2.5 | **Install location, signed USB updates, first inch** | [02.5-install-update.md](02.5-install-update.md) | Step 2 |
+| 2.6 | **One file from the internet — the Windows setup exe, the download page** | [02.6-github-distribution.md](02.6-github-distribution.md) | Step 2.5 |
 | 3 | **Money & ledger core** | [03-ledger-core.md](03-ledger-core.md) | Step 2 |
 | 4 | **Customers — CRUD, `BA-####` codes, search, CSV import** | [04-customers.md](04-customers.md) | Step 3 |
 | 5 | **Advances — voucher + line grid, draft→posted, void via reversal** | [05-advances.md](05-advances.md) | Step 4 |
