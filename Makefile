@@ -21,7 +21,7 @@ export CGO_ENABLED := 0
 
 GOOSES := windows darwin linux
 
-.PHONY: all setup dev web-dev web-install web-build install-local test vet-all build-all keygen stage-scripts sign release clean ci help
+.PHONY: all setup dev web-dev web-install web-build install-local test vet-all build-all keygen stage-scripts sign release publish clean ci help
 
 all: build-all
 
@@ -37,6 +37,7 @@ help:
 	@echo "keygen      create the release signing key (once, ever)"
 	@echo "sign        write and sign dist/latest.json for the current tag"
 	@echo "release     web-build + build-all + sign — the folder that goes on the USB stick"
+	@echo "publish     upload that folder to GitHub as a DRAFT release (needs gh)"
 	@echo "ci          vet-all + test + build-all — the gate"
 	@echo "clean       remove dist/ and the generated web/dist stub"
 
@@ -134,7 +135,23 @@ dist:
 # A real release, and deliberately stricter than build-all: it refuses to run
 # without an exact version tag and without the signing key, because an unsigned
 # or untagged build is precisely what must never reach the station.
+#
+# BokkieSetup.exe is a copy of the Windows binary, not a different build. The
+# manifest keys artifacts by platform and verifies by hash, so the copy checks
+# out against the same signed entry under either name — which is why the USB
+# folder, the manifest, pick-binary.sh and Install Bokkie.cmd need no change.
 release: web-build build-all stage-scripts sign
+	cp dist/bokkie-win-amd64.exe dist/BokkieSetup.exe
+	@echo "--- release ---" && ls -1 dist/
+
+# Publishing is local because signing is local: the private release key never
+# goes to GitHub, and a repository secret is still a copy of the one key whose
+# loss locks every installed host out of updates forever. See 02.6 D10.
+#
+# The release is created as a draft. The windows-latest check runs against it,
+# and publishing is a human click once that is green.
+publish:
+	@sh scripts/publish.sh
 
 ci: vet-all test build-all
 	@echo "ci: ok"
