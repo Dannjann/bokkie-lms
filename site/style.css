@@ -1,0 +1,114 @@
+/* One column, system fonts, no CDN. The owner may read this on a phone at the
+   station, on a connection that is paying by the megabyte. */
+
+:root {
+    --ink: #1a1a1a;
+    --quiet: #5c5c5c;
+    --line: #dcd8d0;
+    --paper: #faf8f5;
+    --card: #ffffff;
+    --accent: #2f6b4f;
+    --accent-ink: #ffffff;
+    --warn-edge: #c8a21a;
+    --warn-bg: #fdf8e3;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ink: #ececec;
+        --quiet: #a9a9a9;
+        --line: #343434;
+        --paper: #171717;
+        --card: #1f1f1f;
+        --accent: #4f9d76;
+        --accent-ink: #0d0d0d;
+        --warn-edge: #b9972a;
+        --warn-bg: #2a2410;
+    }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    padding: 2.5rem 1rem 4rem;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 38rem; margin: 0 auto; }
+
+h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; }
+p  { margin: 0 0 1rem; }
+
+.lede { color: var(--quiet); margin-bottom: 2rem; }
+
+.download {
+    display: block;
+    background: var(--accent);
+    color: var(--accent-ink);
+    text-align: center;
+    text-decoration: none;
+    font-size: 1.15rem;
+    font-weight: 600;
+    padding: 1.1rem 1rem;
+    border-radius: .5rem;
+}
+.download:hover { filter: brightness(1.08); }
+.download small { display: block; font-weight: 400; font-size: .8rem; opacity: .9; margin-top: .25rem; }
+
+.meta {
+    color: var(--quiet);
+    font-size: .85rem;
+    text-align: center;
+    margin: .75rem 0 0;
+    word-break: break-all;
+}
+
+.warning {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-edge);
+    border-radius: .5rem;
+    padding: 1rem 1.1rem;
+    margin: 2rem 0 0;
+}
+.warning h2 { margin-top: 0; }
+
+ol, ul { margin: 0 0 1rem; padding-left: 1.3rem; }
+li { margin-bottom: .4rem; }
+
+code {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: .25rem;
+    padding: .1rem .35rem;
+    font: .875em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-all;
+}
+
+.card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: .5rem;
+    padding: 1rem 1.1rem;
+    margin-bottom: 1rem;
+}
+.card h3 { margin: 0 0 .4rem; font-size: 1rem; }
+.card p { margin: 0; color: var(--quiet); font-size: .925rem; }
+
+footer {
+    margin-top: 3rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+    color: var(--quiet);
+    font-size: .85rem;
+}
+
+a { color: var(--accent); }
+
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; }
+td code { border: none; background: none; padding: 0; }
