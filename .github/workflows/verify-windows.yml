@@ -35,6 +35,23 @@ jobs:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
     steps:
+      # Dispatched by hand, the tag is typed, and the two ways of typing it
+      # wrong both end in `gh release download` saying "release not found" —
+      # which is true and tells nobody what to do about it.
+      - name: This tag names a release
+        run: |
+          if ($env:TAG -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "TAG is '$env:TAG'. A bokkie release is vMAJOR.MINOR.PATCH, with the v — " +
+                  "internal/release refuses anything else, so '$env:TAG' could not have been signed."
+          }
+          if (-not (gh release view $env:TAG --repo "${{ github.repository }}" 2>$null)) {
+            throw "There is no release for $env:TAG yet, draft or published. " +
+                  "This check runs against the draft that 'make publish' creates on the developer's machine — " +
+                  "it builds and signs there, because the signing key never comes here. " +
+                  "Sequence: git tag -a $env:TAG -m '...' && make release && make publish."
+          }
+          Write-Host "$env:TAG exists; checking the assets it holds"
+
       # The release's own assets, not a fresh build: the point is to exercise
       # the bytes the owner will download, including the copy step that made
       # BokkieSetup.exe out of bokkie-win-amd64.exe.
