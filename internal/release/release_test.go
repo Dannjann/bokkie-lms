@@ -215,3 +215,21 @@ func usePublicKey(t *testing.T, key ed25519.PublicKey) {
 	PublicKey = base64.StdEncoding.EncodeToString(key)
 	t.Cleanup(func() { PublicKey = previous })
 }
+
+// A build with no key compiled in refuses every update — correctly, and
+// silently as far as anyone reading the source is concerned. It looks exactly
+// like a build that checks. This pins the key in place so that losing it is a
+// failed test here rather than a station that cannot be updated.
+func TestThisBuildCarriesAReleaseKey(t *testing.T) {
+	// Deliberately not usePublicKey: the committed value is what is under test.
+	if PublicKey == "" {
+		t.Fatal("PublicKey is empty, so this build refuses every update; paste the public half from `make keygen` into verify.go")
+	}
+	raw, err := base64.StdEncoding.DecodeString(PublicKey)
+	if err != nil {
+		t.Fatalf("the committed release key is not valid base64: %v", err)
+	}
+	if len(raw) != ed25519.PublicKeySize {
+		t.Errorf("the committed release key is %d bytes, want %d", len(raw), ed25519.PublicKeySize)
+	}
+}

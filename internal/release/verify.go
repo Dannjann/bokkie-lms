@@ -25,7 +25,7 @@ import (
 // Empty means no key was compiled in, and every update is refused. Failing shut
 // is correct here: the alternative is a build that installs anything handed to
 // it while looking exactly like one that checks.
-var PublicKey = ""
+var PublicKey = "s0JIHkSKC2x+3SDkU9/kk5wY+p213OSLN+URKhTVNYw="
 
 // ErrNoKey is returned by a build with no public key compiled in.
 var ErrNoKey = fmt.Errorf("this build has no release key compiled into it, so it cannot tell a genuine bokkie release from any other file; " +
