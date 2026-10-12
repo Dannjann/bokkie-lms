@@ -132,16 +132,13 @@ func guided(elevated bool, do string) (string, error) {
 		}
 		defer closeLog.Close()
 
-		// service.Install deregisters the existing service before it replaces
-		// the binary, so everything from here is a partial change if it fails.
-		if err := service.Install(log, opts); err != nil {
-			return "", winsetup.Partial(err)
-		}
-		if err := winsetup.Register(programEntry(installed)); err != nil {
-			// A missing Control Panel entry is cosmetic beside a working
-			// station, and refusing an install over it would be the tail
-			// wagging the dog.
-			log.Warn("could not add Bokkie to Add/Remove Programs", "error", err)
+		// The same path the USB stick's Install Bokkie.cmd takes, so both ways
+		// of installing leave the machine in the same state — Control Panel
+		// entry included. service.Install deregisters the existing service
+		// before it replaces the binary, so a failure inside here is a partial
+		// change, which installHere marks.
+		if err := installHere(log, opts); err != nil {
+			return "", err
 		}
 		return winsetup.DoneInstalled, nil
 

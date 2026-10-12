@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"log/slog"
 	"os"
 
 	"github.com/Dannjann/bokkie-lms/internal/service"
@@ -19,13 +20,38 @@ func cmdInstall(args []string) error {
 	}
 	defer closeLog.Close()
 
-	if err := service.Install(log, opts); err != nil {
+	if err := installHere(log, opts); err != nil {
 		return err
 	}
 
 	log.Info("bokkie is installed and running",
 		"url", "http://bokkie.local:"+itoa(opts.Port),
 		"next", "reboot the host and confirm the app still answers with nobody logged in")
+	return nil
+}
+
+// installHere registers the service and, on Windows, puts bokkie in Add/Remove
+// Programs.
+//
+// Both ways of installing go through here. The registry write used to live in
+// the setup window alone, which meant a station installed from the USB stick —
+// Install Bokkie.cmd, which calls this verb — never appeared in Add/Remove
+// Programs at all, while the runbook promised it did. The Windows runner found
+// it by checking the promise rather than the path that makes it.
+func installHere(log *slog.Logger, opts service.Options) error {
+	if err := service.Install(log, opts); err != nil {
+		return winsetup.Partial(err)
+	}
+
+	installed, err := service.InstalledPath()
+	if err != nil {
+		return err
+	}
+	if err := winsetup.Register(programEntry(installed)); err != nil {
+		// A missing Control Panel entry is cosmetic beside a working station,
+		// and failing an install over it would be the tail wagging the dog.
+		log.Warn("could not add Bokkie to Add/Remove Programs", "error", err)
+	}
 	return nil
 }
 
