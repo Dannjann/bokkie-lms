@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/Dannjann/bokkie-lms/internal/buildinfo"
+	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
 
 const usage = `bokkie — TLS Palay & Corn lending management system
@@ -28,12 +29,22 @@ commands:
   import-customers
                load the customer master from a CSV file
                (-check to see what it would do without writing anything)
+  setup        the guided install window — what double-clicking this file runs
 
 run "bokkie <command> -h" for the flags of a single command.
 `
 
 func main() {
 	if len(os.Args) < 2 {
+		// A double-click gets the guided window; everything else keeps the
+		// behaviour scripts and the Makefile rely on.
+		if winsetup.LaunchedFromExplorer(winsetup.ConsoleProcessCount(), len(os.Args)) {
+			if err := runGuidedSetup(nil); err != nil {
+				fmt.Fprintln(os.Stderr, "bokkie:", err)
+				os.Exit(1)
+			}
+			return
+		}
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
@@ -56,6 +67,8 @@ func main() {
 		err = cmdUpdate(args)
 	case "import-customers":
 		err = cmdImportCustomers(args)
+	case "setup":
+		err = runGuidedSetup(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return
