@@ -122,6 +122,23 @@ jobs:
           if ($s.Arguments -ne '--app=http://bokkie.local:8080') { throw "shortcut arguments are $($s.Arguments)" }
           Write-Host "$($s.TargetPath) $($s.Arguments)"
 
+      # The diagnostic is only worth having if it is right about a station
+      # that works. One that cries wolf on a healthy host is one nobody reads
+      # by the third time.
+      - name: The self-check agrees the station is healthy
+        run: |
+          $out = .\BokkieSetup.exe doctor 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0) { throw "doctor reported a problem on a station that installed cleanly" }
+
+      # The short address is the whole reason port 80 is bound: people type
+      # the name, not the name and a port.
+      - name: The short address reaches the app
+        run: |
+          $r = Invoke-WebRequest http://localhost/healthz -MaximumRedirection 5
+          if ($r.StatusCode -ne 200) { throw "port 80 answered $($r.StatusCode)" }
+          Write-Host "http://localhost -> $($r.StatusCode)"
+
       - name: Uninstall
         run: .\BokkieSetup.exe uninstall
 
