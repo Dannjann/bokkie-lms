@@ -7,14 +7,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/release"
+	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
 
 func actions(choices []setupChoice) []setupAction {
@@ -141,34 +144,74 @@ func TestProgramEntryPointsAtTheInstalledBinary(t *testing.T) {
 }
 
 func TestASelfCheckFailureNeverReplacesAWorkingStation(t *testing.T) {
-	proceed, message := selfCheckOutcome(true, false, errors.New("no such host"))
+	proceed, notice := weighSelf(true, selfCheck{}, errors.New("no such host"))
 	if proceed {
 		t.Fatal("an unverified file was allowed to update an installed station")
 	}
-	if !strings.Contains(message, "Nothing has been changed") {
-		t.Errorf("the refusal did not say the machine is untouched:\n%s", message)
+	if !strings.Contains(notice.Error(), "Nothing has been changed") {
+		t.Errorf("the refusal did not say the machine is untouched:\n%s", notice)
 	}
-	if !strings.Contains(message, "USB stick") {
-		t.Errorf("the refusal did not offer the way that still works:\n%s", message)
+	if !strings.Contains(notice.Error(), "USB stick") {
+		t.Errorf("the refusal did not offer the way that still works:\n%s", notice)
 	}
 }
 
 // Review Focus 3: the offline station is the reason the USB path still exists,
 // and refusing a first install for having no internet makes it uninstallable.
 func TestAnOfflineFirstInstallProceedsAndSaysSo(t *testing.T) {
-	proceed, message := selfCheckOutcome(false, false, errors.New("dial tcp: i/o timeout"))
+	proceed, notice := weighSelf(false, selfCheck{}, errors.New("dial tcp: i/o timeout"))
 	if !proceed {
 		t.Fatal("a first install was refused for having no internet, which makes an offline station uninstallable")
 	}
-	if !strings.Contains(message, "could not be checked") {
-		t.Errorf("the install did not admit it was unchecked:\n%s", message)
+	if !strings.Contains(notice.Error(), "could not be checked") {
+		t.Errorf("the install did not admit it was unchecked:\n%s", notice)
 	}
 }
 
 func TestAVerifiedFileIsNotTalkedAbout(t *testing.T) {
-	proceed, message := selfCheckOutcome(true, true, nil)
-	if !proceed || message != "" {
-		t.Errorf("a verified file produced proceed=%v message=%q, want a silent yes", proceed, message)
+	proceed, notice := weighSelf(true, selfCheck{OK: true}, nil)
+	if !proceed || notice != nil {
+		t.Errorf("a verified file produced proceed=%v notice=%v, want a silent yes", proceed, notice)
+	}
+}
+
+// The finding this replaces: the refusal was printed and the install ran
+// anyway, so the screen said "Nothing has been changed" and then the service
+// was torn down and replaced with the unverified bytes.
+func TestBytesThatDoNotMatchTheReleaseAreRefusedEverywhere(t *testing.T) {
+	altered := selfCheck{Reason: "bokkie.exe has been altered or corrupted since it was built"}
+
+	for _, installed := range []bool{true, false} {
+		proceed, notice := weighSelf(installed, altered, nil)
+		if proceed {
+			t.Fatalf("installed=%v: a file whose bytes do not match the release it claims to be was allowed to install", installed)
+		}
+		if !strings.Contains(notice.Error(), "does not match") {
+			t.Errorf("installed=%v: the refusal does not say what is wrong:\n%s", installed, notice)
+		}
+	}
+}
+
+// Review Focus 2, at the call site rather than only inside verifySelf. The
+// window must print the version sentence and nothing alarming around it.
+func TestAStaleDownloadIsAVerdictNotAFault(t *testing.T) {
+	stale := selfCheck{Stale: true, Reason: "This file is Bokkie v1.0.0, and the current release is v1.1.0."}
+
+	proceed, notice := weighSelf(true, stale, nil)
+	if proceed {
+		t.Error("an older release was allowed over a working station")
+	}
+	printed := winsetup.ExitMessage(notice, "")
+	if strings.Contains(printed, "Send the developer") || strings.Contains(printed, "could not be checked") {
+		t.Errorf("an out-of-date download was reported as a fault:\n%s", printed)
+	}
+	if !strings.Contains(printed, "v1.1.0") {
+		t.Errorf("the window does not name the version to download:\n%s", printed)
+	}
+
+	// A bare machine has nothing to lose, so an older release still installs.
+	if proceed, _ := weighSelf(false, stale, nil); !proceed {
+		t.Error("an older release was refused on a machine with nothing on it")
 	}
 }
 
@@ -242,4 +285,51 @@ func signedRelease(t *testing.T, version string) (dir, binary string) {
 		t.Fatal(err)
 	}
 	return dir, binary
+}
+
+// A console's stdin does not reach EOF when somebody presses Enter, so an
+// address prompt that reads to EOF never returns. This is the shape of a real
+// console: a reader that stays open after a line is written.
+func TestAskAddressReturnsWhenTheLineEnds(t *testing.T) {
+	cases := map[string]struct {
+		typed string
+		want  string
+	}{
+		"Enter alone takes the default": {"\n", winsetup.DefaultAddress},
+		"a typed address is used":       {"http://192.168.1.50:8080\n", "http://192.168.1.50:8080"},
+		"trailing spaces are trimmed":   {"  http://192.168.1.50:8080  \n", "http://192.168.1.50:8080"},
+	}
+
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			reader, writer := io.Pipe()
+			go func() {
+				writer.Write([]byte(c.typed))
+				// Deliberately never closed: a console does not close when the
+				// person presses Enter, and that is the whole bug.
+			}()
+
+			type result struct {
+				address string
+				err     error
+			}
+			done := make(chan result, 1)
+			go func() {
+				address, err := askAddress(io.Discard, reader)
+				done <- result{address, err}
+			}()
+
+			select {
+			case got := <-done:
+				if got.err != nil {
+					t.Fatalf("askAddress: %v", got.err)
+				}
+				if got.address != c.want {
+					t.Errorf("address = %q, want %q", got.address, c.want)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("askAddress never returned after the line ended; the setup window would hang forever on a counter PC")
+			}
+		})
+	}
 }

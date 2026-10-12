@@ -52,3 +52,33 @@ func TestElevatedArgsNameTheActionSoTheChildCannotRepeatTheMenu(t *testing.T) {
 		}
 	}
 }
+
+// service.Install deregisters the existing service before it replaces the
+// binary, so a failure after that point leaves a station with no service at
+// all. Telling its owner the old system is untouched is the one sentence that
+// would have sent them looking.
+func TestExitMessageDoesNotPromiseAnUntouchedMachineAfterItWasTouched(t *testing.T) {
+	got := ExitMessage(Partial(errors.New("start the bokkie service: access is denied")), "")
+	if strings.Contains(got, "untouched") {
+		t.Errorf("a failure mid-change claimed the old system is untouched:\n%s", got)
+	}
+	for _, want := range []string{"part-installed", "Do not run this again", "access is denied"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the partial-failure message is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// An out-of-date download is news, not a fault. Wrapping it in "this did not
+// finish, send the developer everything above" buries the one sentence the
+// person can act on under two that send them to the phone instead.
+func TestExitMessagePrintsAVerdictPlainly(t *testing.T) {
+	const reason = "This file is Bokkie v1.0.0, and the current release is v1.1.0."
+	got := ExitMessage(Verdict(reason), "")
+	if got != reason {
+		t.Errorf("ExitMessage = %q, want exactly the verdict", got)
+	}
+	if strings.Contains(got, "Send the developer") {
+		t.Errorf("a verdict was reported as a fault:\n%s", got)
+	}
+}

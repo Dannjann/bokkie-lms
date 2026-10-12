@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -197,11 +199,12 @@ func askAddress(w io.Writer, r io.Reader) (string, error) {
 	fmt.Fprint(w, "Press Enter to use that, or type the host computer's address\n")
 	fmt.Fprint(w, "(for example http://192.168.1.50:8080): ")
 
-	line, err := io.ReadAll(io.LimitReader(r, 512))
-	if err != nil {
-		return winsetup.DefaultAddress, nil
-	}
-	typed := strings.TrimSpace(string(line))
+	// One line, not everything until EOF. A console's stdin does not reach EOF
+	// when somebody presses Enter, so reading to EOF here is a window that
+	// never comes back — on the first menu item a counter PC is offered.
+	line, err := bufio.NewReader(io.LimitReader(r, 512)).ReadString('\n')
+	_ = err // a line with no newline after it is still a line.
+	typed := strings.TrimSpace(line)
 	if typed == "" {
 		return winsetup.DefaultAddress, nil
 	}
@@ -237,6 +240,11 @@ type selfCheck struct {
 	// Reason is why not, in words for the person reading the window. Empty
 	// when OK.
 	Reason string
+	// Stale is a file that is a genuine release, just not the current one.
+	// Kept apart from a byte mismatch because they are different events: one
+	// is somebody who kept the installer in their Downloads folder, the other
+	// is a file claiming to be this release while not being it.
+	Stale bool
 }
 
 // verifySelf weighs this executable's own bytes against the current release.
@@ -260,7 +268,7 @@ func verifySelf(ctx context.Context, client *http.Client, base, exe, thisVersion
 	// about it is both wrong and alarming, so the versions are compared before
 	// the hashes, which is the only place that distinction still exists.
 	if manifest.Version != thisVersion {
-		return selfCheck{Manifest: manifest, Reason: fmt.Sprintf(
+		return selfCheck{Manifest: manifest, Stale: true, Reason: fmt.Sprintf(
 			"This file is Bokkie %s, and the current release is %s.\n"+
 				"Download the current one from the Bokkie downloads page.",
 			thisVersion, manifest.Version)}, nil
@@ -276,29 +284,50 @@ func verifySelf(ctx context.Context, client *http.Client, base, exe, thisVersion
 	return selfCheck{OK: true, Manifest: manifest}, nil
 }
 
-// selfCheckOutcome decides what to do when this file could not be checked
-// against a signed manifest.
+// weighSelf decides what to do about this file before it is allowed to touch
+// the machine. It is the one place that decision is made, so that install,
+// repair and update cannot drift apart on it.
 //
-// The asymmetry is deliberate. Replacing a working station on the strength of a
-// file nobody could verify is the thing the signing key exists to prevent.
-// Refusing a *first* install for the same reason would mean a station with no
-// internet cannot be installed at all — which is the fallback's whole purpose —
-// so it proceeds, and says plainly that it could not be checked.
-func selfCheckOutcome(installed, verified bool, failure error) (proceed bool, message string) {
-	if verified {
-		return true, ""
+// Three different things can be wrong, and a person acts differently on each:
+//
+//   - The check could not run at all — no internet. Here the asymmetry applies:
+//     a working station is not replaced on the strength of a file nobody could
+//     verify, but a bare machine proceeds, because refusing would mean a
+//     station with no internet cannot be installed at all, which is what the
+//     USB fallback is for.
+//   - The check ran and the file is an older release. That is news, not a
+//     fault: somebody kept the installer in their Downloads folder. It will
+//     not go over a working station, and on a bare machine it is allowed with
+//     a word about it.
+//   - The check ran and the bytes do not match the release they claim to be.
+//     That is refused everywhere, including on a bare machine. Nothing else in
+//     this program treats that as survivable and nor should this.
+func weighSelf(installed bool, check selfCheck, failure error) (proceed bool, notice error) {
+	switch {
+	case check.OK:
+		return true, nil
+
+	case failure != nil:
+		why := "\n\n" + failure.Error()
+		if installed {
+			return false, errors.New("This file could not be checked against the Bokkie release key, so it will not\n" +
+				"replace the working system on this computer. Nothing has been changed.\n\n" +
+				"Download it again from the Bokkie downloads page, or update from the USB stick." + why)
+		}
+		return true, winsetup.Verdict("This file could not be checked against the Bokkie release key — this computer\n" +
+			"may have no internet connection. Installing anyway, because there is nothing\n" +
+			"on this computer to lose.\n\n" +
+			"If you did not get this file from the Bokkie downloads page, close this window." + why)
+
+	case check.Stale:
+		if installed {
+			return false, winsetup.Verdict(check.Reason + "\n\nNothing has been changed on this computer.")
+		}
+		return true, winsetup.Verdict(check.Reason + "\n\nInstalling it anyway, because there is nothing on this computer yet.")
+
+	default:
+		return false, errors.New("This file does not match the Bokkie release it says it is, so it will not be\n" +
+			"installed on this computer. Nothing has been changed.\n\n" +
+			"Download it again from the Bokkie downloads page.\n\n" + check.Reason)
 	}
-	why := ""
-	if failure != nil {
-		why = "\n\n" + failure.Error()
-	}
-	if installed {
-		return false, "This file could not be checked against the Bokkie release key, so it will not\n" +
-			"replace the working system on this computer. Nothing has been changed.\n\n" +
-			"Download it again from the Bokkie downloads page, or update from the USB stick." + why
-	}
-	return true, "This file could not be checked against the Bokkie release key — this computer\n" +
-		"may have no internet connection. Installing anyway, because there is nothing\n" +
-		"on this computer to lose.\n\n" +
-		"If you did not get this file from the Bokkie downloads page, close this window." + why
 }

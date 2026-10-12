@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/Dannjann/bokkie-lms/internal/buildinfo"
+	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/release"
 	"github.com/Dannjann/bokkie-lms/internal/service"
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
@@ -32,8 +33,18 @@ func runGuidedSetup(args []string) error {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
 	elevated := fs.Bool("elevated", false, "this process was started by the unelevated window")
 	do := fs.String("do", "", "the action chosen in the unelevated window")
+	// The one line in this program that no test and no type-check can judge:
+	// GetConsoleProcessList is declared by hand, and if it returns 0 on a real
+	// console then a double-click shows usage in a window that vanishes —
+	// which is the exact failure this whole step exists to close. This verb
+	// lets the Windows runner call it and look at the answer.
+	probeConsole := fs.Bool("probe-console", false, "print how many processes share this console, and do nothing else")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *probeConsole {
+		fmt.Println(winsetup.ConsoleProcessCount())
+		return nil
 	}
 
 	done, err := guided(*elevated, *do)
@@ -56,12 +67,6 @@ func runGuidedSetup(args []string) error {
 func guided(elevated bool, do string) (string, error) {
 	ctx := context.Background()
 
-	opts, log, closeLog, err := setupOptions()
-	if err != nil {
-		return "", err
-	}
-	defer closeLog.Close()
-
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
@@ -70,7 +75,16 @@ func guided(elevated bool, do string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	serving, servingErr := service.ServingVersion(opts.Port)
+
+	// config.Load reads; it does not create. Nothing here may create anything
+	// until somebody has chosen an action: most people running this file are at
+	// a counter PC that wants a desktop icon, and both the runbook and the
+	// download page promise them that path installs nothing.
+	cfg, err := config.Load("")
+	if err != nil {
+		return "", err
+	}
+	serving, servingErr := service.ServingVersion(cfg.Port)
 	state := describeInstallation(exe, installed, serving, servingErr)
 
 	// The elevated child was told what to do and must not ask again: the
@@ -85,6 +99,14 @@ func guided(elevated bool, do string) (string, error) {
 		return "Nothing was changed on this computer.", nil
 	}
 
+	// Review Focus 4, and it is checked here rather than in the switch below so
+	// that nobody is made to approve an administrator prompt for an action that
+	// was never going to run. placeExecutable guards it a second time.
+	if state.RunningFromInstallPath && (action == actionInstall || action == actionRepair || action == actionUpdate) {
+		return "", winsetup.Verdict("This is the copy of Bokkie that is already installed on this computer.\n\n" +
+			"Run the file you downloaded instead. Nothing has been changed.")
+	}
+
 	// Anything needing rights we do not have goes to a second window. The
 	// shortcut deliberately does not, which is why this is checked per choice
 	// rather than once at the top.
@@ -97,26 +119,23 @@ func guided(elevated bool, do string) (string, error) {
 
 	switch action {
 	case actionInstall, actionRepair:
-		// Review Focus 4. placeExecutable would be copying a file over
-		// itself, and the service manager is already pointed here.
-		if state.RunningFromInstallPath {
-			return "", fmt.Errorf("this is the copy of Bokkie that is already installed on this computer; " +
-				"run the file you downloaded instead")
-		}
-		// A first install proceeds even unchecked — an offline station has
-		// nothing on it to lose, and refusing here is what would make the USB
-		// fallback useless. It says so rather than staying quiet.
-		if check, checkErr := verifySelf(ctx, nil, release.LatestBase, exe, buildinfo.Version); !check.OK {
-			if checkErr == nil {
-				checkErr = errors.New(check.Reason)
-			}
-			if _, message := selfCheckOutcome(state.Installed, false, checkErr); message != "" {
-				fmt.Println()
-				fmt.Println(message)
-			}
-		}
-		if err := service.Install(log, opts); err != nil {
+		// weighSelf decides whether this file may touch the machine at all.
+		// Its refusal is returned, not printed: printing it and carrying on is
+		// how a screen comes to say "nothing has been changed" immediately
+		// before the service is torn down and replaced.
+		if err := permitted(ctx, state, exe); err != nil {
 			return "", err
+		}
+		opts, log, closeLog, err := setupOptions()
+		if err != nil {
+			return "", err
+		}
+		defer closeLog.Close()
+
+		// service.Install deregisters the existing service before it replaces
+		// the binary, so everything from here is a partial change if it fails.
+		if err := service.Install(log, opts); err != nil {
+			return "", winsetup.Partial(err)
 		}
 		if err := winsetup.Register(programEntry(installed)); err != nil {
 			// A missing Control Panel entry is cosmetic beside a working
@@ -127,17 +146,17 @@ func guided(elevated bool, do string) (string, error) {
 		return winsetup.DoneInstalled, nil
 
 	case actionUpdate:
-		// The asymmetry: an installed station is not replaced by a file that
-		// could not be checked. selfCheckOutcome holds the reasoning.
-		check, checkErr := verifySelf(ctx, nil, release.LatestBase, exe, buildinfo.Version)
-		if !check.OK {
-			if checkErr == nil {
-				checkErr = errors.New(check.Reason)
-			}
-			if _, message := selfCheckOutcome(true, false, checkErr); message != "" {
-				return "", errors.New(message)
-			}
+		if err := permitted(ctx, state, exe); err != nil {
+			return "", err
 		}
+		_, log, closeLog, err := setupOptions()
+		if err != nil {
+			return "", err
+		}
+		defer closeLog.Close()
+
+		// update.Apply takes its own backup and rolls itself back, so a failure
+		// inside it is not a partial change in the sense ErrPartial means.
 		if err := applyDownloadedUpdate(ctx, log, exe); err != nil {
 			return "", err
 		}
@@ -154,10 +173,10 @@ func guided(elevated bool, do string) (string, error) {
 		return winsetup.DoneShortcut, nil
 
 	case actionUninstall:
-		if err := service.Uninstall(log, opts); err != nil {
+		if err := uninstall("", false); err != nil {
 			return "", err
 		}
-		return winsetup.DoneRemoved, winsetup.Deregister()
+		return winsetup.DoneRemoved, nil
 	}
 	return "", nil
 }
@@ -198,6 +217,26 @@ func applyDownloadedUpdate(ctx context.Context, log *slog.Logger, exe string) er
 		return err
 	}
 	log.Info("updated", "from", result.From, "to", result.To, "backup", result.BackupPath)
+	return nil
+}
+
+// permitted asks whether this file may touch the machine, and turns a refusal
+// into the error the window prints.
+//
+// One function so that install, repair and update cannot drift apart on the
+// question — the state they are in differs, the rule does not.
+func permitted(ctx context.Context, state setupState, exe string) error {
+	check, checkErr := verifySelf(ctx, nil, release.LatestBase, exe, buildinfo.Version)
+
+	proceed, notice := weighSelf(state.Installed, check, checkErr)
+	if !proceed {
+		return notice
+	}
+	if notice != nil {
+		// Allowed, with something worth saying first.
+		fmt.Println()
+		fmt.Println(notice.Error())
+	}
 	return nil
 }
 

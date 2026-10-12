@@ -17,8 +17,10 @@ func TestUninstallStringQuotesThePath(t *testing.T) {
 	if got != want {
 		t.Errorf("UninstallString = %s, want %s", got, want)
 	}
-	if strings.HasPrefix(got[1:], `"`) {
-		t.Error("the arguments were swept inside the quotes, where Windows would read them as part of the file name")
+	// The closing quote must come before the arguments, not after them: with
+	// both inside, Windows reads the whole string as one very long file name.
+	if closing := strings.Index(got[1:], `"`) + 1; closing != len(p.UninstallExe)+1 {
+		t.Errorf("the closing quote is at %d, want %d — the arguments are inside the quotes", closing, len(p.UninstallExe)+1)
 	}
 }
 

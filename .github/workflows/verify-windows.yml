@@ -21,8 +21,11 @@ on:
         description: The release tag to check, for example v0.1.0
         required: true
 
+# contents: write rather than read, and it writes nothing. A draft release is
+# visible only to accounts with push access, and `contents: read` is not push
+# access — with read, the download below 404s and this check never runs at all.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   install-and-remove:
@@ -48,6 +51,21 @@ jobs:
           }
           Write-Host "BokkieSetup.exe matches the manifest entry for $($want.file)"
 
+      # The one line in the diff that no test and no type-check can judge.
+      # GetConsoleProcessList is declared by hand against kernel32; if the proc
+      # lookup is wrong it returns 0, and a double-click then shows usage in a
+      # window that flashes and vanishes — the exact failure this step exists
+      # to close. Every other step here passes arguments, so without this the
+      # call is never made on Windows at all.
+      - name: The console can be counted
+        run: |
+          $count = .\BokkieSetup.exe setup --probe-console
+          if (-not ($count -match '^\d+$')) { throw "probe-console printed '$count', not a number" }
+          if ([int]$count -lt 1) {
+            throw "GetConsoleProcessList returned $count with a console attached; a double-click would show usage and vanish"
+          }
+          Write-Host "console process count: $count"
+
       - name: Install
         run: .\BokkieSetup.exe install
 
@@ -72,6 +90,20 @@ jobs:
           $entry = Get-ItemProperty $key
           if (-not $entry.UninstallString) { throw "no UninstallString under $key" }
           Write-Host "$($entry.DisplayName) $($entry.DisplayVersion) -> $($entry.UninstallString)"
+
+      # The spec asks for this by name: the runner cannot click a shortcut, so
+      # it reads the .lnk back. Without it FindEdge, the known-folder lookup,
+      # the PowerShell call and ShortcutScript's real round trip are
+      # unexercised anywhere — and the shortcut is what every counter PC runs.
+      - name: The desktop shortcut is a real shortcut
+        run: |
+          "" | .\BokkieSetup.exe setup --elevated --do=shortcut
+          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Bokkie.lnk'
+          if (-not (Test-Path $lnk)) { throw "no shortcut at $lnk" }
+          $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+          if ($s.TargetPath -notmatch 'msedge\.exe$') { throw "shortcut target is $($s.TargetPath)" }
+          if ($s.Arguments -ne '--app=http://bokkie.local:8080') { throw "shortcut arguments are $($s.Arguments)" }
+          Write-Host "$($s.TargetPath) $($s.Arguments)"
 
       - name: Uninstall
         run: .\BokkieSetup.exe uninstall

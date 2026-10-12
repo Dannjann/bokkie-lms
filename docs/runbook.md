@@ -202,10 +202,12 @@ It prints the row counts, or explains what is wrong with the file.
 2. Double-click it. Windows will say *"Windows protected your PC"* — **this is
    expected**, because the program is not signed by a certificate we pay a
    yearly fee for. Click **More info**, then **Run anyway**.
-3. Approve the administrator prompt.
-4. A window opens and asks what you want to do. Choose **Install Bokkie on this
-   computer**.
-5. When it finishes it prints the address to open. If it does not finish,
+3. A black window opens and asks what you want to do. Choose **Install Bokkie
+   on this computer** by typing its number and pressing Enter.
+4. Approve the administrator prompt.
+5. **The first window closes and a new one opens.** This is normal and is not a
+   crash — the second window is the one with permission to do the work.
+6. When it finishes it prints the address to open. If it does not finish,
    nothing has been removed — send the developer everything on the screen.
 
 You do not need to copy a folder anywhere. The file installs itself to

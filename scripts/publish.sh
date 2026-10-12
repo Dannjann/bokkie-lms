@@ -85,7 +85,22 @@ gh release create "$TAG" \
     "dist/Update Bokkie.command" \
     dist/pick-binary.sh
 
+# GitHub does not fire release events for drafts, so the check has to be asked
+# for by name. Printing "the check is running" without this is how an hour goes
+# into the workflow file looking for a run that was never triggered.
 echo
-echo "publish: $TAG is a DRAFT. Nothing can download it yet."
-echo "  The windows-latest check runs against it now."
-echo "  Publish it once that is green: gh release edit $TAG --draft=false"
+echo "publish: starting the Windows check against $TAG"
+if gh workflow run verify-windows.yml -f tag="$TAG"; then
+    echo "  gh run list --workflow=verify-windows.yml"
+else
+    echo "  could not start it; run it by hand:" >&2
+    echo "  gh workflow run verify-windows.yml -f tag=$TAG" >&2
+fi
+
+echo
+echo "publish: $TAG is a DRAFT. Nothing can download it yet —"
+echo "  releases/latest/download/ skips drafts, which is what the setup exe"
+echo "  and the downloads page both point at."
+echo
+echo "  Publish it once the Windows check is green:"
+echo "    gh release edit $TAG --draft=false"

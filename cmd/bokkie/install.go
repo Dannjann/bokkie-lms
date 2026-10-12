@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"os"
 
 	"github.com/Dannjann/bokkie-lms/internal/service"
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
@@ -43,18 +45,50 @@ func cmdUninstall(args []string) error {
 		return err
 	}
 
-	opts, log, closeLog, err := serviceOptions(*dataDir)
+	err := uninstall(*dataDir, *fromControlPanel)
+
+	// Every exit from the Control Panel path goes through here, including the
+	// ones that happen before there is a log to write to. A dialog that closes
+	// and shows nothing at all is the failure D6 was written about, and the
+	// earliest returns — a missing data folder, a log file that cannot be
+	// opened — are exactly the ones that would otherwise take that route.
+	if *fromControlPanel {
+		if errors.Is(err, winsetup.ErrElevationCancelled) {
+			return nil
+		}
+		winsetup.Report("Bokkie", winsetup.ExitMessage(err, winsetup.DoneRemoved))
+	}
+	return err
+}
+
+func uninstall(dataDir string, fromControlPanel bool) error {
+	// Windows runs an UninstallString unelevated, and nothing about this
+	// binary makes it ask: UAC's installer-detection heuristics only apply to
+	// 32-bit executables without a manifest. Without this, every uninstall
+	// from Add/Remove Programs fails on "access is denied" — which is what the
+	// runbook currently promises works.
+	if fromControlPanel && !winsetup.IsElevated() {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		return winsetup.Elevate(exe, []string{"uninstall", "--from-control-panel"})
+	}
+
+	opts, log, closeLog, err := serviceOptions(dataDir)
 	if err != nil {
 		return err
 	}
 	defer closeLog.Close()
 
-	err = service.Uninstall(log, opts)
-	if err == nil {
-		err = winsetup.Deregister()
+	if err := service.Uninstall(log, opts); err != nil {
+		return err
 	}
-	if *fromControlPanel {
-		winsetup.Report("Bokkie", winsetup.ExitMessage(err, winsetup.DoneRemoved))
+	if err := winsetup.Deregister(); err != nil {
+		// The service is gone and Control Panel still lists it: a partial
+		// state, and the message has to say so rather than claim nothing
+		// happened.
+		return winsetup.Partial(err)
 	}
-	return err
+	return nil
 }

@@ -23,6 +23,37 @@ const (
 		"they were. Nothing has been deleted."
 )
 
+// ErrPartial marks a failure that happened after this computer had already
+// started being changed.
+//
+// It exists because the ordinary failure message promises the old system is
+// untouched, and service.Install deregisters the existing service before it
+// puts the new binary in place. A failure after that point leaves a station
+// with no registered service, and telling its owner nothing was touched is the
+// one sentence that would have sent them looking.
+var ErrPartial = errors.New("this computer had already started being changed when it stopped")
+
+// errVerdict marks a message that is news rather than a fault — an
+// out-of-date download, say. The file was checked; the check simply had an
+// answer. Wrapping it in "this did not finish, send the developer everything
+// above" buries the one sentence the person can act on.
+var errVerdict = errors.New("verdict")
+
+// Verdict returns an error carrying a message the window should print plainly.
+func Verdict(message string) error { return fmt.Errorf("%s%w", message, wrap(errVerdict)) }
+
+// Partial marks err as having happened mid-change.
+func Partial(err error) error { return fmt.Errorf("%w: %w", ErrPartial, err) }
+
+// wrap hides a sentinel inside a message without printing it. errors.Is still
+// finds it; the person never reads the word "verdict".
+func wrap(sentinel error) error { return silent{sentinel} }
+
+type silent struct{ error }
+
+func (s silent) Error() string { return "" }
+func (s silent) Unwrap() error { return s.error }
+
 // PressEnterToClose holds the window open.
 //
 // Without it a double-click is a console that flashes and vanishes, taking the
@@ -47,8 +78,20 @@ func ExitMessage(err error, done string) string {
 	switch {
 	case err == nil:
 		return done
-	case errors.Is(err, ErrElevationCancelled):
+
+	// Neither of these is a fault, and both read as one if they go through the
+	// branch below. A person who chose not to continue, and a person holding
+	// an out-of-date file, each need one sentence and no alarm.
+	case errors.Is(err, ErrElevationCancelled), errors.Is(err, errVerdict):
 		return err.Error()
+
+	case errors.Is(err, ErrPartial):
+		return "This did not finish, and this computer had already started being\n" +
+			"changed when it stopped. Bokkie may be part-installed or part-removed.\n\n" +
+			"Do not run this again until the developer has seen this screen.\n\n" +
+			"Send the developer everything printed above.\n\n" +
+			err.Error()
+
 	default:
 		return "This did not finish. Nothing has been removed and the old\n" +
 			"system, if there was one, is untouched.\n\n" +
