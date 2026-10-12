@@ -13,6 +13,7 @@ Station**, Pintor Gamu, Isabela.
 | [01-foundation.md](01-foundation.md) | Step 1 — build system, runtime, service install | 🟨 Built, gate pending |
 | [02-identity-audit.md](02-identity-audit.md) | Step 2 — auth, roles, audit log, backup | ✅ Built, gate passed |
 | [02.5-install-update.md](02.5-install-update.md) | Step 2.5 — install location, signed USB updates, first inch | 🟨 Built, gate pending |
+| [02.6-github-distribution.md](02.6-github-distribution.md) | Step 2.6 — the Windows setup exe, downloads from GitHub, the download page | ⬜ Specified, not built |
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
 | [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | ✅ Built, gate passed |
