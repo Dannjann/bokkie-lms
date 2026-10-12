@@ -212,21 +212,35 @@ func checkNameReachable(r *Report, opts Options, addresses []string) {
 // Somebody types bokkie.local, the browser goes to port 80, nothing is there,
 // and the browser says "refused to connect" — which reads as a broken server
 // rather than a missing port number.
+//
+// It asks localhost first and the LAN name second. Asking only the name would
+// mean a host that cannot resolve its own .local name — which is common, and
+// is not a fault — never finds out whether the short address works at all.
 func checkBarePort(r *Report, opts Options) {
 	const name = "Bokkie answers at the short address, without a port number"
-	bare := "http://" + opts.Name()
 
-	if err := fetch(opts.client(), bare+"/healthz"); err != nil {
+	if err := fetch(opts.client(), "http://localhost/healthz"); err != nil {
 		r.Add(Check{
-			Name:   name,
-			State:  Note,
-			Detail: "nothing answers on " + bare + " (port 80)",
-			Fix:    "",
+			Name:  name,
+			State: Note,
+			Detail: "nothing of ours answers on port 80 (" + err.Error() + ");\n" +
+				"         something else on this computer may already use it. The address\n" +
+				"         needs its port number: http://" + opts.Name() + ":" + strconv.Itoa(opts.Port),
 		})
 		return
 	}
-	r.Add(Check{Name: name, State: OK, Detail: bare + " works, so the port number is optional"})
-	r.Reach = bare
+
+	// It works here. Whether the *name* also reaches it is a separate question,
+	// and only worth asking when the name resolves at all.
+	bare := "http://" + opts.Name()
+	if len(opts.LocalAddresses) > 0 {
+		if err := fetch(opts.client(), bare+"/healthz"); err == nil {
+			r.Add(Check{Name: name, State: OK, Detail: bare + " works, so the port number is optional"})
+			r.Reach = bare
+			return
+		}
+	}
+	r.Add(Check{Name: name, State: OK, Detail: "port 80 answers on this computer"})
 }
 
 func fetch(client *http.Client, url string) error {
