@@ -117,6 +117,10 @@ sign:
 # folder is five executables and a JSON file, and the person it is handed to has
 # to know which one to run and how to run it with administrator rights.
 #
+# The Windows shortcut wrapper is gone: a counter PC gets its desktop shortcut
+# from the setup window inside bokkie.exe, which needs no administrator rights
+# and is one fewer file to explain. The .command wrappers stay as they are.
+#
 # Named one by one rather than `scripts/*`: scripts/ also holds developer
 # tooling that builds from source and skips the signature check, and a glob here
 # is how that would end up on a USB stick bound for the station.

@@ -63,8 +63,14 @@ func serviceCommand(name string, args []string) (service.Options, *slog.Logger, 
 	if err := fs.Parse(args); err != nil {
 		return service.Options{}, nil, nil, err
 	}
+	return serviceOptions(*dataDir)
+}
 
-	cfg, log, closeLog, err := bootstrap(*dataDir, true)
+// serviceOptions is serviceCommand without the flag parsing, for the callers
+// that have their own flags — uninstall, which also takes --from-control-panel,
+// and the setup window, which takes none.
+func serviceOptions(dataDir string) (service.Options, *slog.Logger, io.Closer, error) {
+	cfg, log, closeLog, err := bootstrap(dataDir, true)
 	if err != nil {
 		return service.Options{}, nil, nil, err
 	}
