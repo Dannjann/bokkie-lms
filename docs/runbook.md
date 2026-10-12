@@ -287,6 +287,40 @@ always one of:
 If the name will not behave, every screen is still reachable by address —
 `http://192.168.1.x:8080`. `bokkie doctor` prints this computer's address.
 
+### "Another machine on this network is answering to that name"
+
+Two computers on the station network are both calling themselves `bokkie.local`,
+and the counter PCs are being sent to the wrong one. The check names both
+addresses — the one the name resolves to, and the one this computer actually
+has — so you can tell them apart.
+
+This almost always means a second copy of Bokkie is running somewhere: a laptop
+it was once installed on for testing, or an old host that was replaced and never
+switched off. **Find that machine and stop Bokkie on it.** Until then the
+station is still reachable by address, `http://192.168.1.x:8080`, which
+`bokkie doctor` prints.
+
+Bokkie also writes this into its own log within a few seconds of starting, so
+the host says so without anybody asking.
+
+### "Another program is already using port 8080"
+
+Some other program on the host computer got there first. Bokkie refuses to
+install over it rather than registering a service that cannot start, and
+nothing on the computer has been changed.
+
+Two ways out:
+
+1. **Stop the other program**, then run the installer again.
+2. **Give Bokkie a different port.** Open `C:\ProgramData\Bokkie\config.yaml`
+   in Notepad, change the `port:` line to something else — `8081` is a fine
+   choice — save it, and install again. Every address then uses that number
+   instead: `http://bokkie.local:8081`, and the shortcut on each counter PC
+   has to be made again so it points at the new one.
+
+`bokkie doctor` says which of the two you are looking at: it tells a port that
+nothing is on apart from a port that something else answers.
+
 ### Stopping and starting it
 
 Double-click `BokkieSetup.exe` and choose **Stop Bokkie** or **Start Bokkie**.

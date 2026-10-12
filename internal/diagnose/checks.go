@@ -28,6 +28,16 @@ type Options struct {
 	LANAccess      bool
 	LANAccessKnown bool
 
+	// PortOpen is whether anything at all accepted a TCP connection on the
+	// port. With ServingErr set it is the difference between "Bokkie is not
+	// running" and "something else has Bokkie's port" — which look identical
+	// from a browser and need opposite fixes.
+	PortOpen bool
+
+	// ConfigPath is the file that holds the port, named in the fix for a
+	// clash. Empty leaves it out rather than guessing at a path.
+	ConfigPath string
+
 	// LookupHost resolves a name. nil means net.LookupHost.
 	LookupHost func(string) ([]string, error)
 	// LocalAddresses are this machine's own IPv4 addresses.
@@ -84,6 +94,28 @@ func Run(opts Options) Report {
 // all? Everything else is downstream of it.
 func checkServing(r *Report, opts Options) bool {
 	local := fmt.Sprintf("http://localhost:%d", opts.Port)
+
+	// Something is on the port and it is not us. This is the failure that
+	// wastes the most time, because a browser opened at the port shows a page
+	// — just not Bokkie's — and every instinct says the install worked.
+	if opts.ServingErr != nil && opts.PortOpen {
+		fix := fmt.Sprintf("Another program on this computer is already using port %d.\n", opts.Port) +
+			"Either stop that program, or give Bokkie a different port."
+		if opts.ConfigPath != "" {
+			fix += "\n\nTo move Bokkie, edit this file and change the port line:\n  " + opts.ConfigPath
+		}
+		if opts.StartHint != "" {
+			fix += "\nThen start Bokkie again:  " + opts.StartHint
+		}
+		r.Add(Check{
+			Name:   "Bokkie is running on this computer",
+			State:  Problem,
+			Detail: fmt.Sprintf("port %d answered, but not as Bokkie: %v", opts.Port, opts.ServingErr),
+			Fix:    fix,
+		})
+		return false
+	}
+
 	if opts.ServingErr != nil {
 		fix := "Bokkie is installed but not answering."
 		if opts.StartHint != "" {
@@ -292,4 +324,17 @@ func LocalIPv4() []string {
 		}
 	}
 	return out
+}
+
+// PortOpen reports whether anything accepts a TCP connection on the port.
+//
+// Separate from asking the app whether it is healthy, because the two answers
+// together are what tell a port clash apart from a stopped service.
+func PortOpen(port int) bool {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 2*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }

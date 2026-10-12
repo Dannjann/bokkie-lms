@@ -53,6 +53,10 @@ func diagnoseHost(dataDir string) diagnose.Report {
 		opts.LogDir = cfg.LogDir()
 	}
 	opts.Serving, opts.ServingErr = service.ServingVersion(opts.Port)
+	opts.PortOpen = diagnose.PortOpen(opts.Port)
+	if err == nil {
+		opts.ConfigPath = cfg.ConfigPath()
+	}
 
 	// Only worth opening the database if something is answering: a station
 	// that is down has a more pressing problem than which way a switch is set.

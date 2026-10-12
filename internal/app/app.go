@@ -23,6 +23,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/backup"
 	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/db"
+	"github.com/Dannjann/bokkie-lms/internal/diagnose"
 	"github.com/Dannjann/bokkie-lms/internal/discovery"
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
@@ -269,7 +270,59 @@ func (a *App) startDiscovery() {
 	if err := a.discovery.SetPublished(lanAccess); err != nil {
 		a.log.Warn("could not advertise over mDNS; reach the server by IP address instead",
 			"hostname", a.cfg.MDNS.Hostname, "error", err)
+		return
 	}
+	if lanAccess {
+		go a.warnOnNameCollision()
+	}
+}
+
+// nameCollisionDelay gives the responder time to publish and the network time
+// to answer before the name is judged.
+const nameCollisionDelay = 5 * time.Second
+
+// warnOnNameCollision says so, loudly, when the LAN name resolves to a machine
+// that is not this one.
+//
+// This is written from a real evening. A developer's own machine had a bokkie
+// installed from `make install-local`, advertising the same bokkie.local on the
+// same network — and the station's counter PCs were sent to it. The name
+// resolved, so the browser said "refused to connect" rather than "cannot find",
+// and every instinct read that as a broken install. The station's own log said
+// nothing, because from where it sat everything was fine.
+//
+// It is a warning and never fatal. Which machine wins a contested mDNS name is
+// not ours to decide, and a station that serves perfectly on its own address is
+// not something to refuse to run.
+func (a *App) warnOnNameCollision() {
+	time.Sleep(nameCollisionDelay)
+
+	name := a.cfg.MDNS.Hostname + ".local"
+	resolved, err := net.LookupHost(name)
+	if err != nil {
+		// Plenty of hosts cannot resolve their own mDNS name even while every
+		// other machine can. That is not a fault and must not be logged as one.
+		a.log.Info("this computer cannot look up its own LAN name; the other machines may still find it",
+			"name", name, "error", err)
+		return
+	}
+
+	mine := diagnose.LocalIPv4()
+	for _, address := range resolved {
+		for _, own := range mine {
+			if address == own {
+				a.log.Info("the LAN name points at this computer", "name", name, "address", address)
+				return
+			}
+		}
+	}
+
+	a.log.Warn("ANOTHER MACHINE ON THIS NETWORK IS ANSWERING TO THIS NAME",
+		"name", name,
+		"resolves_to", resolved,
+		"this_computer", mine,
+		"effect", "the counter PCs will be sent to that machine instead of this one",
+		"fix", "find and stop the other bokkie, or give this one a different mdns hostname in the settings file")
 }
 
 // Stop drains in-flight requests, then closes the database. Requests are

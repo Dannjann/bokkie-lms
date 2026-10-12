@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/Dannjann/bokkie-lms/internal/diagnose"
 	"github.com/Dannjann/bokkie-lms/internal/service"
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
@@ -40,6 +41,9 @@ func cmdInstall(args []string) error {
 // Programs at all, while the runbook promised it did. The Windows runner found
 // it by checking the promise rather than the path that makes it.
 func installHere(log *slog.Logger, opts service.Options) error {
+	if err := portIsOurs(opts.Port); err != nil {
+		return err
+	}
 	if err := service.Install(log, opts); err != nil {
 		return winsetup.Partial(err)
 	}
@@ -56,6 +60,30 @@ func installHere(log *slog.Logger, opts service.Options) error {
 
 	reportReachability(log, opts.DataDir)
 	return nil
+}
+
+// portIsOurs refuses an install onto a port another program already owns.
+//
+// Refusing here follows the rule the rest of the installer already follows: a
+// refusal happens before anything on the host changes. Without it the service
+// registers, fails to bind, and leaves a machine with a service that cannot
+// start and a person reading "the service is not answering" — which describes
+// the symptom and names nothing about the cause.
+//
+// A port held by Bokkie itself is not a clash. That is a repair or an update,
+// which is most of what this path is used for.
+func portIsOurs(port int) error {
+	if !diagnose.PortOpen(port) {
+		return nil
+	}
+	if _, err := service.ServingVersion(port); err == nil {
+		return nil
+	}
+	return fmt.Errorf("another program on this computer is already using port %d, so Bokkie cannot start there.\n"+
+		"Nothing has been changed.\n\n"+
+		"Either stop that program, or give Bokkie a different port by editing the\n"+
+		"port line in the settings file in Bokkie's data folder, then install again.\n"+
+		"Run \"bokkie doctor\" to see what is on the port", port)
 }
 
 // reportReachability checks, from the host and at the end of every install,

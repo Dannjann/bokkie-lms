@@ -181,3 +181,50 @@ func TestTheReportNamesAnAddressThatWorks(t *testing.T) {
 		t.Errorf("the closing line does not name the address:\n%s", r)
 	}
 }
+
+// The failure that wastes the most time. A browser opened at the port shows a
+// page — just not Bokkie's — so every instinct says the install worked, and
+// the advice for a stopped service ("start it") does nothing at all here.
+func TestAPortClashIsNotReportedAsAStoppedService(t *testing.T) {
+	r := Run(Options{
+		Hostname: "bokkie", Port: 8080,
+		ServingErr: errors.New("port http://127.0.0.1:8080/healthz is answering, but not with bokkie's health response"),
+		PortOpen:   true,
+		StartHint:  "sc start bokkie",
+		ConfigPath: `C:\ProgramData\Bokkie\config.yaml`,
+	})
+
+	got := r.Checks[0]
+	if got.State != Problem {
+		t.Fatalf("state = %v, want a problem", got.State)
+	}
+	if strings.Contains(got.Detail, "nothing answered") {
+		t.Errorf("something answered, and the report said nothing did:\n%s", got.Detail)
+	}
+	for _, want := range []string{"Another program", "different port", "config.yaml"} {
+		if !strings.Contains(got.Fix, want) {
+			t.Errorf("the fix is missing %q:\n%s", want, got.Fix)
+		}
+	}
+}
+
+// And the reverse: with nothing on the port at all, "start it" is exactly the
+// right advice and the port-clash wording would send somebody hunting a
+// program that is not there.
+func TestAStoppedServiceIsNotReportedAsAPortClash(t *testing.T) {
+	r := Run(Options{
+		Hostname: "bokkie", Port: 8080,
+		ServingErr: errors.New("connection refused"),
+		PortOpen:   false,
+		StartHint:  "sc start bokkie",
+		ConfigPath: `C:\ProgramData\Bokkie\config.yaml`,
+	})
+
+	got := r.Checks[0]
+	if strings.Contains(got.Fix, "Another program") {
+		t.Errorf("a stopped service was reported as a port clash:\n%s", got.Fix)
+	}
+	if !strings.Contains(got.Fix, "sc start bokkie") {
+		t.Errorf("the fix does not say how to start it:\n%s", got.Fix)
+	}
+}
