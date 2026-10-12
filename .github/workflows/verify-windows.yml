@@ -1,0 +1,89 @@
+# This is the only Windows machine bokkie has. It proves the service registers,
+# starts, answers and comes out again — against the exact binary a draft release
+# is holding, before anybody can download it.
+#
+# It does not prove: that bokkie.local resolves on a Windows 10 counter PC — the
+# single most likely support call, and no runner will ever show it; that
+# SmartScreen lets the download through; or that Windows Defender does not
+# quarantine an unsigned, freshly published executable. Those need the real
+# machine, and they are the step's gate rather than this file's job.
+#
+# `make ci` and the pre-push hook remain the gate for whether the code is good.
+# Nothing here decides that.
+name: verify-windows
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to check, for example v0.1.0
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  install-and-remove:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      # The release's own assets, not a fresh build: the point is to exercise
+      # the bytes the owner will download, including the copy step that made
+      # BokkieSetup.exe out of bokkie-win-amd64.exe.
+      - name: Download the release's own assets
+        run: gh release download "$env:TAG" --repo "${{ github.repository }}" --pattern "BokkieSetup.exe" --pattern "latest.json*"
+
+      - name: It is the binary the signed manifest describes
+        run: |
+          $want = (Get-Content latest.json | ConvertFrom-Json).artifacts |
+                  Where-Object { $_.platform -eq "windows/amd64" }
+          $got = (Get-FileHash BokkieSetup.exe -Algorithm SHA256).Hash.ToLower()
+          if ($got -ne $want.sha256) {
+            throw "BokkieSetup.exe hashes $got, the manifest says $($want.sha256)"
+          }
+          Write-Host "BokkieSetup.exe matches the manifest entry for $($want.file)"
+
+      - name: Install
+        run: .\BokkieSetup.exe install
+
+      - name: It answers
+        run: |
+          $body = Invoke-RestMethod http://localhost:8080/healthz
+          if ($body.status -ne "ok") { throw "healthz said $($body.status)" }
+          Write-Host "healthz: $($body | ConvertTo-Json -Compress)"
+
+      # A service that only runs while somebody is logged in is the mistake
+      # internal/service's package comment is written about, and it is not
+      # discovered until the morning the station reboots.
+      - name: It starts with the computer
+        run: |
+          $qc = sc.exe qc bokkie | Out-String
+          if ($qc -notmatch "AUTO_START") { throw "the service is not set to start automatically:`n$qc" }
+          Write-Host $qc
+
+      - name: It is in Add/Remove Programs
+        run: |
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Bokkie"
+          $entry = Get-ItemProperty $key
+          if (-not $entry.UninstallString) { throw "no UninstallString under $key" }
+          Write-Host "$($entry.DisplayName) $($entry.DisplayVersion) -> $($entry.UninstallString)"
+
+      - name: Uninstall
+        run: .\BokkieSetup.exe uninstall
+
+      # The data folder surviving an uninstall is a promise the runbook makes to
+      # somebody who may have pressed Uninstall by accident.
+      - name: The database is still there
+        run: |
+          if (-not (Test-Path "C:\ProgramData\Bokkie")) { throw "the data folder was removed by uninstall" }
+          Get-ChildItem "C:\ProgramData\Bokkie"
+
+      - name: The service is gone
+        run: |
+          $svc = Get-Service bokkie -ErrorAction SilentlyContinue
+          if ($svc) { throw "the bokkie service is still registered after uninstall" }
