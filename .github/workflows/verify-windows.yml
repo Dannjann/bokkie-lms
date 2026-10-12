@@ -146,6 +146,12 @@ jobs:
           if (($out -match '\[ FAIL \]') -and ($out -notmatch '->')) {
             throw "doctor reported a fault with nothing to do about it"
           }
+          # doctor exits non-zero when it finds a problem, which is right, and
+          # GitHub's pwsh wrapper ends the step with $LASTEXITCODE. Without
+          # this the step grades doctor's verdict about this VM instead of the
+          # assertions above — which is the thing the comment at the top of
+          # this step exists to avoid.
+          exit 0
 
       # The short address is the whole reason port 80 is bound: people type
       # the name, not the name and a port.
