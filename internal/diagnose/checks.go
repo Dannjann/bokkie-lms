@@ -141,7 +141,11 @@ func checkName(r *Report, opts Options) []string {
 
 	addresses, err := opts.lookup(name)
 	if err != nil || len(addresses) == 0 {
-		state, fix := Problem, "Use this computer's address instead of the name:\n"+
+		state, fix := Problem, "Try the name from a counter PC or a phone before assuming it is broken.\n"+
+			"Some host computers cannot look up their own .local name even when\n"+
+			"every other machine on the network can.\n"+
+			"\n"+
+			"If it does not work there either, use this computer's address instead:\n"+
 			"  http://"+firstOr(opts.LocalAddresses, "<this computer's IP>")+":"+strconv.Itoa(opts.Port)+"\n"+
 			"On the counter PCs, run BokkieSetup.exe and choose the shortcut option,\n"+
 			"then give it that address when it asks."

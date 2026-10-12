@@ -122,14 +122,30 @@ jobs:
           if ($s.Arguments -ne '--app=http://bokkie.local:8080') { throw "shortcut arguments are $($s.Arguments)" }
           Write-Host "$($s.TargetPath) $($s.Arguments)"
 
-      # The diagnostic is only worth having if it is right about a station
-      # that works. One that cries wolf on a healthy host is one nobody reads
-      # by the third time.
-      - name: The self-check agrees the station is healthy
+      # The diagnostic is only worth having if it is right about a station that
+      # works, so this checks what it says rather than only that it ran.
+      #
+      # It deliberately does NOT require an all-clear. This runner is a single
+      # cloud VM with no mDNS resolver and no second machine, so bokkie.local
+      # cannot resolve here and never will — doctor reporting that is doctor
+      # being correct. Asserting health here would be asserting something about
+      # Azure rather than about bokkie, and the way to prove the name works is
+      # a counter PC, which no runner has.
+      - name: The self-check reads the station correctly
         run: |
           $out = .\BokkieSetup.exe doctor 2>&1 | Out-String
           Write-Host $out
-          if ($LASTEXITCODE -ne 0) { throw "doctor reported a problem on a station that installed cleanly" }
+          if ($out -notmatch '\[\s*ok\s*\].*running on this computer') {
+            throw "doctor did not see the service it has just watched install and answer"
+          }
+          if ($out -notmatch 'version v') {
+            throw "doctor did not report the serving version"
+          }
+          # Every failure it does report has to carry a next step; a report
+          # without one has moved the support call rather than removed it.
+          if (($out -match '\[ FAIL \]') -and ($out -notmatch '->')) {
+            throw "doctor reported a fault with nothing to do about it"
+          }
 
       # The short address is the whole reason port 80 is bound: people type
       # the name, not the name and a port.
