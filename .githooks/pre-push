@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs the full gate before anything leaves this machine.
+#
+# There is no hosted CI for this repo, so this hook is the only thing that
+# catches a cgo dependency creeping into the build matrix. That failure is
+# silent otherwise: it breaks the Windows build and nothing tells you until
+# deployment day.
+#
+# Bypass with: git push --no-verify
+set -e
+echo "pre-push: running make ci"
+make ci

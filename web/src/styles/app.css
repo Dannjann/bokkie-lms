@@ -1,0 +1,94 @@
+/*
+ * The shell's own tokens and the handful of layout primitives every page uses.
+ *
+ * PrimeVue's tokens (--p-*) cover the components. These cover the chrome around
+ * them — the dark rail, the content well, the card — which PrimeVue has no
+ * opinion about. They are plain CSS custom properties so a page can use them in
+ * a scoped <style> block without importing anything.
+ */
+
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /*
+   * Light, and only light. The station is a daylit room with a counter, staff
+   * read figures off it next to paper slips all day, and step 8 will print
+   * these same screens to A4. A browser set to dark mode must not turn a
+   * ledger grey.
+   */
+  color-scheme: light;
+
+  /* The rail. Slate, not the brand colour: navigation should recede. */
+  --shell-nav-bg: #1e293b;
+  --shell-nav-bg-deep: #172033;
+  --shell-nav-border: #334155;
+  --shell-nav-fg: #94a3b8;
+  --shell-nav-fg-hover: #e2e8f0;
+  --shell-nav-fg-active: #ffffff;
+  --shell-nav-active-bg: rgb(20 184 166 / 0.16);
+  --shell-nav-accent: #2dd4bf;
+
+  --shell-nav-width: 15.5rem;
+  --shell-topbar-height: 3.5rem;
+
+  --shell-content-bg: var(--p-surface-50);
+  --shell-surface: var(--p-surface-0);
+  --shell-border: var(--p-surface-200);
+  --shell-muted: var(--p-surface-500);
+
+  --shell-radius: 10px;
+  --shell-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 3px rgb(15 23 42 / 0.04);
+}
+
+body {
+  margin: 0;
+  background: var(--shell-content-bg);
+  color: var(--p-surface-900);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * A panel of content. Deliberately not a PrimeVue Card: Card brings padding
+ * conventions and a header slot that fight with forms and with DataTable, and
+ * every screen here wants the same plain white rectangle.
+ */
+.card {
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-border);
+  border-radius: var(--shell-radius);
+  box-shadow: var(--shell-shadow);
+}
+
+.card--padded {
+  padding: 1.25rem;
+}
+
+/* Stack of blocks down a page, at the one spacing every screen uses. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* The small uppercase label above a figure or a group. */
+.label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--shell-muted);
+}
+
+/*
+ * Anything that is a quantity, a code, or a date. Tabular figures so digits
+ * line up down a column — the whole point of a ledger being readable at a
+ * glance.
+ */
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Forms are read top to bottom and are never full-bleed on a wide monitor. */
+.form-column {
+  max-width: 34rem;
+}

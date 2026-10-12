@@ -1,6 +1,6 @@
 # Step 0 — Domain Interview
 
-**Status:** not started · **Blocks:** Steps 6, 7, 8 · **Runs:** in parallel with
+**Status:** not started · **Blocks:** nothing · **Runs:** in parallel with
 Steps 1–3, from day one
 
 ---
@@ -10,8 +10,11 @@ Steps 1–3, from day one
 Three things about how the business actually works are unknown, and two of them
 shape *behaviour*, not just report layout. The architecture is deliberately
 designed so this ignorance costs nothing up front — the ledger can express any
-of the likely answers — but Steps 7 (interest) and 8 (reports) **cannot be
-started** until these are answered.
+of the likely answers. **None of these questions blocks a step any more**, and
+that is a deliberate choice rather than a discovery: Q1 and Q5 became settings
+whose defaults do nothing, and Q3 and Q4 became assumptions built in the open.
+Each question below records what was assumed and what an answer would still
+cost — which is the part that matters when the answers finally come.
 
 Guessing here is the expensive failure mode. An interest rule implemented wrong
 produces numbers that look plausible and are wrong, and nobody notices until a
@@ -33,7 +36,7 @@ farmer disputes a balance.
 
 ## Questions
 
-### Q1 — How is "Compute Percentage" calculated? ⚠️ blocks Step 7
+### Q1 — How is "Compute Percentage" calculated? ⚠️ no longer blocking
 
 The single most important question. Sub-questions:
 
@@ -44,6 +47,18 @@ The single most important question. Sub-questions:
 - Is it ever waived, discounted, or negotiated per customer?
 - What triggers a run — a date, or someone clicking the button?
 - If a farmer repays early, is interest pro-rated or charged in full?
+
+Step 7 does not wait for the answer, for the reason Step 6 did not wait for Q5:
+almost none of what this question decides is structure. The run, its preview,
+its numbering and its reversal are right under every likely answer, and the
+rule itself is the `interest.method`, `interest.rate_bps` and `interest.basis`
+settings — defaulting to `none`, so an install nobody has configured charges
+nothing at all.
+
+Two answers would still cost code rather than a settings change, and they are
+the two worth listening for on the day: **interest pro-rated when a farmer
+repays early**, and **a rate negotiated per customer**. Both are recorded in
+[07-interest.md](07-interest.md) under *What the answer can still cost*.
 
 **Answer:**
 
@@ -61,7 +76,7 @@ The single most important question. Sub-questions:
 
 ---
 
-### Q3 — What is on the "Return of Investment Status" report? ⚠️ blocks Step 8
+### Q3 — What is on the "Return of Investment Status" report? ⚠️ no longer blocking
 
 Get the printout. Then confirm:
 
@@ -70,11 +85,22 @@ Get the printout. Then confirm:
 - What period does it cover — all time, a season, a date range?
 - Who reads it, and what decision do they make from it?
 
+Step 8 does not wait for the answer. It assumes a portfolio block — capital
+deployed, repaid, interest charged and collected, still outstanding — with a row
+per farmer beneath it, on the reasoning that the two are the same query at two
+groupings and the cheaper mistake is to build both. If the owner means only one
+of them, the other is deleted rather than rebuilt.
+
+Two answers would still cost real work: **per-cropping-season** rather than a
+date range, which needs a season defined; and **cost of capital**, which is a
+figure this system has never been told. Both are recorded in
+[08-reports.md](08-reports.md).
+
 **Answer:**
 
 ---
 
-### Q4 — What does "Recall Liquidated Transaction" do? ⚠️ blocks Step 8
+### Q4 — What does "Recall Liquidated Transaction" do? ⚠️ no longer blocking
 
 - Does it *view* a settled account, or *reopen* one?
 - If it reopens: what happens to the balances — is that a correction workflow?
@@ -82,14 +108,27 @@ Get the printout. Then confirm:
 This matters more than it looks. "Reopen" implies a mutation path we must model
 as reversing entries rather than edits.
 
+Step 8 assumes **view**, and builds it so that it structurally cannot be
+anything else: the report package has no write path at all. The system already
+has two sanctioned ways to move a settled balance — void the document, or post
+an adjustment with a reason — so if the answer is "it reopens", what gets built
+is a deliberate correction workflow rather than a door left ajar in a report.
+
 **Answer:**
 
 ---
 
-### Q5 — Payment application order ⚠️ affects Step 6
+### Q5 — Payment application order ⚠️ no longer blocking
 
 When a payment arrives and the customer owes both principal and interest, which
 is cleared first? Is it consistent, or does it depend on the arrangement?
+
+Step 6 does not wait for the answer: the rule is the `payment.applies` setting,
+defaulting to `interest-first`. Nothing in the system charges interest until
+Step 7, so no payment posted before then can be affected by the answer — when it
+comes, it is a settings change and applies from that moment on. If the answer is
+"it depends on the arrangement", that is a different shape — a per-customer
+override — and it is worth knowing before Step 7 rather than after.
 
 **Answer:**
 

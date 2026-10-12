@@ -236,7 +236,7 @@ platform branches.
 | Auth | Session cookie + `argon2id` | Local users, no external IdP |
 | Service | `kardianos/service` | One API over Windows SCM, launchd, systemd |
 | Printing | `alexbrainman/printer` (Win) / CUPS `lp -o raw` (Unix) | Behind one `RawPrinter` interface |
-| Discovery | `grandcat/zeroconf` | `bokkie.local` survives a DHCP address change |
+| Discovery | host's own mDNS responder; `grandcat/zeroconf` where there is none | `bokkie.local` survives a DHCP address change |
 | Frontend | Vue 3 + Vite + TS | Embedded via `go:embed` |
 | UI kit | PrimeVue 4 (Aura) | DataTable handles the grid-heavy screens |
 | State | Pinia + vue-router | Standard |
@@ -316,7 +316,9 @@ ledger_entries                      -- ★ the single source of truth
       -- advance | interest | payment | adjustment | reversal | opening
   principal_delta_cents, interest_delta_cents,
   source_table, source_id,          -- provenance back to the document
-  reversed_by_id, created_at, created_by
+  reverses_id,                      -- set on a reversal, naming its target
+  reason,                           -- required on a reversal or an adjustment
+  created_at, created_by, created_by_username
 
 customer_balances                   -- derived cache, rebuildable
   customer_id, principal_cents, interest_cents,
@@ -326,6 +328,21 @@ users        id, username, display_name, password_hash, role, active
 audit_log    id, at, user_id, action, entity, entity_id, before_json, after_json
 settings     key, value             -- ref_no start, interest rules, slip layout
 ```
+
+The reversal link points **forward**, from the reversal to the entry it undoes,
+rather than backward from the target. Writing it on the target would mean
+updating a posted row, and then the append-only trigger would need an exception
+listing every column that must stay unchanged — a hole that widens silently
+every time a later migration adds a column. Pointing forward keeps the trigger
+total: `ledger_entries` refuses every `UPDATE`, with no conditions. "Has this
+been reversed?" is a lookup on a unique partial index, which is also what makes
+*reversed at most once* true under two simultaneous voids rather than merely
+usually true.
+
+`created_by_username` sits beside the nullable `created_by` for the same reason
+it does in `audit_log`: an interest run or a cutover import happens with nobody
+signed in, and inventing a user id for it would make the ledger claim something
+it does not know.
 
 **Opening balances** (the start-fresh cutover) are entered as `opening` ledger
 entries dated at the cutover, not as columns on `customers`. The ledger stays
@@ -371,15 +388,39 @@ still prompt once on first launch — warn whoever installs it). Forgetting this
 is the single most likely "it doesn't work from the other PC" support call, on
 any OS.
 
+**Network access is a setting, not a start-up decision.** `network.lan_access`
+decides whether a request from anywhere but the host machine is served at all,
+and a manager moves it from the dashboard without a restart — switching it off
+also withdraws `bokkie.local`, so the other machines stop being told where to
+find a server that will now refuse them. It is a policy control rather than a
+security boundary: the listener stays on `0.0.0.0` either way, a source address
+on a LAN with no TLS is a claim and not a proof, and the switch is refused
+anywhere but the host, because turning it off from a counter PC would take away
+the app and the switch in the same click.
+
 **macOS gotcha.** An unsigned binary copied onto a Mac is quarantined by
 Gatekeeper and refuses to run with an unhelpful error. Fix at build time with an
 ad-hoc signature (`codesign -s - bokkie`) or at install time with
 `xattr -d com.apple.quarantine bokkie`. Put it in the install script, not in a
 README nobody reads.
 
-**Linux gotcha.** Avahi usually already owns port 5353, so a second mDNS
-responder fails to bind. Detect it and register `bokkie.local` through Avahi's
-D-Bus API instead.
+**mDNS: register through whoever already owns port 5353.** This was learned the
+hard way on the first install, and it is not only a Linux problem:
+
+| Host | Who owns mDNS | How bokkie registers |
+|---|---|---|
+| macOS | `mDNSResponder`, always | `dns-sd -P`, supervised as a child process |
+| Linux | Avahi, on any desktop distribution | Avahi's D-Bus API, after the built-in responder fails to bind |
+| Windows | usually nothing | the built-in `grandcat/zeroconf` responder |
+
+A second responder on a host that already has one **binds without error and
+then answers nothing** — bokkie logs that it is advertising and no phone on the
+station can resolve the name. On macOS the Bonjour API is C, and using it would
+mean cgo, which would end cross-compilation for every other target: the
+supervised `dns-sd` child process is the cheaper trade.
+
+Advertising is a convenience, never a dependency. If it fails, the server still
+serves on its IP address and says so in the log.
 
 **Backup — replacing the legacy "Back-up Files" menu item.** Nightly
 `VACUUM INTO` writes a single timestamped, consistent `.db` file to a configured
@@ -416,19 +457,21 @@ rendered in `Asia/Manila`.
 
 Steps 1–3 are the architecture and are detailed in their own docs. Steps 4–10
 are features — listed for shape only, **each gets its own plan when we reach
-it.**
+it.** Steps 4 through 8 have theirs.
 
 | Step | Scope | Doc | Depends on |
 |---|---|---|---|
 | 0 | **Domain interview** — questions for the owner | [domain-interview.md](domain-interview.md) | — (parallel track) |
 | 1 | **Build & runtime foundation** | [01-foundation.md](01-foundation.md) | — |
 | 2 | **Identity, audit, backup** | [02-identity-audit.md](02-identity-audit.md) | Step 1 |
+| 2.5 | **Install location, signed USB updates, first inch** | [02.5-install-update.md](02.5-install-update.md) | Step 2 |
+| 2.6 | **One file from the internet — the Windows setup exe, the download page** | [02.6-github-distribution.md](02.6-github-distribution.md) | Step 2.5 |
 | 3 | **Money & ledger core** | [03-ledger-core.md](03-ledger-core.md) | Step 2 |
-| 4 | Customers — CRUD, `BA-####` codes, search, **CSV import** | *later* | Step 3 |
-| 5 | Advances — voucher + line grid, draft→posted, void via reversal | *later* | Step 4 |
-| 6 | Payments — entry, allocation, customer statement | *later* | Step 5, Q5 |
-| 7 | Interest — posting run, preview, reversible | *later* | **Blocked on Q1** |
-| 8 | Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS | *later* | **Blocked on Q3/Q4** |
+| 4 | **Customers — CRUD, `BA-####` codes, search, CSV import** | [04-customers.md](04-customers.md) | Step 3 |
+| 5 | **Advances — voucher + line grid, draft→posted, void via reversal** | [05-advances.md](05-advances.md) | Step 4 |
+| 6 | **Payments — entry, the principal/interest split, customer statement** ✅ | [06-payments.md](06-payments.md) | Step 5 |
+| 7 | **Interest — posting run, preview, reversible** ✅ | [07-interest.md](07-interest.md) | Step 6 · Q1 answered by a setting |
+| 8 | **Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS** ✅ | [08-reports.md](08-reports.md) | Step 7 · Q3/Q4 assumed, and recorded |
 | 9 | Dot-matrix slips — ESC/P templates, `RawPrinter` wiring | *later* | Step 5 |
 | 10 | Cutover — opening balances, parallel run, go-live | *later* | All |
 
@@ -443,7 +486,10 @@ it.**
 ## Open questions
 
 - **Interest rule, repayment mechanism, ROI report contents** → the domain
-  interview. Runs in parallel; blocks only Steps 7–8.
+  interview. Runs in parallel, and no longer blocks anything. Q1 became a
+  setting whose default charges nothing; Q3 and Q4 became assumptions built in
+  the open. What each answer could still cost is recorded in
+  [07-interest.md](07-interest.md) and [08-reports.md](08-reports.md).
 - **Whether a second counter needs its own local dot-matrix** → defer; build the
   print agent only if asked.
 - **Which host the station actually uses** → blocks nothing. Build all targets

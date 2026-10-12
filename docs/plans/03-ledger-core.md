@@ -1,6 +1,6 @@
 # Step 3 — Money and the Ledger Core
 
-**Status:** not started · **Depends on:** Step 2 · **Blocks:** every feature step
+**Status:** ✅ built, gate passed · **Depends on:** Step 2 · **Blocks:** every feature step
 
 ---
 
@@ -19,6 +19,59 @@ reconstructible from the record rather than remembered.
 Arbitrary sequences of posts and reversals produce provably correct, rebuildable
 balances under property testing. Nothing is visible in the UI — that is expected
 and correct.
+
+---
+
+## Where this stands
+
+All five tasks are built and the gate has been run. Unlike steps 1 and 2.5,
+nothing here needed hardware this project does not have: the whole step is
+proven by tests, which is what "no screens" was for.
+
+| Checked | Result |
+|---|---|
+| Six property invariants, thousands of generated sequences | ✅ hold |
+| `Money` through JSON, both directions | ✅ exact; a bare JSON number is refused |
+| The AST float ban, against five deliberate floats | ✅ each one detected |
+| `UPDATE` and `DELETE` on `ledger_entries` | ✅ refused by the database |
+| A second reversal written straight to SQLite | ✅ refused by the unique index |
+| A reversal that is not the exact negation, by hand | ✅ refused by a trigger |
+| Corrupted `customer_balances` at boot | ✅ detected, rebuilt, one audit row |
+| 80 concurrent posts under `-race` | ✅ correct balances, no cache drift |
+
+**The property tests were checked against deliberate breakage**, because a
+property test that cannot fail is worse than none — it reports success over
+exactly the ground it was supposed to be watching. Three mutations were
+introduced in turn and each was caught: skipping the cache update after a post,
+committing a batch one entry at a time, and downgrading the reversal index to a
+non-unique one. The third is the reason `TestTheDatabaseRefusesASecondReversal`
+goes around the service entirely — the Go check in `Reverse` catches a
+sequential double-void first, so a service-level test would have passed with the
+index removed and proved nothing.
+
+## Decisions taken while building
+
+Three things had to be settled that the plan left open or got wrong.
+
+**1. `customers` is created by this step's migration.** Schema only — no domain
+package, no service, no screens, all of which remain step 4's. `ledger_entries`
+needs a real foreign key on `customer_id`, and SQLite cannot add one to an
+existing table without rebuilding it; on a table wrapped in append-only triggers
+that rebuild means dropping the very protection that makes the table
+trustworthy. The boundary that matters is the one in the Go package, and
+`internal/domain/ledger` still knows nothing but entries and balances.
+
+**2. The reversal link points forward.** The plan asked both for triggers that
+`RAISE` on every `UPDATE` and for the target's `reversed_by_id` to be set when
+it is reversed. Those cannot both be true. Writing `reverses_id` on the reversal
+instead keeps the trigger total; the alternative was a `WHEN` clause naming
+every column that must stay unchanged, which stops covering each new column a
+later migration adds. `00-architecture.md` § Data model has been amended.
+
+**3. A reversal is dated the day of the void.** The plan fixed a reversal's
+deltas but not its date. Dating it today rather than back-dating it to its
+target is what makes `BalanceAt` reproduce a statement that was printed and
+handed over months ago.
 
 ---
 
@@ -59,13 +112,20 @@ also protects against someone poking at the file with a SQLite browser.
 ### Reversal rules
 
 - A reversal's deltas are the exact negation of its target.
-- The target's `reversed_by_id` is set to the reversal's id, in the same
-  transaction.
-- **An entry can be reversed at most once** — enforce with a unique index on
-  `reversed_by_id`, not just a Go check.
+- The reversal names its target in `reverses_id`. The link points **forward**,
+  not backward: as first drafted this step set `reversed_by_id` on the target,
+  which is an `UPDATE` against the table whose whole value is that it never
+  takes one. See *Decisions taken while building* below.
+- **An entry can be reversed at most once** — enforced by a unique partial index
+  on `reverses_id`, not just a Go check.
 - **A reversal cannot itself be reversed.** Correcting a mistaken void means
   posting a fresh entry, which leaves a legible trail of what actually happened.
+  Enforced by a trigger, so it holds against a hand-typed `INSERT` too.
 - A reversal carries its own `created_by` and a reason.
+- **A reversal is dated the day it is made**, not the day of the entry it
+  undoes. A statement printed in February must still say in March what it said
+  in February; back-dating a correction into a closed period silently rewrites a
+  number somebody has already been shown.
 
 ### Balance derivation
 
@@ -125,14 +185,20 @@ Migration only. No handlers, no API.
 The complete API every later feature will use. Keep it small:
 
 ```go
-Post(ctx, entry) (ID, error)          // append one entry
-PostBatch(ctx, entries) error         // several entries, one transaction
-Reverse(ctx, entryID, reason) error   // write the negation, link the target
-BalanceFor(ctx, customerID) (Balance, error)
-BalanceAt(ctx, customerID, date) (Balance, error)   // reports need as-of
+Post(ctx, entry) (int64, error)               // append one entry
+PostBatch(ctx, entries) ([]int64, error)      // several entries, one transaction
+Reverse(ctx, entryID, by, reason) (int64, error)  // write the negation, name the target
+BalanceFor(ctx, customerID) (Balance, error)          // from the cache
+BalanceAt(ctx, customerID, date) (Balance, error)     // summed; reports need as-of
 StatementFor(ctx, customerID, from, to) ([]Entry, error)
-RebuildCache(ctx) error               // recompute customer_balances from scratch
+EntryByID(ctx, id) (Entry, error)
+RebuildCache(ctx) (int, error)                // recompute customer_balances from scratch
+Discrepancies(ctx) ([]Discrepancy, error)     // compare cache against ledger, change nothing
+SelfCheck(ctx, by) ([]Discrepancy, error)     // compare, and repair loudly if they disagree
 ```
+
+`Reverse` takes an actor as well as a reason — a reversal records who made it,
+and the plan's original three-argument signature had nowhere to put that.
 
 - `PostBatch` matters: posting a voucher spanning several customers (Q6) must be
   atomic. Half a posted voucher is a corruption, not an error.
@@ -197,12 +263,16 @@ go test ./internal/domain/ledger/... -race
 go test ./... -run Property -count=10
 ```
 
-- All six property invariants hold.
+- All six property invariants hold. ✅
 - Money round-trips through JSON unchanged; the AST float test fails when a
-  float is deliberately introduced.
-- `UPDATE`/`DELETE` on `ledger_entries` is rejected by the database.
-- Corrupted cache is detected at startup, rebuilt, and audited.
-- Concurrent posts under `-race` produce correct balances.
+  float is deliberately introduced. ✅
+- `UPDATE`/`DELETE` on `ledger_entries` is rejected by the database. ✅
+- Corrupted cache is detected at startup, rebuilt, and audited. ✅
+- Concurrent posts under `-race` produce correct balances. ✅
+
+The property tests are named `TestProperty…` so that the `-run Property` above
+actually selects them. `make ci` runs the whole lot without `-race`; the race
+build is worth running by hand when anything in the posting path changes.
 
 ## Risks
 
@@ -218,7 +288,12 @@ go test ./... -run Property -count=10
 
 ## What this step deliberately does not do
 
-No customer records, no advances, no payments, no UI. Those are Steps 4–6, each
-with its own plan. If a lending concept starts appearing in `internal/domain/ledger`,
-the boundary has been crossed — the ledger knows about entries and balances, and
-nothing about palay.
+No advances, no payments, no UI. Those are Steps 4–6, each with its own plan. If
+a lending concept starts appearing in `internal/domain/ledger`, the boundary has
+been crossed — the ledger knows about entries and balances, and nothing about
+palay.
+
+The one exception is the `customers` **table**, created here so the ledger's
+foreign key is real from its first row; see decision 1 above. Customer records
+as a feature — the domain package, the service, the screens — are still step 4's
+entirely, and nothing in this step reads or writes that table.

@@ -1,6 +1,7 @@
 # Step 1 — Build and Runtime Foundation
 
-**Status:** not started · **Depends on:** nothing · **Blocks:** Steps 2–10
+**Status:** tasks 1.1–1.7 built · gate not yet passed (the host drill is manual)
+· **Depends on:** nothing · **Blocks:** Steps 2–10
 
 ---
 
@@ -16,11 +17,95 @@ service lifecycle all get baked into how everything else is written.
 
 ## Done when
 
-- All five build targets green in CI with no C compiler present.
+- All five build targets green via `make ci` with no C compiler present.
 - On the chosen host: `bokkie install` → reboot → a second machine **and a
   phone** both load the app shell at `http://bokkie.local:8080`, with nobody
   logged into the host.
 - Killing the process mid-request: it restarts and `/healthz` recovers.
+
+> ⚠️ **The gate passes on darwin only.** No Windows or Linux host is available,
+> so the service-lifecycle drill runs against launchd. **Windows SCM and systemd
+> stay explicitly unverified** until a real host exists — including the failure
+> this doc warns about hardest in 1.7, a Windows service that only runs while a
+> user is logged in. Do not mark Step 1 green without carrying this caveat
+> forward to Step 10.
+
+---
+
+## Where this stands
+
+All seven tasks are implemented and `make ci` is green: five binaries,
+`CGO_ENABLED=0`, `go vet` per GOOS, tests passing. What is **not** done is the
+manual gate below — it needs a host, a second machine and a phone, and on this
+machine it needs `sudo`.
+
+| Task | Built | Verified how |
+|---|---|---|
+| 1.1 build matrix | ✅ | `make ci` |
+| 1.2 config | ✅ | unit tests; `--data-dir` exercised end to end |
+| 1.3 logging | ✅ | unit tests for rotation and pruning |
+| 1.4 SQLite + migrations | ✅ | unit tests: fresh migrate, no-op re-boot, refusal on a newer schema |
+| 1.5 HTTP server | ✅ | unit tests + reached from the LAN address; drain-on-shutdown test |
+| 1.6 SPA | ✅ | production binary serves the SPA from a directory with no `web/`; `-dev` proxies to Vite |
+| 1.7 service, firewall, mDNS | ⚠️ built; launchd install runs, the reboot drill has not | see the gate below |
+
+### Deviations from this plan, and why
+
+- **PrimeVue 5, vue-router 5, Pinia 4** rather than the PrimeVue 4 written down
+  when this was drafted — they are the current majors, and pinning a greenfield
+  project to a superseded one buys nothing. `@primeuix/themes` carries Aura.
+  TypeScript is held at 5.x because `vue-tsc` does not support 7 yet.
+- **Two config settings the task list did not name:** `log.level` /
+  `log.retention` (1.3 needs a retention cap) and `mdns.enabled` /
+  `mdns.hostname` (1.7 needs a name to publish).
+- **`bokkie run` goes through the service wrapper even in the foreground.**
+  One lifecycle path rather than two, which is what makes the Windows stop
+  signal — not a signal at all — behave like Ctrl-C.
+- **mDNS failure is a warning, not a fatal error.** The app is still reachable
+  by IP; refusing to serve the station because a name could not be advertised
+  is the worse outcome.
+
+### Learned from the first real install
+
+`sudo ./dist/bokkie-mac-arm64 install` on the dev Mac registered cleanly and
+reported success — and nothing ran. Two reasons, both now handled in code:
+
+- **The binary was inside a home directory.** macOS home directories are 0700,
+  so `_bokkie` could not traverse the path; launchd had nothing to execute and
+  produced no log to say so. `install` now refuses when the service account
+  cannot reach the executable, and prints the `cp` to `/usr/local/bin` that
+  fixes it. **Install from a system path, never from the build directory** —
+  `dist/` is also wiped by `make clean`, which would break the service at the
+  next boot.
+- **launchd would not spawn the job at all.** `kardianos/service` points the
+  daemon's stdout and stderr at `/var/log/<name>.log`, which a non-root service
+  account cannot create — and launchd refuses to start a job whose output files
+  it cannot open, silently and with no log to say so. The install now sets
+  `LogDirectory` to the data directory's `logs/`, which the service account
+  already owns. Watch for the equivalent on the first systemd host.
+- **The install reported success without checking.** A service manager says
+  "started" as soon as it has spawned the process. `install` now polls
+  `/healthz` for up to 15s and validates the response body, so a port already
+  held by something else — exactly what happened here — is caught at install
+  time rather than at the counter.
+
+- **mDNS advertised nothing.** `grandcat/zeroconf` bound port 5353 on macOS
+  without error, logged a successful registration, and no device on the LAN
+  could resolve `bokkie.local` — Apple's `mDNSResponder` already owns mDNS
+  there, exactly as Avahi does on Linux. Registration now goes through the
+  host's own responder per OS (see `00-architecture.md` § Operations), which
+  resolves and serves from a second device. **Verified on macOS.**
+
+### Still unverified
+
+- **Windows SCM and systemd** — no host available. The reboot-with-nobody-
+  logged-in test, the account creation, the firewall rules and the Avahi
+  fallback are all written but have never run. Carry this to Step 10.
+- **launchd** — the install drill needs `sudo` and has not been run either.
+- **`bokkie.local` from a phone and a second PC** — resolution and an HTTP
+  fetch by name now work from the host itself. The other devices are still the
+  real test, and Windows PCs may need Bonjour for `.local` resolution if the
+  station's machines are old enough.
 
 ---
 
@@ -39,8 +124,8 @@ Build:
 - `internal/buildinfo` — `Version`, `Commit`, `Date` stamped via `-ldflags`, and
   a `String()` that also reports `GOOS/GOARCH`. Worth the ten minutes: the first
   question on any support call is "which build is actually on that machine?"
-- `Makefile` — `dev`, `test`, `vet-all`, `build-all`, `clean`, `ci`.
-- `.github/workflows/ci.yml` — the same checks the Makefile runs.
+- `Makefile` — `setup`, `dev`, `test`, `vet-all`, `build-all`, `clean`, `ci`.
+- `.githooks/pre-push` — runs `make ci`, wired by `make setup`.
 - `.gitignore` — `dist/`, `node_modules/`, `*.db`, `*.db-wal`, `*.db-shm`,
   `web/dist/`.
 
@@ -58,8 +143,13 @@ Also `go vet` once per `GOOS`, so the build-tagged `printing` and `config` files
 are all type-checked rather than only the host's. Without this, a broken
 `spooler_windows.go` sits undetected until someone builds for Windows.
 
-> Make `make ci` run the identical checks locally. There is no git remote yet, so
-> a workflow file alone would be aspirational; a Make target is useful today.
+> **Decided: no hosted CI.** The remote exists
+> (`git@github.com:Dannjann/bokkie-lms.git`), so a GitHub Actions workflow was
+> viable and was declined — five cross-compiles per push is metered spend for a
+> single-developer repo. But cgo creep is a *silent* failure, and a `make ci`
+> that depends on remembering to type it does not close that hole. The
+> `.githooks/pre-push` hook is therefore load-bearing, not a nicety: it is the
+> only thing that runs the gate. Revisit if a second contributor appears.
 
 **Done when:** `make build-all` produces five binaries and `make ci` passes.
 
@@ -158,6 +248,13 @@ from memory with no `web/` directory present.
 - `bokkie install` / `uninstall` / `run` via `kardianos/service`, working on
   Windows SCM, launchd, and systemd.
 - Run as a dedicated low-privilege account per `00-architecture.md` § Operations.
+  **`install` creates the account itself** (`useradd --system` on Linux, `dscl`
+  on macOS; Windows `LocalService` is built in) rather than requiring it to
+  pre-exist — a manual prerequisite is exactly what gets fumbled on a support
+  call. Creation is idempotent, and on failure it prints the exact command and
+  exits non-zero. **Never fall back to root:** a financial database owned by
+  root because account creation quietly failed is worse than a refusal to
+  install.
 - Firewall rule added at install time, per OS.
 - mDNS advertising `bokkie.local` via `grandcat/zeroconf`, **with the Avahi
   fallback on Linux** — Avahi usually already holds port 5353, so binding a
@@ -175,21 +272,27 @@ the station reboots one morning.
 ## Verification
 
 ```bash
-make ci          # vet per GOOS + tests + all five builds, CGO_ENABLED=0
+make ci          # vet per GOOS + tests + all five builds, CGO_ENABLED=0  ✅ passing
 make build-all   # five binaries in dist/
+make release     # web-build first, so the binaries carry the real SPA
 ```
 
 **All five must succeed with no C compiler installed.** If any target starts
 demanding a cross-toolchain, a cgo dependency has crept in — almost certainly the
 SQLite driver — and the host flexibility in Decision 5 is quietly gone.
 
-Manual, on the chosen host:
+Manual, on the chosen host — **none of these have been run yet:**
 
-1. `bokkie install`, reboot, confirm the service is running with nobody logged in.
+1. `sudo cp dist/bokkie-<target> /usr/local/bin/bokkie`, then
+   `sudo /usr/local/bin/bokkie install`; reboot, confirm the service is running
+   with nobody logged in.
 2. Load the app shell from a second PC and from a phone via `bokkie.local`.
 3. `kill -9` the process; confirm the service manager restarts it and `/healthz`
    recovers.
 4. Delete the data dir, restart, confirm it rebuilds cleanly from nothing.
+
+Step 4 is the only one already proven: a fresh data directory migrates, and a
+second boot is a no-op.
 
 ## Risks
 
@@ -198,4 +301,4 @@ Manual, on the chosen host:
 | A dependency pulls in cgo | Task 1.1 CI gate catches it the day it happens |
 | Windows service runs only when logged in | Explicit reboot test in verification |
 | Avahi port conflict on Linux | Handled in 1.7, not discovered in the field |
-| `go:embed` breaks a clean checkout | Placeholder `web/dist` committed |
+| `go:embed` breaks a clean checkout | `web/dist` stub generated by the Makefile — committing build-output paths invites a future "cleanup" that breaks the build |

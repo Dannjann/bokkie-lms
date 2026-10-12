@@ -1,0 +1,36 @@
+# 2026/09/15 22:27:48.814139 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw steps: 2
+# 2026/09/15 22:27:48.814142 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw step0/action: "post"
+# 2026/09/15 22:27:48.814143 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw step0/customer: 1
+# 2026/09/15 22:27:48.814144 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw step0/day: 0
+# 2026/09/15 22:27:48.814144 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw step0/user: 1
+# 2026/09/15 22:27:48.814145 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw step0/type: "advance"
+# 2026/09/15 22:27:48.814146 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw step0/principal: 1
+# 2026/09/15 22:27:48.814206 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw step1/action: "reverse"
+# 2026/09/15 22:27:48.814207 [TestPropertyLedgerHoldsUnderArbitrarySequences] [rapid] draw step1/target: 0
+# 2026/09/15 22:27:48.814320 [TestPropertyLedgerHoldsUnderArbitrarySequences] reversing entry 1 left customer 1 at 0.00/0.00, want -0.01/0.00
+# 
+v0.4.8#13543777497538511470
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x1f2b5a0e61c3a6
+0x0
+0x0
+0x0
+0x0

@@ -1,0 +1,34 @@
+# 2026/09/16 19:43:38.543525 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw rule: "principal-first"
+# 2026/09/16 19:43:38.545668 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw steps: 2
+# 2026/09/16 19:43:38.545670 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw step0/action: "create"
+# 2026/09/16 19:43:38.545674 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw step0/customer: 1
+# 2026/09/16 19:43:38.545674 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw step0/day: 0
+# 2026/09/16 19:43:38.545675 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw step0/amount: 1
+# 2026/09/16 19:43:38.545675 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw step0/method: "cash"
+# 2026/09/16 19:43:38.545814 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw step1/action: "post"
+# 2026/09/16 19:43:38.545816 [TestPropertyPaymentsHoldUnderArbitrarySequences] [rapid] draw step1/draft: 1
+# 2026/09/16 19:43:38.546153 [TestPropertyPaymentsHoldUnderArbitrarySequences] payment 1 cleared 1 of interest, more than the 0 owed
+# 
+v0.4.8#91855688994401643
+0x0
+0x1
+0x0
+0x0
+0x1
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x6b74f03291620
+0x5
+0x0
+0x0

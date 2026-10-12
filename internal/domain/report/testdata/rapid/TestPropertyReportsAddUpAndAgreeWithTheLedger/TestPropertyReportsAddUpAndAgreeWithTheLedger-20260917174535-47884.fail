@@ -1,0 +1,191 @@
+# 2026/09/17 17:45:35.358867 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw steps: 12
+# 2026/09/17 17:45:35.358870 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step0/customer: 1
+# 2026/09/17 17:45:35.358871 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step0/day: 0
+# 2026/09/17 17:45:35.358871 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step0/amount: 1
+# 2026/09/17 17:45:35.358872 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step0/kind: "advance"
+# 2026/09/17 17:45:35.358951 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step1/customer: 1
+# 2026/09/17 17:45:35.358951 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step1/day: 0
+# 2026/09/17 17:45:35.358951 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step1/amount: 1
+# 2026/09/17 17:45:35.358952 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step1/kind: "advance"
+# 2026/09/17 17:45:35.359025 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step2/customer: 1
+# 2026/09/17 17:45:35.359026 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step2/day: 0
+# 2026/09/17 17:45:35.359026 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step2/amount: 1
+# 2026/09/17 17:45:35.359027 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step2/kind: "advance"
+# 2026/09/17 17:45:35.359098 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step3/customer: 1
+# 2026/09/17 17:45:35.359105 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step3/day: 0
+# 2026/09/17 17:45:35.359105 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step3/amount: 1
+# 2026/09/17 17:45:35.359105 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step3/kind: "advance"
+# 2026/09/17 17:45:35.359177 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step4/customer: 1
+# 2026/09/17 17:45:35.359177 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step4/day: 0
+# 2026/09/17 17:45:35.359178 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step4/amount: 1
+# 2026/09/17 17:45:35.359178 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step4/kind: "advance"
+# 2026/09/17 17:45:35.359249 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step5/customer: 1
+# 2026/09/17 17:45:35.359250 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step5/day: 0
+# 2026/09/17 17:45:35.359250 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step5/amount: 1
+# 2026/09/17 17:45:35.359250 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step5/kind: "advance"
+# 2026/09/17 17:45:35.359322 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step6/customer: 1
+# 2026/09/17 17:45:35.359322 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step6/day: 0
+# 2026/09/17 17:45:35.359323 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step6/amount: 1
+# 2026/09/17 17:45:35.359323 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step6/kind: "advance"
+# 2026/09/17 17:45:35.359396 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step7/customer: 1
+# 2026/09/17 17:45:35.359396 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step7/day: 0
+# 2026/09/17 17:45:35.359396 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step7/amount: 1
+# 2026/09/17 17:45:35.359397 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step7/kind: "advance"
+# 2026/09/17 17:45:35.359469 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step8/customer: 1
+# 2026/09/17 17:45:35.359469 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step8/day: 0
+# 2026/09/17 17:45:35.359469 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step8/amount: 1
+# 2026/09/17 17:45:35.359470 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step8/kind: "advance"
+# 2026/09/17 17:45:35.359542 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step9/customer: 1
+# 2026/09/17 17:45:35.359542 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step9/day: 0
+# 2026/09/17 17:45:35.359542 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step9/amount: 1
+# 2026/09/17 17:45:35.359543 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step9/kind: "advance"
+# 2026/09/17 17:45:35.359615 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step10/customer: 3
+# 2026/09/17 17:45:35.359616 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step10/day: 0
+# 2026/09/17 17:45:35.359616 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step10/amount: 1
+# 2026/09/17 17:45:35.359616 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step10/kind: "payment"
+# 2026/09/17 17:45:35.359687 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step11/customer: 3
+# 2026/09/17 17:45:35.359687 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step11/day: 0
+# 2026/09/17 17:45:35.359688 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step11/amount: 2
+# 2026/09/17 17:45:35.359688 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw step11/kind: "advance"
+# 2026/09/17 17:45:35.359758 [TestPropertyReportsAddUpAndAgreeWithTheLedger] [rapid] draw as-of: 2
+# 2026/09/17 17:45:35.359934 [TestPropertyReportsAddUpAndAgreeWithTheLedger] customer 3 owes 0.01 of principal and is aged at 0.02
+# 
+v0.4.8#14024906962012902811
+0x0
+0x9867f1f40f739
+0xb
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x1f2b5a0e61c3a6
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2

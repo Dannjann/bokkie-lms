@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download Bokkie</title>
+<meta name="description" content="Download Bokkie, the lending management system for TLS Palay &amp; Corn Buying Station.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+
+<h1>Bokkie</h1>
+<p class="lede">
+    The lending system for TLS Palay &amp; Corn Buying Station. This page is for
+    the person installing it on the station&rsquo;s computer.
+</p>
+
+<!-- A plain link, deliberately. GitHub redirects this to the newest published
+     release, so the button works with JavaScript switched off and needs no
+     editing when a release is cut. -->
+<a class="download" href="https://github.com/Dannjann/bokkie-lms/releases/latest/download/BokkieSetup.exe">
+    Download Bokkie for Windows
+    <small>One file. Windows 10 or later, 64-bit.</small>
+</a>
+<p class="meta">
+    Version <span id="version">— see latest.json</span> ·
+    SHA-256 <span id="sha256">— see latest.json</span>
+</p>
+
+<div class="warning">
+    <h2>Windows will warn you about this file</h2>
+    <p>
+        When you run it you will see a blue box saying
+        <strong>&ldquo;Windows protected your PC&rdquo;</strong>. This is expected.
+        It appears because the file is not signed by a certificate this project
+        has paid for &mdash; not because anything is wrong with it.
+    </p>
+    <ol>
+        <li>Click <strong>More info</strong>.</li>
+        <li>Click <strong>Run anyway</strong>.</li>
+    </ol>
+    <p>
+        If you would rather check the file than take that on trust, the SHA-256
+        above is published inside the signed
+        <a href="https://github.com/Dannjann/bokkie-lms/releases/latest/download/latest.json">latest.json</a>.
+        In PowerShell: <code>Get-FileHash BokkieSetup.exe</code>
+    </p>
+</div>
+
+<h2>What happens when you run it</h2>
+<ol>
+    <li>A black window opens and asks what you want to do. Choose
+        <strong>Install Bokkie on this computer</strong> by typing its number
+        and pressing Enter.</li>
+    <li>Windows asks for permission to make changes. Say yes.</li>
+    <li><strong>The first window closes and a new one opens.</strong> This is
+        normal and is not a crash &mdash; the second window is the one with
+        permission to do the work.</li>
+    <li>It installs itself, starts, and makes sure it is answering.</li>
+    <li>Open <code>http://bokkie.local:8080</code> in Edge.</li>
+</ol>
+<p>
+    Bokkie starts with the computer from then on. Nobody needs to be logged in
+    for the other computers at the station to reach it.
+</p>
+
+<h2>On the counter computers</h2>
+<p>
+    Run the same file on each counter PC and choose
+    <strong>Put a Bokkie shortcut on this computer&rsquo;s desktop</strong>.
+    That needs no administrator password and installs nothing &mdash; it only
+    puts an icon on the desktop that opens Bokkie.
+</p>
+
+<h2>If the station has no internet</h2>
+<p>
+    Everything above needs a connection once, to download one file. If the
+    station has none, copy the whole release folder onto a USB stick from a
+    computer that does, and use the files inside it:
+</p>
+<div class="card">
+    <h3>Install Bokkie.cmd</h3>
+    <p>Double-click it on the host computer. Same install, from the stick.</p>
+</div>
+<div class="card">
+    <h3>Update Bokkie.cmd</h3>
+    <p>Double-click it to move an installed station to a newer version.</p>
+</div>
+<p>
+    <a href="https://github.com/Dannjann/bokkie-lms/releases/latest">All files in the current release</a>
+</p>
+
+<h2>Other computers</h2>
+<table>
+    <tr><th>Mac, Apple silicon</th><td><code>bokkie-mac-arm64</code></td></tr>
+    <tr><th>Mac, Intel</th><td><code>bokkie-mac-amd64</code></td></tr>
+    <tr><th>Linux, 64-bit</th><td><code>bokkie-linux-amd64</code></td></tr>
+    <tr><th>Linux, ARM</th><td><code>bokkie-linux-arm64</code></td></tr>
+</table>
+<p>
+    On a Mac or Linux host, download the release folder and double-click
+    <code>Install Bokkie.command</code>, or run <code>bokkie install</code> with
+    administrator rights.
+</p>
+
+<footer>
+    <p>
+        Something not working? The
+        <a href="https://github.com/Dannjann/bokkie-lms/blob/main/docs/runbook.md">runbook</a>
+        covers starting, stopping, backups and restoring. If it does not match
+        what you see on screen, stop and call the developer rather than
+        improvising.
+    </p>
+</footer>
+
+</main>
+
+<script>
+// Fills in the version and hash.
+//
+// The page is correct without any of this: both values are published inside
+// latest.json, which the text above points at by name, and the download button
+// is a plain link. Nothing here is load-bearing.
+//
+// Two sources because they fail differently. latest.json carries both values
+// but is a release asset, and whether a browser is allowed to read one
+// cross-origin is not ours to promise. The API always allows it and always has
+// the tag, but knows nothing about checksums — so it fills in the version when
+// the first source is unreachable, and the hash keeps saying where to look.
+(function () {
+    var REPO = 'Dannjann/bokkie-lms';
+    var set = function (id, value) {
+        if (value) document.getElementById(id).textContent = value;
+    };
+
+    fetch('https://github.com/' + REPO + '/releases/latest/download/latest.json')
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (m) {
+            set('version', m.version);
+            var win = (m.artifacts || []).filter(function (a) { return a.platform === 'windows/amd64'; })[0];
+            if (win) set('sha256', win.sha256);
+        })
+        .catch(function () {
+            return fetch('https://api.github.com/repos/' + REPO + '/releases/latest')
+                .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+                .then(function (release) { set('version', release.tag_name); });
+        })
+        .catch(function () {
+            // No connection, or no release published yet. The static text stands.
+        });
+})();
+</script>
+
+</body>
+</html>
