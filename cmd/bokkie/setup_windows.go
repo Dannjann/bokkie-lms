@@ -169,6 +169,38 @@ func guided(elevated bool, do string) (string, error) {
 		}
 		return winsetup.DoneShortcut, nil
 
+	case actionStop:
+		opts, log, closeLog, err := setupOptions()
+		if err != nil {
+			return "", err
+		}
+		defer closeLog.Close()
+		if err := service.Stop(log, opts); err != nil {
+			return "", err
+		}
+		return "Bokkie has been stopped.\n\n" +
+			"Nobody can use it until it is started again. It will start by itself\n" +
+			"the next time this computer restarts.", nil
+
+	case actionStart:
+		opts, log, closeLog, err := setupOptions()
+		if err != nil {
+			return "", err
+		}
+		defer closeLog.Close()
+		if err := service.Start(log, opts); err != nil {
+			return "", err
+		}
+		return winsetup.DoneInstalled, nil
+
+	case actionDoctor:
+		// Deliberately needs no administrator rights and changes nothing: the
+		// moment to run this is when something is wrong, and a prompt in the
+		// way is one more thing between the person and the answer.
+		fmt.Println()
+		fmt.Print(diagnoseHost(""))
+		return "", nil
+
 	case actionUninstall:
 		if err := uninstall("", false); err != nil {
 			return "", err

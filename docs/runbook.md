@@ -246,6 +246,55 @@ folder and every backup in it exactly where they are**. Nothing is deleted.
 
 ---
 
+## When nobody can reach Bokkie
+
+**Run the check before anything else.** It changes nothing, needs no password,
+and prints the whole picture at once:
+
+- **The quick way:** double-click `BokkieSetup.exe` and choose **Check why
+  Bokkie cannot be reached**.
+- **At a command prompt:** `bokkie doctor`
+
+It tells you, in order: whether Bokkie is running on this computer, whether the
+other computers are allowed in, whether the name `bokkie.local` points at this
+machine, and whether it actually answers there. Anything it marks `FAIL` comes
+with what to do about it. Send the developer the whole screen.
+
+### The two addresses
+
+Both of these reach the same system:
+
+```
+http://bokkie.local
+http://bokkie.local:8080
+```
+
+The short one works because Bokkie also answers on the ordinary web port. If
+something else on the host computer is already using that port, only the longer
+one works — the check above says so plainly when that happens.
+
+### "Refused to connect"
+
+That message means the computer found the host but nothing answered. Almost
+always one of:
+
+- **Bokkie is stopped.** The check says so, and how to start it.
+- **The address was typed without `:8080`** on a host where port 80 is taken.
+- **Another machine on the network answers to `bokkie.local`.** The check
+  compares what the name resolves to against this computer's own address and
+  says when they differ.
+
+If the name will not behave, every screen is still reachable by address —
+`http://192.168.1.x:8080`. `bokkie doctor` prints this computer's address.
+
+### Stopping and starting it
+
+Double-click `BokkieSetup.exe` and choose **Stop Bokkie** or **Start Bokkie**.
+Stopping does not remove anything and does not touch the database; it starts
+again by itself when the computer restarts.
+
+---
+
 ## Updating to a new version
 
 Download the new `BokkieSetup.exe` from

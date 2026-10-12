@@ -25,7 +25,10 @@ func ensureFirewall(log *slog.Logger, _ string, port int) error {
 		"dir=in",
 		"action=allow",
 		"protocol=TCP",
-		"localport=" + strconv.Itoa(port),
+		// Port 80 as well as the app's own: the server also answers there and
+		// redirects, so that a counter PC given the bare name reaches the app
+		// instead of nothing. A rule naming a port nothing serves is harmless.
+		"localport=" + strconv.Itoa(port) + ",80",
 		// Private and domain profiles only: the station LAN, never a public
 		// network the host might later be plugged into.
 		"profile=private,domain",

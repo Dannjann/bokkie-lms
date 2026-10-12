@@ -56,7 +56,12 @@ type App struct {
 	ledgerChecks *ledger.Checker
 
 	listener net.Listener
-	serveErr chan error
+
+	// The port 80 redirect, when port 80 was free. Both are nil when it was
+	// not, which is a normal and uninteresting state.
+	shortSrv      *http.Server
+	shortListener net.Listener
+	serveErr      chan error
 
 	// store and discovery are held because LAN access is a setting now, not a
 	// start-up decision: Start has to ask what it currently is, and the API has
@@ -179,6 +184,7 @@ func (a *App) Start() error {
 	a.listener = listener
 
 	a.log.Info("http server listening", "addr", addr, "port", a.cfg.Port)
+	a.startShortAddress()
 	a.startDiscovery()
 	a.backups.Start()
 	a.ledgerChecks.Start()
@@ -191,6 +197,59 @@ func (a *App) Start() error {
 		a.serveErr <- err
 	}()
 	return nil
+}
+
+// shortAddressPort is port 80, where a browser goes when it is given a bare
+// name. It is not configurable: the whole value of it is that it is the port
+// nobody has to be told about.
+const shortAddressPort = 80
+
+// startShortAddress also answers on port 80, so that typing bokkie.local does
+// what the person expects.
+//
+// This exists because of a real evening: the first Windows install was reported
+// as broken when somebody typed bokkie.local and the browser, having been given
+// no port, went to 80, found nothing, and said "refused to connect" — which
+// reads as a broken server rather than a missing port number. The runbook can
+// say ":8080" as often as it likes; people type the name.
+//
+// Failing to bind is a log line and nothing more. Port 80 is commonly already
+// taken — IIS, Skype of old, anything with a web console — and refusing to
+// serve the station over a convenience would be the tail wagging the dog. The
+// real port goes on working either way, which is what every shortcut uses.
+func (a *App) startShortAddress() {
+	if a.cfg.Port == shortAddressPort {
+		return
+	}
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", shortAddressPort))
+	if err != nil {
+		a.log.Info("port 80 is not available, so the address needs its port number",
+			"address", fmt.Sprintf("http://%s.local:%d", a.cfg.MDNS.Hostname, a.cfg.Port),
+			"error", err)
+		return
+	}
+	a.shortListener = listener
+
+	// A redirect rather than a second copy of the app: one origin keeps the
+	// session cookie, the audit log and anything else that reasons about where
+	// a request came from working the way they already do.
+	target := fmt.Sprintf(":%d", a.cfg.Port)
+	a.shortSrv = &http.Server{
+		ReadHeaderTimeout: readHeaderTimeout,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			host := r.Host
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+			http.Redirect(w, r, "http://"+host+target+r.URL.RequestURI(), http.StatusTemporaryRedirect)
+		}),
+		ErrorLog: slog.NewLogLogger(a.log.Handler(), slog.LevelWarn),
+	}
+
+	a.log.Info("also answering on the short address",
+		"short", fmt.Sprintf("http://%s.local", a.cfg.MDNS.Hostname),
+		"app", fmt.Sprintf("http://%s.local:%d", a.cfg.MDNS.Hostname, a.cfg.Port))
+	go a.shortSrv.Serve(listener)
 }
 
 // startDiscovery publishes the LAN name, if the station is currently letting
@@ -234,6 +293,15 @@ func (a *App) Stop(ctx context.Context) error {
 
 	ctx, cancel := context.WithTimeout(ctx, shutdownGrace)
 	defer cancel()
+
+	// The redirect first, and without waiting on it: it holds nothing in
+	// flight worth draining, and leaving port 80 bound would stop the next
+	// start of the service from taking it back.
+	if a.shortSrv != nil {
+		if err := a.shortSrv.Close(); err != nil {
+			a.log.Warn("could not close the short address listener", "error", err)
+		}
+	}
 
 	shutdownErr := a.srv.Shutdown(ctx)
 	if errors.Is(shutdownErr, context.DeadlineExceeded) {

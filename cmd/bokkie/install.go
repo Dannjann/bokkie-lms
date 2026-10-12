@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -52,7 +53,34 @@ func installHere(log *slog.Logger, opts service.Options) error {
 		// and failing an install over it would be the tail wagging the dog.
 		log.Warn("could not add Bokkie to Add/Remove Programs", "error", err)
 	}
+
+	reportReachability(log, opts.DataDir)
 	return nil
+}
+
+// reportReachability checks, from the host and at the end of every install,
+// that the name in the shortcut on every counter PC actually resolves to this
+// machine and answers.
+//
+// It is printed, never fatal. The install genuinely succeeded: the service is
+// registered, running and answering on its own address, and a station that
+// serves fine but cannot advertise a name is a working station. What it must
+// not do is say "Bokkie is installed, open http://bokkie.local:8080" while
+// that address goes nowhere — which is how the first real install was reported
+// as broken when it was not.
+func reportReachability(log *slog.Logger, dataDir string) {
+	report := diagnoseHost(dataDir)
+	if report.Healthy() {
+		log.Info("the station is reachable", "address", report.Reach)
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("Bokkie is installed and running, but not everything about the")
+	fmt.Println("network checked out:")
+	fmt.Println()
+	fmt.Print(report)
+	fmt.Println("Run \"bokkie doctor\" at any time to check this again.")
 }
 
 // cmdUninstall stops and deregisters the service. The data directory and the

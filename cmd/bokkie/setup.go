@@ -39,6 +39,9 @@ const (
 	actionRepair
 	actionShortcut
 	actionUninstall
+	actionStop
+	actionStart
+	actionDoctor
 	actionQuit
 )
 
@@ -58,6 +61,8 @@ var adminActions = map[setupAction]bool{
 	actionUpdate:    true,
 	actionRepair:    true,
 	actionUninstall: true,
+	actionStop:      true,
+	actionStart:     true,
 }
 
 // needsAdmin is read both when the menu is built and when a choice is
@@ -81,6 +86,7 @@ func menuFor(state setupState) []setupChoice {
 		return []setupChoice{
 			shortcut,
 			choice(actionInstall, "Install Bokkie on this computer (this makes it the host)"),
+			choice(actionDoctor, "Check what is wrong (changes nothing)"),
 			closeIt,
 		}
 	}
@@ -98,9 +104,19 @@ func menuFor(state setupState) []setupChoice {
 		first = choice(actionRepair, "Repair this installation (reinstall "+state.InstalledVersion+")")
 	}
 
+	// Stop or start, whichever this machine is not. Offering both would be
+	// offering one that does nothing, and the person reading the menu is being
+	// asked to tell the developer what they see.
+	power := choice(actionStop, "Stop Bokkie (it will start again when this computer restarts)")
+	if state.InstalledVersion == "" {
+		power = choice(actionStart, "Start Bokkie (it is installed here but not answering)")
+	}
+
 	return []setupChoice{
 		first,
+		power,
 		shortcut,
+		choice(actionDoctor, "Check why Bokkie cannot be reached (changes nothing)"),
 		choice(actionUninstall, "Remove Bokkie from this computer (the data folder is kept)"),
 		closeIt,
 	}
@@ -154,6 +170,9 @@ var actionNames = map[setupAction]string{
 	actionRepair:    "repair",
 	actionShortcut:  "shortcut",
 	actionUninstall: "uninstall",
+	actionStop:      "stop",
+	actionStart:     "start",
+	actionDoctor:    "doctor",
 }
 
 func nameOf(a setupAction) string { return actionNames[a] }

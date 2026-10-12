@@ -333,3 +333,48 @@ func TestAskAddressReturnsWhenTheLineEnds(t *testing.T) {
 		})
 	}
 }
+
+// Offering both stop and start would offer one that does nothing, to a person
+// who is being asked to tell the developer what they can see.
+func TestTheMenuOffersStopOrStartButNeverBoth(t *testing.T) {
+	running := actions(menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"}))
+	if !contains(running, actionStop) {
+		t.Error("a running station was not offered a way to stop it")
+	}
+	if contains(running, actionStart) {
+		t.Error("a running station was offered a start")
+	}
+
+	silent := actions(menuFor(setupState{Installed: true, ThisVersion: "v1.0.0"}))
+	if !contains(silent, actionStart) {
+		t.Error("an installed station that is not answering was not offered a start")
+	}
+	if contains(silent, actionStop) {
+		t.Error("a station that is not answering was offered a stop")
+	}
+}
+
+// The moment to run the check is when something is wrong, and an administrator
+// prompt in the way is one more thing between the person and the answer.
+func TestTheCheckIsAlwaysOfferedAndNeverNeedsAPassword(t *testing.T) {
+	for _, state := range []setupState{
+		{ThisVersion: "v1.0.0"},
+		{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"},
+	} {
+		if !contains(actions(menuFor(state)), actionDoctor) {
+			t.Errorf("state %+v was not offered the check", state)
+		}
+	}
+	if needsAdmin(actionDoctor) {
+		t.Error("the check asks for administrator rights; it changes nothing and must not")
+	}
+}
+
+func contains(haystack []setupAction, needle setupAction) bool {
+	for _, a := range haystack {
+		if a == needle {
+			return true
+		}
+	}
+	return false
+}
