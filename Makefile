@@ -150,6 +150,11 @@ release: web-build build-all stage-scripts sign
 #
 # The release is created as a draft. The windows-latest check runs against it,
 # and publishing is a human click once that is green.
+#
+# Push before you release, not after. The pre-push hook runs `make ci`, which
+# runs build-all, and LDFLAGS stamps a build date — so the binaries change and
+# dist/ no longer matches the signature beside it. publish.sh refuses that, but
+# the order is easier to remember than the refusal.
 publish:
 	@sh scripts/publish.sh
 

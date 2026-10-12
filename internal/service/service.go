@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	ksvc "github.com/kardianos/service"
 )
@@ -202,13 +203,8 @@ func newService(prog ksvc.Interface, opts Options, account, executable string) (
 		// --console=false keeps the daemon's stderr quiet: the log file is the
 		// record, and a service manager that captures stderr would duplicate
 		// every line into a second place nobody prunes.
-		Arguments: []string{"run", "--data-dir", opts.DataDir, "--console=false"},
-		// systemd only: wait for the network, or mDNS starts before there is a
-		// LAN address to advertise.
-		Dependencies: []string{
-			"After=network-online.target",
-			"Wants=network-online.target",
-		},
+		Arguments:    []string{"run", "--data-dir", opts.DataDir, "--console=false"},
+		Dependencies: dependenciesFor(runtime.GOOS),
 		Option: ksvc.KeyValue{
 			// Not cosmetic. See Options.LogDir: the default would make launchd
 			// refuse to start the job at all. bokkie's own log is the record;
@@ -225,6 +221,36 @@ func newService(prog ksvc.Interface, opts Options, account, executable string) (
 		},
 	}
 	return ksvc.New(prog, cfg)
+}
+
+// dependenciesFor is what the service manager is told this service waits for.
+//
+// It takes the platform as an argument rather than reading it, so that the one
+// thing that matters here can be tested from a machine that is not Windows —
+// which is every machine this project has.
+//
+// The Windows case is why this function exists. These strings were written for
+// systemd and applied to all three platforms, and kardianos/service hands the
+// list to the Windows SCM as *service names*. Windows then looks for a service
+// literally called "After=network-online.target", does not find one, and
+// refuses to start the service it has just finished registering:
+//
+//	start the bokkie service: The dependency service does not exist or has
+//	been marked for deletion.
+//
+// Nothing replaces them there. The SCM has the network stack up long before an
+// automatic-start service, and a boot where mDNS somehow starts too early is
+// what OnFailure=restart is for.
+func dependenciesFor(goos string) []string {
+	if goos == "windows" {
+		return nil
+	}
+	// systemd only — launchd ignores these. Without them mDNS can start before
+	// there is a LAN address to advertise.
+	return []string{
+		"After=network-online.target",
+		"Wants=network-online.target",
+	}
 }
 
 // placeExecutable copies the binary to the one path the service manager will be
