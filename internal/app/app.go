@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/api"
@@ -188,6 +189,7 @@ func (a *App) Start() error {
 	a.startShortAddress()
 	a.startDiscovery()
 	a.backups.Start()
+	a.backupThisSession()
 	a.ledgerChecks.Start()
 
 	go func() {
@@ -325,6 +327,49 @@ func (a *App) warnOnNameCollision() {
 		"fix", "find and stop the other bokkie, or give this one a different mdns hostname in the settings file")
 }
 
+// backupThisSession takes a backup as soon as the station is up.
+//
+// The nightly job assumes a machine that is always on. This one is not: it
+// serves while a person has its window open, which may be eight hours a day and
+// never at 2am. Without this, a station opened and closed every day would never
+// back up at all.
+//
+// It runs in the background because nothing about serving should wait on it,
+// and a failure is a warning: a missing backup is bad, and refusing to open the
+// station over it is worse.
+func (a *App) backupThisSession() {
+	go func() {
+		if _, err := a.backups.RunNow(context.Background()); err != nil {
+			a.log.Warn("could not take a backup at startup", "error", err)
+		}
+	}()
+}
+
+// LastBackup is when the most recent backup was taken, and its file name.
+//
+// Read from the folder rather than remembered in a field: the file on disk is
+// the record, and a counter in memory can disagree with it — which is exactly
+// the fault step 8.5 found when a panel printed a file's modification time
+// beside a name that meant something else.
+func (a *App) LastBackup() (time.Time, string) {
+	names, err := backup.List(a.cfg.Backup.Folder)
+	if err != nil || len(names) == 0 {
+		return time.Time{}, ""
+	}
+
+	var newest time.Time
+	var newestName string
+	for _, path := range names {
+		// List returns full paths; TakenAt takes the base itself, and the
+		// screen wants the file name rather than somebody's folder layout.
+		at, ok := backup.TakenAt(path)
+		if ok && at.After(newest) {
+			newest, newestName = at, filepath.Base(path)
+		}
+	}
+	return newest, newestName
+}
+
 // Stop drains in-flight requests, then closes the database. Requests are
 // allowed to finish rather than being cut off: a half-written response to a
 // payment entry is exactly the ambiguity this system exists to remove.
@@ -343,6 +388,15 @@ func (a *App) Stop(ctx context.Context) error {
 	// a corrupt backup in it.
 	a.backups.Stop()
 	a.ledgerChecks.Stop()
+
+	// A backup on the way out, after the schedule has stopped and before the
+	// database is closed. The station may have no night: it runs while a person
+	// has its window open, so the nightly job can go weeks without firing, and
+	// closing the window is the moment a day's work is finished. RunNow
+	// serialises, so this waits for an in-flight backup rather than racing it.
+	if _, err := a.backups.RunNow(context.Background()); err != nil {
+		a.log.Warn("could not take a backup on the way out", "error", err)
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, shutdownGrace)
 	defer cancel()
