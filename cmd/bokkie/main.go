@@ -29,6 +29,7 @@ commands:
   import-customers
                load the customer master from a CSV file
                (-check to see what it would do without writing anything)
+  serve        run the station in this window; closing it stops the station
   setup        the guided install window — what double-clicking this file runs
   doctor       check why the station cannot be reached, and change nothing
 
@@ -68,6 +69,8 @@ func main() {
 		err = cmdUpdate(args)
 	case "import-customers":
 		err = cmdImportCustomers(args)
+	case "serve":
+		err = cmdServe(args)
 	case "setup":
 		err = runGuidedSetup(args)
 	case "doctor":
