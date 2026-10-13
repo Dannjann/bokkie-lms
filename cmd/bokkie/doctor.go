@@ -12,6 +12,7 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/diagnose"
 	"github.com/Dannjann/bokkie-lms/internal/service"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
+	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
 
 // cmdDoctor answers "why can nobody reach this?" without a support call.
@@ -49,6 +50,7 @@ func diagnoseHost(dataDir string) diagnose.Report {
 	}
 	opts.LocalAddresses = diagnose.LocalIPv4()
 	opts.StartHint = startHint()
+	opts.AutoStart = leftoverAutoStart()
 	if err == nil {
 		opts.LogDir = cfg.LogDir()
 	}
@@ -99,4 +101,15 @@ func startHint() string {
 	default:
 		return "sudo systemctl start bokkie"
 	}
+}
+
+// leftoverAutoStart names anything on this computer that could start Bokkie
+// without a person. Empty everywhere but Windows, where the five mechanisms
+// are enumerated in internal/winsetup.
+func leftoverAutoStart() []string {
+	var found []string
+	for _, m := range winsetup.Found(winsetup.AutoStartMechanisms()) {
+		found = append(found, m.Name+" ("+m.Where+")")
+	}
+	return found
 }

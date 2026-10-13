@@ -28,133 +28,27 @@ func actions(choices []setupChoice) []setupAction {
 	return out
 }
 
-// The hazard this guards got bigger, not smaller. There is no install any
-// more, but "Start Bokkie here" on a counter PC serves a second station with
-// its own empty ledger — so the shortcut keeps its place at the top.
-func TestMenuOffersTheShortcutFirstOnAMachineWithNothingInstalled(t *testing.T) {
-	got := menuFor(setupState{ThisVersion: "v1.0.0"})
-	if got[0].Action != actionShortcut {
-		t.Errorf("first choice = %v, want the shortcut: a counter PC must not be led into serving its own empty ledger", got[0].Action)
-	}
-	if got[0].NeedsAdmin {
-		t.Error("the shortcut asked for administrator rights; it writes to one desktop and must not")
-	}
-}
-
-// Starting the station opens a window and binds a port. Asking the person at a
-// counter PC for an administrator password to do that is asking for one they
-// do not have.
-func TestStartingTheStationNeedsNoPassword(t *testing.T) {
-	if needsAdmin(actionServe) {
-		t.Error("starting the station asked for administrator rights")
-	}
-	if !contains(actions(menuFor(setupState{ThisVersion: "v1.0.0"})), actionServe) {
-		t.Error("a machine with nothing on it was not offered a way to start the station")
-	}
-}
-
-// There is no install in 2.7: a person opening the window is the only way the
-// station is ever served.
-func TestTheMenuNoLongerOffersAnInstall(t *testing.T) {
-	for _, state := range []setupState{
-		{ThisVersion: "v1.0.0"},
-		{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"},
-	} {
-		if contains(actions(menuFor(state)), actionInstall) {
-			t.Errorf("state %+v was offered an install, which would register a service that starts on its own", state)
-		}
-	}
-}
-
-// The leftover from a 2.6 install starts the station without anybody asking,
-// so it is offered for removal wherever it is found.
-func TestTheOldServiceIsOfferedForRemovalWhenPresent(t *testing.T) {
-	without := actions(menuFor(setupState{ThisVersion: "v1.0.0"}))
-	if contains(without, actionRemoveService) {
-		t.Error("a machine with no old service was offered to remove one")
-	}
-
-	with := actions(menuFor(setupState{ThisVersion: "v1.0.0", OldServiceInstalled: true}))
-	if !contains(with, actionRemoveService) {
-		t.Error("a machine whose old service still starts on its own was not offered to remove it")
-	}
-}
-
-// Running the same version again is a repair, not an update. Offering "update
-// v1.0.0 to v1.0.0" is how somebody concludes the file they downloaded is wrong.
-// Position stopped mattering once the station choices moved to the top, so
-// this asks which of the two is present rather than which is first.
-func TestMenuCallsTheSameVersionARepair(t *testing.T) {
-	same := actions(menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"}))
-	if !contains(same, actionRepair) || contains(same, actionUpdate) {
-		t.Errorf("menu = %v, want a repair and no update when the versions match", same)
-	}
-
-	newer := actions(menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.1.0"}))
-	if !contains(newer, actionUpdate) || contains(newer, actionRepair) {
-		t.Errorf("menu = %v, want an update and no repair when the file is a different version", newer)
-	}
-}
-
-// A silent reinstall is the one thing the step forbids outright.
-func TestMenuNeverOffersAPlainInstallOnAMachineThatHasOne(t *testing.T) {
-	for _, a := range actions(menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.1.0"})) {
-		if a == actionInstall {
-			t.Fatal("an installed machine was offered a plain install, which would reinstall over a running service without saying so")
-		}
-	}
-}
-
-func TestDescribeInstallationPrefersWhatIsAnswering(t *testing.T) {
-	state := describeInstallation(`C:\Users\dan\Downloads\BokkieSetup.exe`, `C:\Program Files\Bokkie\bokkie.exe`, "v1.0.0", nil)
-	if !state.Installed || state.InstalledVersion != "v1.0.0" {
-		t.Errorf("state = %+v, want installed at v1.0.0 from the serving version", state)
-	}
-}
-
-// A binary at the install path that answers nothing is a failed update. It is
-// still installed, and repair is exactly what it needs.
-func TestDescribeInstallationCountsASilentBinaryAsInstalled(t *testing.T) {
-	dir := t.TempDir()
-	installed := filepath.Join(dir, "bokkie.exe")
-	if err := os.WriteFile(installed, []byte("x"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	state := describeInstallation(filepath.Join(dir, "download.exe"), installed, "", errors.New("connection refused"))
-	if !state.Installed {
-		t.Error("a binary at the install path that is not answering was reported as not installed")
-	}
-	if !contains(actions(menuFor(state)), actionRepair) {
-		t.Error("a failed install was not offered a repair")
-	}
-}
-
-// Review Focus 4: double-clicking the installed copy must be recognised, or
-// the install would try to copy a file over itself.
-func TestDescribeInstallationNoticesItIsTheInstalledCopy(t *testing.T) {
-	state := describeInstallation(`C:\Program Files\Bokkie\bokkie.exe`, `C:\PROGRAM FILES\BOKKIE\bokkie.exe`, "v1.0.0", nil)
-	if !state.RunningFromInstallPath {
-		t.Error("running from the install path was not noticed; Windows paths differ in case, not identity")
-	}
-}
-
 func TestEveryActionSurvivesTheTripThroughElevation(t *testing.T) {
-	for _, a := range []setupAction{actionInstall, actionUpdate, actionRepair, actionShortcut, actionUninstall} {
+	for _, a := range []setupAction{actionShortcut, actionServe, actionDoctor, actionUpdate, actionRemoveService} {
 		if got := actionFor(nameOf(a)); got != a {
 			t.Errorf("actionFor(nameOf(%v)) = %v; the elevated window would do the wrong thing", a, got)
 		}
 	}
 }
 
-// An unrecognised --do must not fall through to install. It is the one action
-// that would make a counter PC into a second host.
-func TestAnUnknownActionIsNotAnInstall(t *testing.T) {
-	if actionFor("instal") == actionInstall {
-		t.Fatal("a misspelled action was read as an install")
+// The names older builds used for the things that registered or managed a
+// Windows service. An upgraded shortcut, a stale script or a typed --do must
+// reach nothing at all — closing the window is the only safe reading.
+func TestTheOldServiceActionNamesReachNothing(t *testing.T) {
+	for _, name := range serviceActions {
+		if got := actionFor(name); got != actionQuit {
+			t.Errorf("--do=%s resolves to %v; it must reach nothing", name, got)
+		}
 	}
-	if actionFor("") == actionInstall {
-		t.Fatal("an empty action was read as an install")
+	for _, name := range []string{"instal", "", "nonsense"} {
+		if got := actionFor(name); got != actionQuit {
+			t.Errorf("--do=%q resolves to %v; an unknown action must close the window", name, got)
+		}
 	}
 }
 
@@ -164,9 +58,16 @@ func TestTheShortcutNeverRaisesAPrompt(t *testing.T) {
 	if needsAdmin(actionShortcut) {
 		t.Error("the desktop shortcut was marked as needing administrator rights")
 	}
-	for _, a := range []setupAction{actionInstall, actionUpdate, actionRepair, actionUninstall} {
+	// What is left that does need rights: replacing the program, and taking
+	// away a service that would otherwise start the station on its own.
+	for _, a := range []setupAction{actionUpdate, actionRemoveService} {
 		if !needsAdmin(a) {
 			t.Errorf("%v was not marked as needing administrator rights", a)
+		}
+	}
+	for _, a := range []setupAction{actionServe, actionDoctor} {
+		if needsAdmin(a) {
+			t.Errorf("%v asks for administrator rights and should not", a)
 		}
 	}
 }
@@ -378,42 +279,6 @@ func TestAskAddressReturnsWhenTheLineEnds(t *testing.T) {
 	}
 }
 
-// Offering both stop and start would offer one that does nothing, to a person
-// who is being asked to tell the developer what they can see.
-func TestTheMenuOffersStopOrStartButNeverBoth(t *testing.T) {
-	running := actions(menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"}))
-	if !contains(running, actionStop) {
-		t.Error("a running station was not offered a way to stop it")
-	}
-	if contains(running, actionStart) {
-		t.Error("a running station was offered a start")
-	}
-
-	silent := actions(menuFor(setupState{Installed: true, ThisVersion: "v1.0.0"}))
-	if !contains(silent, actionStart) {
-		t.Error("an installed station that is not answering was not offered a start")
-	}
-	if contains(silent, actionStop) {
-		t.Error("a station that is not answering was offered a stop")
-	}
-}
-
-// The moment to run the check is when something is wrong, and an administrator
-// prompt in the way is one more thing between the person and the answer.
-func TestTheCheckIsAlwaysOfferedAndNeverNeedsAPassword(t *testing.T) {
-	for _, state := range []setupState{
-		{ThisVersion: "v1.0.0"},
-		{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"},
-	} {
-		if !contains(actions(menuFor(state)), actionDoctor) {
-			t.Errorf("state %+v was not offered the check", state)
-		}
-	}
-	if needsAdmin(actionDoctor) {
-		t.Error("the check asks for administrator rights; it changes nothing and must not")
-	}
-}
-
 func contains(haystack []setupAction, needle setupAction) bool {
 	for _, a := range haystack {
 		if a == needle {
@@ -421,4 +286,128 @@ func contains(haystack []setupAction, needle setupAction) bool {
 		}
 	}
 	return false
+}
+
+// --- the 2.7 menu -----------------------------------------------------------
+//
+// These replace the install-era tests. A review found two ways left to register
+// the auto-starting service this step exists to abolish, so the shape of this
+// menu is now pinned from both directions: what it must offer, and what it must
+// never contain.
+
+// The hazard the old test guarded got bigger, not smaller: with no install,
+// starting the station on a counter PC serves a second station with its own
+// empty ledger.
+func TestTheShortcutIsOfferedFirst(t *testing.T) {
+	got := menuFor(setupState{ThisVersion: "v1.0.0"})
+	if got[0].Action != actionShortcut {
+		t.Errorf("first choice = %v, want the shortcut", got[0].Action)
+	}
+	if got[0].NeedsAdmin {
+		t.Error("the shortcut asked for administrator rights; it writes to one desktop")
+	}
+}
+
+// The finding. "Repair this installation" called service.Install, and it was
+// offered to any machine that merely answered on the port — which, since 2.7,
+// is a station running in a window and never had a service at all.
+func TestNoMenuAnywhereCanRegisterAService(t *testing.T) {
+	for _, state := range []setupState{
+		{ThisVersion: "v1.0.0"},
+		{ThisVersion: "v1.0.0", Running: true, RunningVersion: "v1.0.0"},
+		{ThisVersion: "v1.1.0", Running: true, RunningVersion: "v1.0.0"},
+		{ThisVersion: "v1.0.0", OldServiceInstalled: true},
+		{ThisVersion: "v1.0.0", Running: true, RunningVersion: "v1.0.0", OldServiceInstalled: true},
+	} {
+		for _, choice := range menuFor(state) {
+			for _, gone := range serviceActions {
+				if nameOf(choice.Action) == gone {
+					t.Errorf("state %+v offers %q, which registers or manages the service 2.7 abolished", state, gone)
+				}
+			}
+		}
+	}
+}
+
+// Starting the station opens a window and binds a port. Asking the person at a
+// counter PC for an administrator password to do that is asking for one they
+// do not have.
+func TestStartingTheStationNeedsNoPassword(t *testing.T) {
+	if needsAdmin(actionServe) {
+		t.Error("starting the station asked for administrator rights")
+	}
+	if !contains(actions(menuFor(setupState{ThisVersion: "v1.0.0"})), actionServe) {
+		t.Error("a machine with nothing running was not offered a way to start the station")
+	}
+}
+
+// A second window would bind a port that is taken, and send somebody looking
+// for a fault instead of for the window they already have.
+func TestAStationThatIsRunningIsNotOfferedASecondOne(t *testing.T) {
+	running := actions(menuFor(setupState{ThisVersion: "v1.0.0", Running: true, RunningVersion: "v1.0.0"}))
+	if contains(running, actionServe) {
+		t.Error("a running station was offered a second start")
+	}
+	if !contains(running, actionAlreadyRunning) {
+		t.Error("a running station was not told it is already running")
+	}
+}
+
+// The leftover from an older install starts the station without anybody
+// asking, which is the one thing this step exists to stop.
+func TestTheOldServiceIsOfferedForRemovalWhenPresent(t *testing.T) {
+	if contains(actions(menuFor(setupState{ThisVersion: "v1.0.0"})), actionRemoveService) {
+		t.Error("a machine with no old service was offered to remove one")
+	}
+	if !contains(actions(menuFor(setupState{ThisVersion: "v1.0.0", OldServiceInstalled: true})), actionRemoveService) {
+		t.Error("a machine whose old service still starts on its own was not offered to remove it")
+	}
+}
+
+// Updating replaces this computer's copy, so it is only worth offering when
+// there is a copy to replace and this file is a different one.
+func TestUpdateIsOfferedOnlyWhenThereIsSomethingToUpdate(t *testing.T) {
+	same := actions(menuFor(setupState{ThisVersion: "v1.0.0", Running: true, RunningVersion: "v1.0.0"}))
+	if contains(same, actionUpdate) {
+		t.Error("a station already on this version was offered an update to it")
+	}
+
+	older := actions(menuFor(setupState{ThisVersion: "v1.1.0", Running: true, RunningVersion: "v1.0.0"}))
+	if !contains(older, actionUpdate) {
+		t.Error("a station on an older version was not offered the update")
+	}
+
+	stopped := actions(menuFor(setupState{ThisVersion: "v1.1.0"}))
+	if contains(stopped, actionUpdate) {
+		t.Error("a machine with nothing running was offered an update; there is nothing to replace")
+	}
+}
+
+// The moment to run the check is when something is already wrong, and a
+// password prompt in the way is one more thing between the person and the
+// answer.
+func TestTheCheckIsAlwaysOfferedAndNeverNeedsAPassword(t *testing.T) {
+	for _, state := range []setupState{
+		{ThisVersion: "v1.0.0"},
+		{ThisVersion: "v1.0.0", Running: true, RunningVersion: "v1.0.0"},
+	} {
+		if !contains(actions(menuFor(state)), actionDoctor) {
+			t.Errorf("state %+v was not offered the check", state)
+		}
+	}
+	if needsAdmin(actionDoctor) {
+		t.Error("the check asks for administrator rights; it changes nothing")
+	}
+}
+
+func TestDescribeInstallationReportsWhatIsAnswering(t *testing.T) {
+	state := describeInstallation(`C:\Users\dan\Downloads\BokkieSetup.exe`, `C:\Program Files\Bokkie\bokkie.exe`, "v1.0.0", nil)
+	if !state.Running || state.RunningVersion != "v1.0.0" {
+		t.Errorf("state = %+v, want running at v1.0.0", state)
+	}
+
+	silent := describeInstallation("a.exe", "b.exe", "", errors.New("connection refused"))
+	if silent.Running {
+		t.Error("nothing was answering and the state said it was running")
+	}
 }

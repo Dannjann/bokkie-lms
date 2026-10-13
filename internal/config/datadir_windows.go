@@ -24,6 +24,7 @@ const databaseName = "bokkie.db"
 // C:\ProgramData\Bokkie, and a new binary that quietly opened an empty folder
 // instead would be the worst thing this program could do.
 func defaultDataDir() (string, error) {
+	var preferred string
 	candidates := []Candidate{}
 	for _, base := range []string{os.Getenv("LOCALAPPDATA"), os.Getenv("ProgramData"), `C:\ProgramData`} {
 		if base == "" {
@@ -33,9 +34,32 @@ func defaultDataDir() (string, error) {
 		if alreadyListed(candidates, path) {
 			continue
 		}
+		if preferred == "" {
+			preferred = path
+		}
 		candidates = append(candidates, Candidate{Path: path, HasDatabase: hasDatabase(path)})
 	}
-	return ChooseDataDir(candidates)
+	chosen, err := ChooseDataDir(candidates)
+	if err != nil {
+		return "", err
+	}
+
+	// The adopted folder is the one that can be unwritable. %LOCALAPPDATA% is
+	// this user's own by construction; C:\ProgramData\Bokkie was made by an
+	// elevated install of an older version and granted to the service account
+	// that ran it, and the person who now double-clicks the program is not
+	// that account.
+	//
+	// Checked here rather than left to the first file open, because the first
+	// file open is the log, and "cannot open bokkie-2026-10-13.log" is not a
+	// sentence anybody can act on when the real problem is a year of lending
+	// in a folder this user may not touch.
+	if chosen != preferred && preferred != "" {
+		if err := Writable(chosen); err != nil {
+			return "", adoptedUnwritable(chosen, err)
+		}
+	}
+	return chosen, nil
 }
 
 func alreadyListed(candidates []Candidate, path string) bool {

@@ -248,3 +248,37 @@ func TestStatesMarshalAsWords(t *testing.T) {
 		}
 	}
 }
+
+// Something left behind that starts the station anyway is the station serving
+// while everybody believes it is closed — which nobody goes looking for,
+// because nothing looks wrong.
+func TestALeftoverAutoStartIsReportedAsAProblem(t *testing.T) {
+	client, lookup := serving(t, "8080")
+	base := Options{
+		Hostname: "bokkie", Port: 8080, Serving: "v1.0.0",
+		LANAccessKnown: true, LANAccess: true,
+		LookupHost: lookup, LocalAddresses: []string{"192.168.1.50"},
+		Client: client,
+	}
+
+	clean := Run(base)
+	if !clean.Healthy() {
+		t.Errorf("a station with nothing left behind was reported unhealthy:\n%s", clean)
+	}
+
+	withLeftover := base
+	withLeftover.AutoStart = []string{"service (the bokkie Windows service)"}
+	got := Run(withLeftover)
+	if got.Healthy() {
+		t.Fatalf("a station that starts itself was reported healthy:\n%s", got)
+	}
+	found := false
+	for _, c := range got.Problems() {
+		if strings.Contains(c.Detail, "bokkie Windows service") && strings.Contains(c.Fix, "Remove the old Bokkie service") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the report does not name the leftover or what to do about it:\n%s", got)
+	}
+}

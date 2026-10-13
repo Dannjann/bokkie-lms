@@ -19,6 +19,12 @@ declare module 'vue-router' {
     public?: boolean
     /** Managers only, in the UI. The server enforces the real thing. */
     manager?: boolean
+    /**
+     * The station's own screens: about the machine, not the books. Outside
+     * every guard, because the window opens on one before anybody has logged
+     * in and the server refuses them from any machine but the host anyway.
+     */
+    station?: boolean
   }
 }
 
@@ -35,13 +41,13 @@ export const router = createRouter({
       path: '/station',
       name: 'station',
       component: () => import('@/pages/StationPage.vue'),
-      meta: { title: 'Station', public: true },
+      meta: { title: 'Station', public: true, station: true },
     },
     {
       path: '/station/check',
       name: 'station-check',
       component: () => import('@/pages/StationCheckPage.vue'),
-      meta: { title: 'Check', public: true },
+      meta: { title: 'Check', public: true, station: true },
     },
     {
       path: '/',
@@ -266,6 +272,19 @@ router.beforeEach(async (to) => {
   // truth, and the API's 401s are what correct it if a session dies mid-use.
   if (!session.loaded) {
     await session.load()
+  }
+
+  // The station's own screens are outside all of this. They are about the
+  // machine rather than the books: whether it is serving, at what address, when
+  // it last backed up, and how to stop it.
+  //
+  // Exempting them from the setup redirect is not a convenience. The window
+  // opens on /station in application mode, with no address bar — so on a brand
+  // new station the redirect to /setup would take the Stop button, the address
+  // and the backup time away for the whole of the first session, which is the
+  // session somebody is watching.
+  if (to.meta.station) {
+    return true
   }
 
   if (session.needsSetup) {

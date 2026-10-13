@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 
 	"github.com/Dannjann/bokkie-lms/internal/diagnose"
 	"github.com/Dannjann/bokkie-lms/internal/service"
@@ -16,6 +17,16 @@ import (
 // firewall and starts it — one command on all three platforms, because the
 // person running it is usually standing at the station with the owner waiting.
 func cmdInstall(args []string) error {
+	if runtime.GOOS == "windows" {
+		// The last door. The menu stopped offering an install in 2.7, and the
+		// USB wrapper that called this verb is no longer staged — but the verb
+		// itself was still here, and a verb that registers an auto-starting
+		// service is the hard requirement undone by anybody who types it.
+		return errors.New("bokkie is not installed on Windows any more: it runs while its window is open and only then.\n" +
+			"Double-click the program and choose \"Start Bokkie here\", or run \"bokkie serve\".\n" +
+			"If this computer still has the old Bokkie service on it, the window offers to remove it")
+	}
+
 	opts, log, closeLog, err := serviceCommand("install", args)
 	if err != nil {
 		return err

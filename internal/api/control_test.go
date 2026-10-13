@@ -100,3 +100,43 @@ func TestNonControlPathsPassThrough(t *testing.T) {
 		t.Errorf("a non-control path got %d; the control layer did not pass it on", rec.Code)
 	}
 }
+
+// A mutating endpoint with no session behind it is reachable by any page the
+// operator opens on this machine. A form auto-submitted from another site to
+// localhost would stop the station.
+func TestStopIsRefusedFromAnotherSite(t *testing.T) {
+	handler, station := controlHandler(t, &fakeStation{})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/control/stop", nil)
+	req.RemoteAddr = "127.0.0.1:51000" // the host, as a browser on it would be
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("a cross-site request got %d from the stop button", rec.Code)
+	}
+	if station.stopped {
+		t.Fatal("the station was stopped by a page on another site")
+	}
+}
+
+// The station's own screen is same-origin, and the operator's command line
+// sends no such header at all. Neither may be refused.
+func TestTheStationsOwnScreenAndTheCommandLineAreAccepted(t *testing.T) {
+	for _, site := range []string{"same-origin", "none", ""} {
+		handler, _ := controlHandler(t, &fakeStation{})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/control/stop", nil)
+		req.RemoteAddr = "127.0.0.1:51000"
+		if site != "" {
+			req.Header.Set("Sec-Fetch-Site", site)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusAccepted {
+			t.Errorf("Sec-Fetch-Site %q got %d, want it accepted", site, rec.Code)
+		}
+	}
+}

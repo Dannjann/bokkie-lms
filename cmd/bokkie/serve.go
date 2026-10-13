@@ -58,7 +58,14 @@ func cmdServe(args []string) error {
 		// The window opens on the station's own screen, not the lending app:
 		// the person opening it is switching the station on, and what they
 		// need to see first is whether it came up and where to reach it.
-		stop = windowClosed(log, fmt.Sprintf("http://localhost:%d/station", cfg.Port))
+		var closeWindow func()
+		stop, closeWindow = windowClosed(log, fmt.Sprintf("http://localhost:%d/station", cfg.Port))
+		// The station can stop without the window being closed — the Stop
+		// button, or Ctrl+C. Leaving it open would show a screen with nothing
+		// behind it, and leave a browser profile in the temp folder that
+		// nothing ever removes. On a station used daily for years that is a
+		// steady leak on the system drive.
+		defer closeWindow()
 	}
 
 	return waitThenStop(context.Background(), log, server, stop)
@@ -104,14 +111,15 @@ func waitThenStop(ctx context.Context, log *slog.Logger, server *app.App, stop <
 // That window is the station's switch: while it is open the station is served,
 // and closing it stops everything. Nothing else may start it — see D1 in
 // docs/plans/02.7-window-is-the-server.md.
-func windowClosed(log *slog.Logger, address string) <-chan struct{} {
+func windowClosed(log *slog.Logger, address string) (<-chan struct{}, func()) {
 	stop := make(chan struct{})
+	nothing := func() {}
 
 	profile, err := os.MkdirTemp("", "bokkie-window-")
 	if err != nil {
 		log.Warn("could not make a profile directory for the window; this console is the switch now",
 			"error", err)
-		return stop
+		return stop, nothing
 	}
 
 	process, err := winsetup.OpenWindow(address, profile)
@@ -121,14 +129,30 @@ func windowClosed(log *slog.Logger, address string) <-chan struct{} {
 		os.RemoveAll(profile)
 		log.Warn("could not open a window; this console is the station's switch now",
 			"close_this_to_stop", true, "address", address, "error", err)
-		return stop
+		return stop, nothing
 	}
 
 	log.Info("the station is open in a window; closing it stops the station", "address", address)
+
+	done := make(chan struct{})
 	go func() {
 		process.Wait()
+		close(done)
 		os.RemoveAll(profile)
 		close(stop)
 	}()
-	return stop
+
+	// Closing the other way round: the station stopped first, so the window is
+	// taken away rather than left showing a screen with nothing behind it.
+	// Waiting for the goroutine is what makes the profile removal happen before
+	// the process exits.
+	return stop, func() {
+		select {
+		case <-done:
+		default:
+			process.Kill()
+		}
+		<-done
+		os.RemoveAll(profile)
+	}
 }

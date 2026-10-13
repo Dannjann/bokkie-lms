@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 // Candidate is a data folder that might be the one holding the ledger.
@@ -46,4 +48,45 @@ func ChooseDataDir(candidates []Candidate) (string, error) {
 				"Move or rename the one that is not in use, then start Bokkie again",
 			withData[0].Path, withData[1].Path)
 	}
+}
+
+// Writable reports whether this process can actually create files in dir, by
+// creating one and removing it.
+//
+// Asking is the only way to know. On Windows the folder an older version made
+// was created by an elevated install and granted to the service account that
+// ran it; the interactive user who now opens the window may have read access
+// and nothing more. Inspecting the ACL to work that out would be reimplementing
+// the answer the filesystem will give for free.
+func Writable(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	probe := filepath.Join(dir, ".bokkie-write-test")
+	file, err := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	file.Close()
+	return os.Remove(probe)
+}
+
+// ErrAdoptedUnwritable is the upgraded station that cannot open its own ledger.
+//
+// It is its own error because it is the one failure this whole step must not
+// produce: a folder holding a year of lending, found correctly, and then not
+// openable by the person who double-clicked the program. The message says what
+// to do rather than naming a log file nobody can act on.
+func adoptedUnwritable(dir string, cause error) error {
+	return fmt.Errorf("Bokkie found its records in %s but cannot write there.\n"+
+		"\n"+
+		"That folder was made by an older version of Bokkie, which ran as a\n"+
+		"Windows service. This version runs as you, and has not been given\n"+
+		"permission to it.\n"+
+		"\n"+
+		"Nothing has been changed and no records have been lost. Either:\n"+
+		"  - right-click Bokkie and choose \"Run as administrator\" once, or\n"+
+		"  - ask the developer to move that folder.\n"+
+		"\n"+
+		"(%w)", dir, cause)
 }

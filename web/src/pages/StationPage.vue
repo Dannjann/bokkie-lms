@@ -24,7 +24,14 @@ async function load() {
   } catch (e) {
     // While stopping, a failed poll is the station going down on purpose and
     // must not be reported as a fault.
-    if (!stopping.value) error.value = (e as Error).message
+    if (!stopping.value) {
+      error.value = (e as Error).message
+      // Cleared, not left behind. Holding the last good status meant the green
+      // dot and "Bokkie is running" stayed on screen for as long as the window
+      // was open after the process had died — on the only status display the
+      // station has, to the person deciding whether the counters can work.
+      status.value = null
+    }
   }
 }
 

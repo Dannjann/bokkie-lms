@@ -8,6 +8,7 @@ import (
 
 	"github.com/Dannjann/bokkie-lms/internal/buildinfo"
 	"github.com/Dannjann/bokkie-lms/internal/diagnose"
+	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
 // Station is what the control surface needs from the running app.
@@ -50,6 +51,21 @@ func withControl(d Deps, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, controlPrefix) {
 			next.ServeHTTP(w, r)
+			return
+		}
+		// A mutating endpoint with no session behind it is reachable by any
+		// page the operator happens to open on this machine: a cross-origin
+		// form post to localhost would stop the station. Browsers label such
+		// requests, and the ones this screen makes are same-origin.
+		if r.Method != http.MethodGet && crossSite(r) {
+			d.Logger.Info("refused a control request from another site",
+				"id", RequestID(r.Context()),
+				"path", r.URL.Path,
+				"sec_fetch_site", r.Header.Get("Sec-Fetch-Site"))
+			writeJSON(w, http.StatusForbidden, errorBody{
+				Error:     "this request did not come from the station's own screen",
+				RequestID: RequestID(r.Context()),
+			})
 			return
 		}
 		if !isHostRequest(r) {
@@ -131,15 +147,39 @@ func (d Deps) handleControlStop(w http.ResponseWriter, r *http.Request) {
 // handleControlCheck runs the same checks `bokkie doctor` prints, so there is
 // one set of them and one set of words.
 func (d Deps) handleControlCheck(w http.ResponseWriter, r *http.Request) {
-	port := d.Station.Port()
+	// The real setting, read from the same store withNetworkGate reads. It was
+	// hardcoded true, which meant the screen told somebody "the other computers
+	// are allowed in — ok" on the one fault that explains why they are not, and
+	// then reported the withdrawn LAN name as a problem with a fix telling them
+	// to rebuild every counter PC's shortcut.
+	lan, lanKnown := false, false
+	if d.Settings != nil {
+		lan, lanKnown = d.Settings.Bool(settings.LANAccess), true
+	}
+
 	report := diagnose.Run(diagnose.Options{
 		Hostname:       d.Station.Hostname(),
-		Port:           port,
+		Port:           d.Station.Port(),
 		Serving:        buildinfo.Version,
 		PortOpen:       true,
-		LANAccess:      true,
-		LANAccessKnown: true,
+		LANAccess:      lan,
+		LANAccessKnown: lanKnown,
 		LocalAddresses: diagnose.LocalIPv4(),
 	})
 	writeJSON(w, http.StatusOK, report)
+}
+
+// crossSite reports whether a request came from another site.
+//
+// Sec-Fetch-Site is sent by every browser this station will meet and cannot be
+// set by page script. Its absence is treated as same-site rather than
+// cross-site: curl and the Go test client send nothing, and refusing those
+// would break the operator's own command line to defend against a browser.
+func crossSite(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+		return false
+	default:
+		return true
+	}
 }

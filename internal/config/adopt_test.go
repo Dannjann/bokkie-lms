@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -51,5 +53,40 @@ func TestTwoLedgersAreRefusedRatherThanGuessedBetween(t *testing.T) {
 func TestNoCandidatesIsAnError(t *testing.T) {
 	if _, err := ChooseDataDir(nil); err == nil {
 		t.Error("an empty candidate list produced a path")
+	}
+}
+
+// The upgraded station's worst case: its ledger is found correctly, in a
+// folder made by an elevated install of an older version, and the person who
+// double-clicked the program cannot write there. Without the probe the first
+// sign of it is "cannot open bokkie-2026-10-13.log", which names the wrong
+// problem entirely.
+func TestAnUnwritableFolderIsNoticedAndExplained(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root; every folder is writable")
+	}
+
+	dir := t.TempDir()
+	locked := filepath.Join(dir, "Bokkie")
+	if err := os.Mkdir(locked, 0o500); err != nil { // read and traverse, no write
+		t.Fatal(err)
+	}
+
+	err := Writable(locked)
+	if err == nil {
+		t.Fatal("a folder with no write permission was reported writable")
+	}
+
+	message := adoptedUnwritable(locked, err).Error()
+	for _, want := range []string{locked, "no records have been lost", "Run as administrator"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("the message is missing %q:\n%s", want, message)
+		}
+	}
+}
+
+func TestAWritableFolderPasses(t *testing.T) {
+	if err := Writable(filepath.Join(t.TempDir(), "Bokkie")); err != nil {
+		t.Errorf("a fresh folder was reported unwritable: %v", err)
 	}
 }

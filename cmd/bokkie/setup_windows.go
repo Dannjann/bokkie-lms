@@ -103,7 +103,7 @@ func guided(elevated bool, do string) (string, error) {
 	// Review Focus 4, and it is checked here rather than in the switch below so
 	// that nobody is made to approve an administrator prompt for an action that
 	// was never going to run. placeExecutable guards it a second time.
-	if state.RunningFromInstallPath && (action == actionInstall || action == actionRepair || action == actionUpdate) {
+	if state.RunningFromInstallPath && action == actionUpdate {
 		return "", winsetup.Verdict("This is the copy of Bokkie that is already installed on this computer.\n\n" +
 			"Run the file you downloaded instead. Nothing has been changed.")
 	}
@@ -113,35 +113,29 @@ func guided(elevated bool, do string) (string, error) {
 	// rather than once at the top.
 	if needsAdmin(action) && !elevated && !winsetup.IsElevated() {
 		if err := winsetup.Elevate(exe, winsetup.ElevatedArgs(nameOf(action))); err != nil {
+			// Declining the prompt for the service removal is the one refusal
+			// that must not be generic. Somebody who is told only "that did not
+			// work" goes on to start the station in its window, reads "Bokkie
+			// runs only while this window is open", and believes it — while the
+			// machine still starts the old service on every reboot.
+			if action == actionRemoveService {
+				return "", winsetup.Verdict(
+					"The old Bokkie service was NOT removed, so this computer will still\n" +
+						"start Bokkie by itself after a restart, whether or not anybody\n" +
+						"opened it.\n\n" +
+						"Run this file again and allow the prompt. Nothing else has been\n" +
+						"changed.")
+			}
 			return "", err
 		}
 		return "", errHandedOff
 	}
 
 	switch action {
-	case actionInstall, actionRepair:
-		// weighSelf decides whether this file may touch the machine at all.
-		// Its refusal is returned, not printed: printing it and carrying on is
-		// how a screen comes to say "nothing has been changed" immediately
-		// before the service is torn down and replaced.
-		if err := permitted(ctx, state, exe); err != nil {
-			return "", err
-		}
-		opts, log, closeLog, err := setupOptions()
-		if err != nil {
-			return "", err
-		}
-		defer closeLog.Close()
-
-		// The same path the USB stick's Install Bokkie.cmd takes, so both ways
-		// of installing leave the machine in the same state — Control Panel
-		// entry included. service.Install deregisters the existing service
-		// before it replaces the binary, so a failure inside here is a partial
-		// change, which installHere marks.
-		if err := installHere(log, opts); err != nil {
-			return "", err
-		}
-		return winsetup.DoneInstalled, nil
+	case actionAlreadyRunning:
+		return "Bokkie is already running on this computer.\n\n" +
+			"Look for its window — it is the one you close to stop the station.\n" +
+			"If you cannot find it, restart this computer and open Bokkie again.", nil
 
 	case actionUpdate:
 		if err := permitted(ctx, state, exe); err != nil {
@@ -170,30 +164,6 @@ func guided(elevated bool, do string) (string, error) {
 		}
 		return winsetup.DoneShortcut, nil
 
-	case actionStop:
-		opts, log, closeLog, err := setupOptions()
-		if err != nil {
-			return "", err
-		}
-		defer closeLog.Close()
-		if err := service.Stop(log, opts); err != nil {
-			return "", err
-		}
-		return "Bokkie has been stopped.\n\n" +
-			"Nobody can use it until it is started again. It will start by itself\n" +
-			"the next time this computer restarts.", nil
-
-	case actionStart:
-		opts, log, closeLog, err := setupOptions()
-		if err != nil {
-			return "", err
-		}
-		defer closeLog.Close()
-		if err := service.Start(log, opts); err != nil {
-			return "", err
-		}
-		return winsetup.DoneInstalled, nil
-
 	case actionDoctor:
 		// Deliberately needs no administrator rights and changes nothing: the
 		// moment to run this is when something is wrong, and a prompt in the
@@ -211,11 +181,6 @@ func guided(elevated bool, do string) (string, error) {
 	case actionRemoveService:
 		return "", removeOldService()
 
-	case actionUninstall:
-		if err := uninstall("", false); err != nil {
-			return "", err
-		}
-		return winsetup.DoneRemoved, nil
 	}
 	return "", nil
 }
@@ -262,12 +227,12 @@ func applyDownloadedUpdate(ctx context.Context, log *slog.Logger, exe string) er
 // permitted asks whether this file may touch the machine, and turns a refusal
 // into the error the window prints.
 //
-// One function so that install, repair and update cannot drift apart on the
-// question — the state they are in differs, the rule does not.
+// A station that is running is one with something to lose, which is the
+// distinction weighSelf's asymmetry turns on.
 func permitted(ctx context.Context, state setupState, exe string) error {
 	check, checkErr := verifySelf(ctx, nil, release.LatestBase, exe, buildinfo.Version)
 
-	proceed, notice := weighSelf(state.Installed, check, checkErr)
+	proceed, notice := weighSelf(state.Running, check, checkErr)
 	if !proceed {
 		return notice
 	}

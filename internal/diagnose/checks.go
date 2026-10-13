@@ -38,6 +38,12 @@ type Options struct {
 	// clash. Empty leaves it out rather than guessing at a path.
 	ConfigPath string
 
+	// AutoStart names anything on this computer that could start Bokkie
+	// without a person — a leftover service, a Run key, a scheduled task. The
+	// caller fills it in; this package has no business knowing what Windows
+	// can do.
+	AutoStart []string
+
 	// LookupHost resolves a name. nil means net.LookupHost.
 	LookupHost func(string) ([]string, error)
 	// LocalAddresses are this machine's own IPv4 addresses.
@@ -83,6 +89,7 @@ func Run(opts Options) Report {
 		// Nothing below can mean anything while the app itself is down.
 		return r
 	}
+	checkAutoStart(&r, opts)
 	checkLANAccess(&r, opts)
 	addresses := checkName(&r, opts)
 	checkNameReachable(&r, opts, addresses)
@@ -165,6 +172,30 @@ func checkLANAccess(r *Report, opts Options) {
 	}
 }
 
+// checkAutoStart reports anything that could start Bokkie without a person.
+//
+// Since 2.7 the station is open when somebody has opened its window and at no
+// other time. Something left behind that starts it anyway is not a small
+// untidiness: it is the station serving when everybody believes it is closed,
+// which nobody would go looking for because nothing looks wrong.
+func checkAutoStart(r *Report, opts Options) {
+	const name = "Nothing starts Bokkie on its own"
+
+	if len(opts.AutoStart) == 0 {
+		r.Add(Check{Name: name, State: OK,
+			Detail: "Bokkie runs only while its window is open"})
+		return
+	}
+	r.Add(Check{
+		Name:   name,
+		State:  Problem,
+		Detail: "this computer will start Bokkie by itself: " + strings.Join(opts.AutoStart, ", "),
+		Fix: "Run Bokkie and choose \"Remove the old Bokkie service\".\n" +
+			"Until that is done this computer serves the station after every\n" +
+			"restart, whether or not anybody opened it.",
+	})
+}
+
 // checkName asks whether the LAN name points at this machine. A name that
 // resolves somewhere else is the failure that looks exactly like a name that
 // does not resolve at all, and the two need opposite fixes.
@@ -202,7 +233,16 @@ func checkName(r *Report, opts Options) []string {
 			Detail: fmt.Sprintf("%s resolves to %s, but this computer is %s",
 				name, strings.Join(addresses, ", "), strings.Join(opts.LocalAddresses, ", ")),
 			Fix: "Another machine on this network is answering to that name.\n" +
-				"Use this computer's address instead:  http://" +
+				"Find that machine and stop Bokkie on it — it is usually a laptop\n" +
+				"Bokkie was once tried on, or an old host nobody switched off.\n" +
+				"\n" +
+				"If it has to keep that name, give this one a different one: open\n" +
+				"the settings file in Bokkie's data folder and change the line\n" +
+				"  mdns:\n    hostname: " + opts.Hostname + "\n" +
+				"to another word, then start Bokkie again. Every counter PC's\n" +
+				"shortcut has to be made again to match.\n" +
+				"\n" +
+				"Until then, use this computer's address:  http://" +
 				firstOr(opts.LocalAddresses, "<this computer's IP>") + ":" + strconv.Itoa(opts.Port),
 		})
 		return addresses
