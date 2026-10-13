@@ -55,7 +55,10 @@ func cmdServe(args []string) error {
 
 	var stop <-chan struct{} = make(chan struct{})
 	if !*noWindow {
-		stop = windowClosed(log, fmt.Sprintf("http://localhost:%d", cfg.Port))
+		// The window opens on the station's own screen, not the lending app:
+		// the person opening it is switching the station on, and what they
+		// need to see first is whether it came up and where to reach it.
+		stop = windowClosed(log, fmt.Sprintf("http://localhost:%d/station", cfg.Port))
 	}
 
 	return waitThenStop(context.Background(), log, server, stop)

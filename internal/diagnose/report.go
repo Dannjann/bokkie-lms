@@ -30,6 +30,15 @@ const (
 	Problem
 )
 
+// MarshalJSON writes the state as the word rather than the number.
+//
+// A screen that received 0, 1 or 2 would have to carry a second copy of what
+// they mean, and the two copies would disagree the first time a state was
+// added between them.
+func (s State) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + s.String() + `"`), nil
+}
+
 func (s State) String() string {
 	switch s {
 	case OK:
@@ -45,22 +54,22 @@ func (s State) String() string {
 type Check struct {
 	// Name is the question in the owner's words, not the implementation's:
 	// "the name bokkie.local points at this computer", never "mDNS A record".
-	Name  string
-	State State
+	Name  string `json:"name"`
+	State State  `json:"state"`
 	// Detail is what was actually found. It is printed either way, because
 	// "ok" lines are how somebody reads past the checks to the one that failed.
-	Detail string
+	Detail string `json:"detail,omitempty"`
 	// Fix is what to do, and is required whenever State is Problem. A check
 	// that reports a fault without saying what to do about it has moved the
 	// support call rather than removed it.
-	Fix string
+	Fix string `json:"fix,omitempty"`
 }
 
 // Report is every check, in the order they were run.
 type Report struct {
-	Checks []Check
+	Checks []Check `json:"checks"`
 	// Reach is the address that was proved to work, for the closing line.
-	Reach string
+	Reach string `json:"reach,omitempty"`
 }
 
 // Add records a check.

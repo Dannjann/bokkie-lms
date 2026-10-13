@@ -2,6 +2,7 @@ package diagnose
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -226,5 +227,24 @@ func TestAStoppedServiceIsNotReportedAsAPortClash(t *testing.T) {
 	}
 	if !strings.Contains(got.Fix, "sc start bokkie") {
 		t.Errorf("the fix does not say how to start it:\n%s", got.Fix)
+	}
+}
+
+// The screen reads these words. Numbers would mean a second copy of what they
+// mean living in TypeScript, and two copies disagree the first time a state is
+// added between them.
+func TestStatesMarshalAsWords(t *testing.T) {
+	data, err := json.Marshal(Report{Checks: []Check{
+		{Name: "a", State: OK},
+		{Name: "b", State: Note},
+		{Name: "c", State: Problem},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"state":"ok"`, `"state":"note"`, `"state":"problem"`} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("the report is missing %s:\n%s", want, data)
+		}
 	}
 }

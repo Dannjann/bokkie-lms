@@ -27,6 +27,22 @@ declare module 'vue-router' {
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // The station's own screens. Public, because the person who opens the
+    // window has not logged in and should not have to in order to see whether
+    // the station is running — and the server refuses these from any machine
+    // but the host regardless of what the browser believes.
+    {
+      path: '/station',
+      name: 'station',
+      component: () => import('@/pages/StationPage.vue'),
+      meta: { title: 'Station', public: true },
+    },
+    {
+      path: '/station/check',
+      name: 'station-check',
+      component: () => import('@/pages/StationCheckPage.vue'),
+      meta: { title: 'Check', public: true },
+    },
     {
       path: '/',
       name: 'home',
