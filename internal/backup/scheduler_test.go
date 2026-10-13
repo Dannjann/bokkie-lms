@@ -2,6 +2,8 @@ package backup
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -53,5 +55,65 @@ func TestConcurrentBackupsNeverLeaveAPartialFile(t *testing.T) {
 		if _, err := Verify(ctx, path); err != nil {
 			t.Errorf("%s does not verify; a backup was written over another: %v", path, err)
 		}
+	}
+}
+
+// A process killed mid-VACUUM used to leave a half-written file under the real
+// name — which List returns, the screen shows as the last backup taken, and
+// prune keeps while deleting a genuine older one to make room. Since 2.7 a
+// backup runs as the window closes, which is exactly when somebody holds the
+// power button.
+func TestAHalfWrittenBackupIsNeverMistakenForOne(t *testing.T) {
+	folder := t.TempDir()
+
+	// What a killed process leaves behind: the partial name, with rubbish in it.
+	partial := filepath.Join(folder, FilePrefix+"20261013-170000"+FileSuffix+partialSuffix)
+	if err := os.WriteFile(partial, []byte("half a database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := List(folder)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("List returned %v; a half-written file was offered as a backup", got)
+	}
+
+	// And the next run clears it rather than leaving it to accumulate.
+	ctx := context.Background()
+	database := openTestDB(t)
+	store, err := settings.Open(ctx, database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewScheduler(database, store, folder, discardLogger()).RunNow(ctx); err != nil {
+		t.Fatalf("RunNow: %v", err)
+	}
+	if _, err := os.Stat(partial); !os.IsNotExist(err) {
+		t.Errorf("the leftover partial is still there: %v", err)
+	}
+}
+
+// The finished file must be whole the instant it carries the real name, which
+// is what the rename buys.
+func TestAFinishedBackupVerifies(t *testing.T) {
+	ctx := context.Background()
+	database := openTestDB(t)
+	store, err := settings.Open(ctx, database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	folder := t.TempDir()
+
+	if _, err := NewScheduler(database, store, folder, discardLogger()).RunNow(ctx); err != nil {
+		t.Fatalf("RunNow: %v", err)
+	}
+	paths, err := List(folder)
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("List = %v, %v; want one backup", paths, err)
+	}
+	if _, err := Verify(ctx, paths[0]); err != nil {
+		t.Errorf("the finished backup does not verify: %v", err)
 	}
 }

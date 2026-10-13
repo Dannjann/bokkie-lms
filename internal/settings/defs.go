@@ -134,13 +134,23 @@ var (
 		Doc:     "Whether the nightly backup runs at all.",
 	}
 
-	// BackupRetention is how many backup files to keep. Fourteen daily copies
-	// is two weeks of mistakes to notice one in, which is the realistic window
-	// for "that balance has looked wrong since last week".
+	// BackupRetention is how many backup files to keep.
+	//
+	// It was fourteen, for fourteen daily copies: two weeks of mistakes to
+	// notice one in, which is the realistic window for "that balance has looked
+	// wrong since last week". Backups stopped being daily in 2.7 — the station
+	// runs while a person has its window open, so one is taken when it opens
+	// and another when it closes, and a day of ordinary use produces two. A
+	// day with a power cut in it produces four or six.
+	//
+	// Forty keeps the two weeks the number was chosen for. Counting files
+	// rather than days is what makes this necessary, and it stays that way on
+	// purpose: the folder is often a USB stick, and a count is something a
+	// person can look at and verify by eye.
 	BackupRetention = Def{
 		Key:     "backup.retention",
 		Kind:    KindInt,
-		Default: "14",
+		Default: "40",
 		Doc:     "How many backup files to keep before the oldest is deleted.",
 	}
 

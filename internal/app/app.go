@@ -369,12 +369,28 @@ func (a *App) warnOnNameCollision() {
 // and a failure is a warning: a missing backup is bad, and refusing to open the
 // station over it is worse.
 func (a *App) backupThisSession() {
+	// Skipped when there is already a recent one. A station that is opened,
+	// closed and opened again — a power cut, a reboot, somebody closing the
+	// window by mistake — would otherwise take a backup every time, and since
+	// retention counts files rather than days, a morning of restarts would
+	// prune away a fortnight of history to make room for a fortnight of
+	// identical copies.
+	if at, _ := a.LastBackup(); !at.IsZero() && time.Since(at) < openingBackupInterval {
+		a.log.Info("skipping the opening backup; a recent one already exists", "last", at)
+		return
+	}
+
 	go func() {
 		if _, err := a.backups.RunNow(context.Background()); err != nil {
 			a.log.Warn("could not take a backup at startup", "error", err)
 		}
 	}()
 }
+
+// openingBackupInterval is how recent a backup has to be for the one taken on
+// opening to be skipped. Half a day: a station opened each morning gets one,
+// and one reopened after lunch does not.
+const openingBackupInterval = 12 * time.Hour
 
 // LastBackup is when the most recent backup was taken, and its file name.
 //
@@ -401,6 +417,13 @@ func (a *App) LastBackup() (time.Time, string) {
 	return newest, newestName
 }
 
+// closingBackupGrace bounds the backup taken as the station closes.
+//
+// It is its own budget rather than the caller's: a drain is sized in seconds
+// and a VACUUM INTO of a season's lending onto a USB stick is not. Bounded all
+// the same, because a window that will not close is a window somebody kills.
+const closingBackupGrace = 5 * time.Minute
+
 // Stop drains in-flight requests, then closes the database. Requests are
 // allowed to finish rather than being cut off: a half-written response to a
 // payment entry is exactly the ambiguity this system exists to remove.
@@ -420,15 +443,6 @@ func (a *App) Stop(ctx context.Context) error {
 	a.backups.Stop()
 	a.ledgerChecks.Stop()
 
-	// A backup on the way out, after the schedule has stopped and before the
-	// database is closed. The station may have no night: it runs while a person
-	// has its window open, so the nightly job can go weeks without firing, and
-	// closing the window is the moment a day's work is finished. RunNow
-	// serialises, so this waits for an in-flight backup rather than racing it.
-	if _, err := a.backups.RunNow(context.Background()); err != nil {
-		a.log.Warn("could not take a backup on the way out", "error", err)
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, shutdownGrace)
 	defer cancel()
 
@@ -446,6 +460,24 @@ func (a *App) Stop(ctx context.Context) error {
 		a.log.Warn("in-flight requests did not finish within the grace period; closing anyway",
 			"grace", shutdownGrace)
 		shutdownErr = a.srv.Close()
+	}
+
+	// The backup goes here: after the requests have drained, not before.
+	//
+	// Both halves of that matter. Before the drain it spent the caller's whole
+	// shutdown deadline on a VACUUM, so Shutdown was reached with the budget
+	// already gone and cut every in-flight connection — a counter PC mid-
+	// payment would be severed without a response, which is exactly the
+	// ambiguity this system exists to remove. And the listener was still
+	// accepting throughout, so a payment posted during the VACUUM landed after
+	// the snapshot and was not in the backup the screen then reported.
+	//
+	// It gets its own deadline rather than the caller's, which is sized for a
+	// drain and not for copying a ledger onto a USB stick.
+	backupCtx, cancelBackup := context.WithTimeout(context.Background(), closingBackupGrace)
+	defer cancelBackup()
+	if _, err := a.backups.RunNow(backupCtx); err != nil {
+		a.log.Warn("could not take a backup on the way out", "error", err)
 	}
 
 	// The serve goroutine only returns once Shutdown or Close has run.

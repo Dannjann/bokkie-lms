@@ -131,6 +131,19 @@ func Run(ctx context.Context, database *sql.DB, opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("backup %s already exists; refusing to overwrite it", path)
 	}
 
+	// Written under a name List cannot return, and renamed into place only
+	// once it has verified.
+	//
+	// The cleanup below removes a bad file, but only if this process lives to
+	// run it — and since 2.7 a backup is taken as the window closes, which is
+	// exactly when somebody holds the power button or ends the task. A file
+	// left half-written under the real name would be the newest backup in the
+	// folder: shown on the screen as the last one taken, kept by prune, and a
+	// genuine older backup deleted to make room for it.
+	partial := path + partialSuffix
+	removePartials(opts.Folder)
+	defer os.Remove(partial)
+
 	want, err := countRows(ctx, database)
 	if err != nil {
 		return Result{}, fmt.Errorf("count rows before backup: %w", err)
@@ -140,25 +153,25 @@ func Run(ctx context.Context, database *sql.DB, opts Options) (Result, error) {
 	// file, taking the same snapshot a reader would see. It cannot run inside a
 	// transaction, which is why the API route for it is registered as
 	// non-transactional.
-	if _, err := database.ExecContext(ctx, `VACUUM INTO ?`, path); err != nil {
+	if _, err := database.ExecContext(ctx, `VACUUM INTO ?`, partial); err != nil {
 		return Result{}, fmt.Errorf("write backup %s: %w", path, err)
 	}
 
-	got, err := Verify(ctx, path)
+	// A backup that failed verification is worse than no backup, because it
+	// will be trusted. The deferred remove above takes it away; it never had
+	// the real name to begin with.
+	got, err := Verify(ctx, partial)
 	if err != nil {
-		// A backup that failed verification is worse than no backup, because
-		// it will be trusted. Remove it rather than leave it in the folder
-		// looking like the others.
-		if rmErr := os.Remove(path); rmErr != nil {
-			return Result{}, fmt.Errorf("%w (and the unverified file %s could not be removed: %v)", err, path, rmErr)
-		}
 		return Result{}, err
 	}
 	if err := compareCounts(want, got); err != nil {
-		if rmErr := os.Remove(path); rmErr != nil {
-			return Result{}, fmt.Errorf("%w (and the bad file %s could not be removed: %v)", err, path, rmErr)
-		}
 		return Result{}, err
+	}
+
+	// The last step, and the only one that makes this a backup. A rename
+	// within a folder is atomic: the file either is not there or is whole.
+	if err := os.Rename(partial, path); err != nil {
+		return Result{}, fmt.Errorf("put the finished backup at %s: %w", path, err)
 	}
 
 	info, err := os.Stat(path)
@@ -283,6 +296,27 @@ func List(folder string) ([]string, error) {
 	// stick and back would have a useless mtime.
 	sort.Strings(files)
 	return files, nil
+}
+
+// partialSuffix marks a backup that is still being written. List requires a
+// name ending in FileSuffix, so a file carrying this one can never be returned
+// as a backup, counted by prune, or shown as the last one taken.
+const partialSuffix = ".partial"
+
+// removePartials clears what a killed process left behind. They are never
+// valid: a partial that survived its own run is by definition one whose run
+// did not finish.
+func removePartials(folder string) {
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() && strings.HasPrefix(name, FilePrefix) && strings.HasSuffix(name, partialSuffix) {
+			os.Remove(filepath.Join(folder, name))
+		}
+	}
 }
 
 // prune deletes the oldest files beyond the retention count.
