@@ -38,6 +38,12 @@ type Options struct {
 	// clash. Empty leaves it out rather than guessing at a path.
 	ConfigPath string
 
+	// DataDir is the folder holding the records, and DataDirErr is why it
+	// could not be settled on. A station whose folder cannot be used never
+	// starts at all, so this is asked before anything else.
+	DataDir    string
+	DataDirErr error
+
 	// AutoStart names anything on this computer that could start Bokkie
 	// without a person — a leftover service, a Run key, a scheduled task. The
 	// caller fills it in; this package has no business knowing what Windows
@@ -85,6 +91,14 @@ func (o Options) Name() string { return o.Hostname + ".local" }
 func Run(opts Options) Report {
 	var r Report
 
+	// First, because everything below assumes a station that can read and
+	// write its own records. One that cannot never starts, and a report that
+	// said only "nothing answered" would describe the symptom and name nothing
+	// about the cause — which is what sent somebody looking at the network for
+	// a problem that was a folder permission.
+	if !checkDataFolder(&r, opts) {
+		return r
+	}
 	if !checkServing(&r, opts) {
 		// Nothing below can mean anything while the app itself is down.
 		return r
@@ -95,6 +109,31 @@ func Run(opts Options) Report {
 	checkNameReachable(&r, opts, addresses)
 	checkBarePort(&r, opts)
 	return r
+}
+
+// checkDataFolder asks whether Bokkie can use the folder its records are in.
+func checkDataFolder(r *Report, opts Options) bool {
+	const name = "Bokkie can read and write its records"
+
+	if opts.DataDirErr != nil {
+		r.Add(Check{
+			Name:   name,
+			State:  Problem,
+			Detail: "Bokkie cannot use its data folder, so it never starts",
+			// The error already carries the folder and the command. Repeating
+			// it here would be two versions of one instruction, and they would
+			// drift.
+			Fix: opts.DataDirErr.Error(),
+		})
+		return false
+	}
+
+	where := opts.DataDir
+	if where == "" {
+		where = "the default folder for this computer"
+	}
+	r.Add(Check{Name: name, State: OK, Detail: where})
+	return true
 }
 
 // checkServing is the first question: is the app running on this machine at

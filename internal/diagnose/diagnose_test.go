@@ -55,17 +55,20 @@ func TestNothingElseIsCheckedWhileTheAppIsDown(t *testing.T) {
 		LogDir:     `C:\ProgramData\Bokkie\logs`,
 	})
 
-	if len(r.Checks) != 1 {
-		t.Fatalf("ran %d checks with the app down, want 1:\n%s", len(r.Checks), r)
+	// The data folder is asked about first and passed, so the serving check is
+	// the last one run: nothing below it is meaningful while the app is down.
+	if last := r.Checks[len(r.Checks)-1]; last.Name != "Bokkie is running on this computer" {
+		t.Fatalf("checks continued past a station that is down; last was %q:\n%s", last.Name, r)
 	}
 	if r.Healthy() {
 		t.Error("a station with nothing running was reported healthy")
 	}
 	// The hint is the caller's, because it differs per platform — a report
 	// telling a Mac to run `sc start bokkie` is worse than one saying nothing.
+	serving := checkNamed(t, r, "Bokkie is running on this computer")
 	for _, want := range []string{"sc start bokkie", `C:\ProgramData\Bokkie\logs`} {
-		if !strings.Contains(r.Checks[0].Fix, want) {
-			t.Errorf("the fix is missing %q:\n%s", want, r.Checks[0].Fix)
+		if !strings.Contains(serving.Fix, want) {
+			t.Errorf("the fix is missing %q:\n%s", want, serving.Fix)
 		}
 	}
 }
@@ -195,7 +198,7 @@ func TestAPortClashIsNotReportedAsAStoppedService(t *testing.T) {
 		ConfigPath: `C:\ProgramData\Bokkie\config.yaml`,
 	})
 
-	got := r.Checks[0]
+	got := checkNamed(t, r, "Bokkie is running on this computer")
 	if got.State != Problem {
 		t.Fatalf("state = %v, want a problem", got.State)
 	}
@@ -221,7 +224,7 @@ func TestAStoppedServiceIsNotReportedAsAPortClash(t *testing.T) {
 		ConfigPath: `C:\ProgramData\Bokkie\config.yaml`,
 	})
 
-	got := r.Checks[0]
+	got := checkNamed(t, r, "Bokkie is running on this computer")
 	if strings.Contains(got.Fix, "Another program") {
 		t.Errorf("a stopped service was reported as a port clash:\n%s", got.Fix)
 	}
@@ -280,5 +283,43 @@ func TestALeftoverAutoStartIsReportedAsAProblem(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("the report does not name the leftover or what to do about it:\n%s", got)
+	}
+}
+
+// checkNamed finds a check by its name. Position stopped meaning anything once
+// the data-folder question moved to the front, and a test that indexes into
+// the list breaks every time a check is added ahead of it.
+func checkNamed(t *testing.T, r Report, name string) Check {
+	t.Helper()
+	for _, c := range r.Checks {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("no check named %q in:\n%s", name, r)
+	return Check{}
+}
+
+// A station whose folder cannot be used never starts, and a report that said
+// only "nothing answered" described the symptom and named nothing about the
+// cause — which is what sent somebody looking at the network for a problem
+// that was a folder permission.
+func TestAnUnusableDataFolderIsTheOnlyThingReported(t *testing.T) {
+	r := Run(Options{
+		Hostname: "bokkie", Port: 8080,
+		DataDirErr: errors.New("Bokkie found its records in C:\\ProgramData\\Bokkie but cannot write there. Run icacls"),
+		ServingErr: errors.New("connection refused"),
+	})
+
+	if len(r.Checks) != 1 {
+		t.Fatalf("ran %d checks with an unusable data folder, want only the first:\n%s", len(r.Checks), r)
+	}
+	if r.Healthy() {
+		t.Error("a station that cannot read its own records was reported healthy")
+	}
+	for _, want := range []string{"ProgramData", "icacls"} {
+		if !strings.Contains(r.Checks[0].Fix, want) {
+			t.Errorf("the fix is missing %q:\n%s", want, r.Checks[0].Fix)
+		}
 	}
 }

@@ -47,6 +47,12 @@ func diagnoseHost(dataDir string) diagnose.Report {
 	if err == nil {
 		opts.Hostname = cfg.MDNS.Hostname
 		opts.Port = cfg.Port
+		opts.DataDir = cfg.DataDir
+	} else {
+		// The most likely reason a station is not answering, and the one it
+		// could not previously explain: the folder holding the records cannot
+		// be used, so nothing ever started.
+		opts.DataDirErr = err
 	}
 	opts.LocalAddresses = diagnose.LocalIPv4()
 	opts.StartHint = startHint()
