@@ -7,11 +7,6 @@ import (
 	"path/filepath"
 )
 
-// databaseName is what a data folder holds when it is the one in use. It is
-// repeated here rather than taken from Config, because this runs before there
-// is a Config to take it from.
-const databaseName = "bokkie.db"
-
 // defaultDataDir is %LOCALAPPDATA%\Bokkie, or wherever the ledger actually is.
 //
 // It used to be C:\ProgramData\Bokkie, machine-wide, because the service ran as
@@ -54,11 +49,13 @@ func defaultDataDir() (string, error) {
 	// file open is the log, and "cannot open bokkie-2026-10-13.log" is not a
 	// sentence anybody can act on when the real problem is a year of lending
 	// in a folder this user may not touch.
-	if chosen != preferred && preferred != "" {
-		if err := Writable(chosen); err != nil {
-			return "", adoptedUnwritable(chosen, err)
-		}
+	// Checked whichever folder was chosen, not only an adopted one. A folder
+	// this user cannot write is a station that cannot open, and where it came
+	// from makes no difference to the person standing in front of it.
+	if err := Writable(chosen); err != nil {
+		return "", adoptedUnwritable(chosen, err)
 	}
+	_ = preferred
 	return chosen, nil
 }
 
@@ -72,6 +69,6 @@ func alreadyListed(candidates []Candidate, path string) bool {
 }
 
 func hasDatabase(dir string) bool {
-	info, err := os.Stat(filepath.Join(dir, databaseName))
+	info, err := os.Stat(filepath.Join(dir, DatabaseName))
 	return err == nil && !info.IsDir()
 }

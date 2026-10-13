@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/app"
+	"github.com/Dannjann/bokkie-lms/internal/config"
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
 
@@ -38,6 +40,12 @@ func cmdServe(args []string) error {
 
 	cfg, log, closeLog, err := bootstrap(*dataDir, true)
 	if err != nil {
+		// A data folder this user cannot write is not a fault to report to the
+		// developer: it is one command for the person standing there. Said as
+		// a verdict, the window prints it and nothing else.
+		if errors.Is(err, config.ErrDataFolderUnwritable) {
+			return winsetup.Verdict(err.Error())
+		}
 		return err
 	}
 	defer closeLog.Close()

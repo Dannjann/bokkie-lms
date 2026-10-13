@@ -50,43 +50,86 @@ func ChooseDataDir(candidates []Candidate) (string, error) {
 	}
 }
 
-// Writable reports whether this process can actually create files in dir, by
-// creating one and removing it.
+// Writable reports whether this process can actually use dir as a data folder,
+// by trying the two things SQLite will need: a new file in the folder, and a
+// write to the database already in it.
 //
-// Asking is the only way to know. On Windows the folder an older version made
-// was created by an elevated install and granted to the service account that
-// ran it; the interactive user who now opens the window may have read access
-// and nothing more. Inspecting the ACL to work that out would be reimplementing
-// the answer the filesystem will give for free.
+// Both halves are necessary, and the second one is the half that was missing.
+// On Windows, C:\ProgramData lets a standard user create new files by
+// inheritance — so a probe that only created one passed — while bokkie.db,
+// written by an elevated install of an older version and granted to the
+// service account that ran it, stayed read-only to the person who now opens
+// the window. The station then got as far as opening the database and failed
+// on the first write with "attempt to write a readonly database", naming no
+// folder and no cause.
+//
+// Asking is the only way to know. Inspecting the ACL to work it out would be
+// reimplementing the answer the filesystem gives for free.
 func Writable(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
+
 	probe := filepath.Join(dir, ".bokkie-write-test")
 	file, err := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
 	file.Close()
-	return os.Remove(probe)
+	if err := os.Remove(probe); err != nil {
+		return err
+	}
+
+	// The database itself, if there is one. Opened for writing and closed
+	// without writing anything: the open is the whole question.
+	database := filepath.Join(dir, DatabaseName)
+	if _, err := os.Stat(database); err != nil {
+		return nil
+	}
+	existing, err := os.OpenFile(database, os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("the records file %s cannot be written to: %w", database, err)
+	}
+	return existing.Close()
 }
 
-// ErrAdoptedUnwritable is the upgraded station that cannot open its own ledger.
+// DatabaseName is the file every data folder is identified by. It is a
+// constant here because the folder has to be chosen before there is a Config
+// to ask.
+const DatabaseName = "bokkie.db"
+
+// ErrDataFolderUnwritable marks the upgraded station that cannot open its own
+// ledger.
+//
+// It is a sentinel so the window can tell this apart from a fault. "This did
+// not finish, send the developer everything printed above" is the wrong thing
+// to say about a problem whose fix is one command the person can run — and it
+// is what buries that command under two paragraphs telling them to phone.
+var ErrDataFolderUnwritable = errors.New("the data folder cannot be written to")
+
+// adoptedUnwritable is the upgraded station that cannot open its own ledger.
 //
 // It is its own error because it is the one failure this whole step must not
 // produce: a folder holding a year of lending, found correctly, and then not
 // openable by the person who double-clicked the program. The message says what
 // to do rather than naming a log file nobody can act on.
 func adoptedUnwritable(dir string, cause error) error {
-	return fmt.Errorf("Bokkie found its records in %s but cannot write there.\n"+
+	return fmt.Errorf("%w.\n\n"+
+		"Bokkie found its records in %s but cannot write there.\n"+
 		"\n"+
 		"That folder was made by an older version of Bokkie, which ran as a\n"+
-		"Windows service. This version runs as you, and has not been given\n"+
-		"permission to it.\n"+
+		"Windows service. This version runs as you, and that account has not\n"+
+		"been given permission to it.\n"+
 		"\n"+
-		"Nothing has been changed and no records have been lost. Either:\n"+
-		"  - right-click Bokkie and choose \"Run as administrator\" once, or\n"+
-		"  - ask the developer to move that folder.\n"+
+		"Nothing has been changed and no records have been lost.\n"+
 		"\n"+
-		"(%w)", dir, cause)
+		"To fix it, open Command Prompt as an administrator — right-click it\n"+
+		"and choose \"Run as administrator\" — and run this one line:\n"+
+		"\n"+
+		"    icacls \"%s\" /grant \"%%USERNAME%%\":(OI)(CI)M /T\n"+
+		"\n"+
+		"Then open Bokkie again the normal way. It does not need an\n"+
+		"administrator after that.\n"+
+		"\n"+
+		"(%w)", ErrDataFolderUnwritable, dir, dir, cause)
 }
