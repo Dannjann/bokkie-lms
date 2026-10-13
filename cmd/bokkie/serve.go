@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/app"
+	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
 
 // shutdownWait bounds the drain. It is longer than any request this system
@@ -45,11 +47,18 @@ func cmdServe(args []string) error {
 		return err
 	}
 
-	// Task 2 replaces this with a channel the window's own closing closes.
-	stop := make(chan struct{})
-	_ = noWindow
+	// Start serving before opening the window, so the window has something to
+	// load rather than a connection error the person has to refresh past.
+	if err := server.Start(); err != nil {
+		return err
+	}
 
-	return serveUntil(context.Background(), log, server, stop)
+	var stop <-chan struct{} = make(chan struct{})
+	if !*noWindow {
+		stop = windowClosed(log, fmt.Sprintf("http://localhost:%d", cfg.Port))
+	}
+
+	return waitThenStop(context.Background(), log, server, stop)
 }
 
 // serveUntil serves until something says to stop, then shuts down cleanly.
@@ -62,7 +71,12 @@ func serveUntil(ctx context.Context, log *slog.Logger, server *app.App, stop <-c
 	if err := server.Start(); err != nil {
 		return err
 	}
+	return waitThenStop(ctx, log, server, stop)
+}
 
+// waitThenStop is serveUntil without the start, for the caller that has already
+// started the server because it needed an address to open a window on.
+func waitThenStop(ctx context.Context, log *slog.Logger, server *app.App, stop <-chan struct{}) error {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(signals)
@@ -78,4 +92,38 @@ func serveUntil(ctx context.Context, log *slog.Logger, server *app.App, stop <-c
 	shutdown, cancel := context.WithTimeout(context.Background(), shutdownWait)
 	defer cancel()
 	return server.Stop(shutdown)
+}
+
+// windowClosed closes when the browser window the station was opened in exits.
+//
+// That window is the station's switch: while it is open the station is served,
+// and closing it stops everything. Nothing else may start it — see D1 in
+// docs/plans/02.7-window-is-the-server.md.
+func windowClosed(log *slog.Logger, address string) <-chan struct{} {
+	stop := make(chan struct{})
+
+	profile, err := os.MkdirTemp("", "bokkie-window-")
+	if err != nil {
+		log.Warn("could not make a profile directory for the window; this console is the switch now",
+			"error", err)
+		return stop
+	}
+
+	process, err := winsetup.OpenWindow(address, profile)
+	if err != nil {
+		// No browser is not a reason to refuse to serve. The console stays the
+		// switch, and the person is told which window to close.
+		os.RemoveAll(profile)
+		log.Warn("could not open a window; this console is the station's switch now",
+			"close_this_to_stop", true, "address", address, "error", err)
+		return stop
+	}
+
+	log.Info("the station is open in a window; closing it stops the station", "address", address)
+	go func() {
+		process.Wait()
+		os.RemoveAll(profile)
+		close(stop)
+	}()
+	return stop
 }
