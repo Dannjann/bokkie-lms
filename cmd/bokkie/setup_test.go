@@ -28,27 +28,71 @@ func actions(choices []setupChoice) []setupAction {
 	return out
 }
 
+// The hazard this guards got bigger, not smaller. There is no install any
+// more, but "Start Bokkie here" on a counter PC serves a second station with
+// its own empty ledger — so the shortcut keeps its place at the top.
 func TestMenuOffersTheShortcutFirstOnAMachineWithNothingInstalled(t *testing.T) {
 	got := menuFor(setupState{ThisVersion: "v1.0.0"})
 	if got[0].Action != actionShortcut {
-		t.Errorf("first choice = %v, want the shortcut: a counter PC must not be led into installing a second host", got[0].Action)
+		t.Errorf("first choice = %v, want the shortcut: a counter PC must not be led into serving its own empty ledger", got[0].Action)
 	}
 	if got[0].NeedsAdmin {
 		t.Error("the shortcut asked for administrator rights; it writes to one desktop and must not")
 	}
 }
 
-// Running the same version again is a repair, not an update. Offering "update
-// v1.0.0 to v1.0.0" is how somebody concludes the file they downloaded is wrong.
-func TestMenuCallsTheSameVersionARepair(t *testing.T) {
-	same := menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"})
-	if same[0].Action != actionRepair {
-		t.Errorf("first choice = %v, want a repair when the versions match", same[0].Action)
+// Starting the station opens a window and binds a port. Asking the person at a
+// counter PC for an administrator password to do that is asking for one they
+// do not have.
+func TestStartingTheStationNeedsNoPassword(t *testing.T) {
+	if needsAdmin(actionServe) {
+		t.Error("starting the station asked for administrator rights")
+	}
+	if !contains(actions(menuFor(setupState{ThisVersion: "v1.0.0"})), actionServe) {
+		t.Error("a machine with nothing on it was not offered a way to start the station")
+	}
+}
+
+// There is no install in 2.7: a person opening the window is the only way the
+// station is ever served.
+func TestTheMenuNoLongerOffersAnInstall(t *testing.T) {
+	for _, state := range []setupState{
+		{ThisVersion: "v1.0.0"},
+		{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"},
+	} {
+		if contains(actions(menuFor(state)), actionInstall) {
+			t.Errorf("state %+v was offered an install, which would register a service that starts on its own", state)
+		}
+	}
+}
+
+// The leftover from a 2.6 install starts the station without anybody asking,
+// so it is offered for removal wherever it is found.
+func TestTheOldServiceIsOfferedForRemovalWhenPresent(t *testing.T) {
+	without := actions(menuFor(setupState{ThisVersion: "v1.0.0"}))
+	if contains(without, actionRemoveService) {
+		t.Error("a machine with no old service was offered to remove one")
 	}
 
-	newer := menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.1.0"})
-	if newer[0].Action != actionUpdate {
-		t.Errorf("first choice = %v, want an update when the file is a different version", newer[0].Action)
+	with := actions(menuFor(setupState{ThisVersion: "v1.0.0", OldServiceInstalled: true}))
+	if !contains(with, actionRemoveService) {
+		t.Error("a machine whose old service still starts on its own was not offered to remove it")
+	}
+}
+
+// Running the same version again is a repair, not an update. Offering "update
+// v1.0.0 to v1.0.0" is how somebody concludes the file they downloaded is wrong.
+// Position stopped mattering once the station choices moved to the top, so
+// this asks which of the two is present rather than which is first.
+func TestMenuCallsTheSameVersionARepair(t *testing.T) {
+	same := actions(menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.0.0"}))
+	if !contains(same, actionRepair) || contains(same, actionUpdate) {
+		t.Errorf("menu = %v, want a repair and no update when the versions match", same)
+	}
+
+	newer := actions(menuFor(setupState{Installed: true, InstalledVersion: "v1.0.0", ThisVersion: "v1.1.0"}))
+	if !contains(newer, actionUpdate) || contains(newer, actionRepair) {
+		t.Errorf("menu = %v, want an update and no repair when the file is a different version", newer)
 	}
 }
 
@@ -81,7 +125,7 @@ func TestDescribeInstallationCountsASilentBinaryAsInstalled(t *testing.T) {
 	if !state.Installed {
 		t.Error("a binary at the install path that is not answering was reported as not installed")
 	}
-	if menuFor(state)[0].Action != actionRepair {
+	if !contains(actions(menuFor(state)), actionRepair) {
 		t.Error("a failed install was not offered a repair")
 	}
 }

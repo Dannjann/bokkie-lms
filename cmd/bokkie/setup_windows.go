@@ -86,6 +86,7 @@ func guided(elevated bool, do string) (string, error) {
 	}
 	serving, servingErr := service.ServingVersion(cfg.Port)
 	state := describeInstallation(exe, installed, serving, servingErr)
+	state.OldServiceInstalled = oldServiceInstalled(cfg)
 
 	// The elevated child was told what to do and must not ask again: the
 	// person answered that question in the window that raised the prompt.
@@ -201,6 +202,15 @@ func guided(elevated bool, do string) (string, error) {
 		fmt.Print(diagnoseHost(""))
 		return "", nil
 
+	case actionServe:
+		// The station runs here, in this window, until it is closed. Nothing
+		// is installed and nothing is registered — a person opening this is
+		// the only way the station is ever served.
+		return "", cmdServe(nil)
+
+	case actionRemoveService:
+		return "", removeOldService()
+
 	case actionUninstall:
 		if err := uninstall("", false); err != nil {
 			return "", err
@@ -288,4 +298,62 @@ func copyTo(dst, src string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// oldServiceInstalled reports whether a 2.6 install left a service behind.
+//
+// Such a service starts the station on its own when the computer restarts,
+// which is the one thing this step exists to stop, so a machine still carrying
+// one is offered its removal wherever it appears in the menu.
+func oldServiceInstalled(cfg config.Config) bool {
+	installed, err := service.IsInstalled(service.Options{
+		DataDir: cfg.DataDir,
+		Port:    cfg.Port,
+		LogDir:  cfg.LogDir(),
+	})
+	return err == nil && installed
+}
+
+// removeOldService takes away the service a 2.6 install left behind.
+//
+// Without this the one machine being upgraded is the one machine that still
+// starts on its own — the hard requirement violated on the only host there is.
+func removeOldService() error {
+	opts, log, closeLog, err := setupOptions()
+	if err != nil {
+		return err
+	}
+	defer closeLog.Close()
+
+	installed, err := service.IsInstalled(opts)
+	if err != nil {
+		return err
+	}
+	if !installed {
+		fmt.Println()
+		fmt.Println("There is no Bokkie service on this computer. Nothing to remove.")
+		return nil
+	}
+
+	fmt.Println()
+	fmt.Println("This computer still has the older Bokkie installed as a Windows service,")
+	fmt.Println("which starts on its own when the computer restarts. This version runs")
+	fmt.Println("only while its window is open, so that service is in the way.")
+	fmt.Println()
+
+	if err := service.Uninstall(log, opts); err != nil {
+		// The person has to know the old one is still there, or they will
+		// believe the station only runs when they open it while it does not.
+		fmt.Println("The old service was NOT removed, so this computer will still start")
+		fmt.Println("Bokkie by itself after a restart. Run this file again as an")
+		fmt.Println("administrator and choose the same option.")
+		return err
+	}
+	if err := winsetup.Deregister(); err != nil {
+		log.Warn("the service is gone but the Add/Remove Programs entry is not", "error", err)
+	}
+
+	fmt.Println("The old service has been removed. Bokkie now runs only while its window")
+	fmt.Println("is open, and nothing starts it on its own.")
+	return nil
 }

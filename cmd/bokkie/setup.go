@@ -29,6 +29,10 @@ type setupState struct {
 	// RunningFromInstallPath is the person having double-clicked the copy in
 	// Program Files rather than the one they downloaded.
 	RunningFromInstallPath bool
+
+	// OldServiceInstalled is a service left behind by a 2.6 install, which
+	// starts the station on its own and must not.
+	OldServiceInstalled bool
 }
 
 type setupAction int
@@ -42,6 +46,8 @@ const (
 	actionStop
 	actionStart
 	actionDoctor
+	actionServe
+	actionRemoveService
 	actionQuit
 )
 
@@ -56,13 +62,18 @@ type setupChoice struct {
 // it. The shortcut is deliberately absent: it writes one file to one desktop,
 // and a counter PC is where it is usually run, by somebody who does not have an
 // administrator password and should not need one.
+// adminActions are the choices that change this computer for everyone who uses
+// it. Starting the station is deliberately absent: it opens a window and binds
+// a port, and asking a counter PC's user for an administrator password to do
+// that is asking for one they do not have.
 var adminActions = map[setupAction]bool{
-	actionInstall:   true,
-	actionUpdate:    true,
-	actionRepair:    true,
-	actionUninstall: true,
-	actionStop:      true,
-	actionStart:     true,
+	actionInstall:       true,
+	actionUpdate:        true,
+	actionRepair:        true,
+	actionUninstall:     true,
+	actionStop:          true,
+	actionStart:         true,
+	actionRemoveService: true,
 }
 
 // needsAdmin is read both when the menu is built and when a choice is
@@ -82,13 +93,22 @@ func menuFor(state setupState) []setupChoice {
 	shortcut := choice(actionShortcut, "Put a Bokkie shortcut on this computer's desktop")
 	closeIt := choice(actionQuit, "Close")
 
+	// Starting the station is first and installing is gone. Bokkie runs while
+	// its window is open and only then — a person opening it is the only way
+	// the station is ever served, which is a hard requirement rather than a
+	// default. See D1 in docs/plans/02.7-window-is-the-server.md.
+	station := []setupChoice{
+		shortcut,
+		choice(actionServe, "Start Bokkie here — this makes this computer the host (runs while this window is open)"),
+		choice(actionDoctor, "Check what is wrong (changes nothing)"),
+	}
+	if state.OldServiceInstalled {
+		station = append(station, choice(actionRemoveService,
+			"Remove the old Bokkie service (it starts on its own, and should not)"))
+	}
+
 	if !state.Installed {
-		return []setupChoice{
-			shortcut,
-			choice(actionInstall, "Install Bokkie on this computer (this makes it the host)"),
-			choice(actionDoctor, "Check what is wrong (changes nothing)"),
-			closeIt,
-		}
+		return append(station, closeIt)
 	}
 
 	var first setupChoice
@@ -112,14 +132,12 @@ func menuFor(state setupState) []setupChoice {
 		power = choice(actionStart, "Start Bokkie (it is installed here but not answering)")
 	}
 
-	return []setupChoice{
+	return append(station,
 		first,
 		power,
-		shortcut,
-		choice(actionDoctor, "Check why Bokkie cannot be reached (changes nothing)"),
 		choice(actionUninstall, "Remove Bokkie from this computer (the data folder is kept)"),
 		closeIt,
-	}
+	)
 }
 
 // describeInstallation works out what this machine already has.
@@ -165,14 +183,16 @@ func fileExists(path string) bool {
 // reads them, and a disagreement between the two would be a window that
 // silently does the wrong thing.
 var actionNames = map[setupAction]string{
-	actionInstall:   "install",
-	actionUpdate:    "update",
-	actionRepair:    "repair",
-	actionShortcut:  "shortcut",
-	actionUninstall: "uninstall",
-	actionStop:      "stop",
-	actionStart:     "start",
-	actionDoctor:    "doctor",
+	actionInstall:       "install",
+	actionUpdate:        "update",
+	actionRepair:        "repair",
+	actionShortcut:      "shortcut",
+	actionUninstall:     "uninstall",
+	actionStop:          "stop",
+	actionStart:         "start",
+	actionDoctor:        "doctor",
+	actionServe:         "serve",
+	actionRemoveService: "remove-service",
 }
 
 func nameOf(a setupAction) string { return actionNames[a] }
