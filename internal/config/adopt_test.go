@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,7 +80,7 @@ func TestAnUnwritableFolderIsNoticedAndExplained(t *testing.T) {
 	}
 
 	message := adoptedUnwritable(locked, err).Error()
-	for _, want := range []string{locked, "no records have been lost", "Run as administrator"} {
+	for _, want := range []string{locked, "no records have been lost", "Let Bokkie fix this"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("the message is missing %q:\n%s", want, message)
 		}
@@ -127,7 +128,7 @@ func TestAWritableFolderHoldingAReadOnlyDatabaseIsNotWritable(t *testing.T) {
 
 	// And the message a person reads names the folder and the one command.
 	message := adoptedUnwritable(dir, err).Error()
-	for _, want := range []string{dir, "icacls", "no records have been lost"} {
+	for _, want := range []string{dir, "Let Bokkie fix this", "no records have been lost"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("the message is missing %q:\n%s", want, message)
 		}
@@ -156,5 +157,27 @@ func TestTheUnwritableFolderCarriesItsSentinel(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "access is denied") {
 		t.Errorf("the cause was lost: %v", err)
+	}
+}
+
+// The window offers to fix this, and the thing doing the fixing needs the path
+// rather than a paragraph with the path somewhere inside it.
+func TestTheUnwritableErrorHandsBackItsFolder(t *testing.T) {
+	err := adoptedUnwritable(`C:\ProgramData\Bokkie`, errors.New("access is denied"))
+
+	dir, ok := UnwritableFolder(err)
+	if !ok {
+		t.Fatal("UnwritableFolder did not recognise the error it was made for")
+	}
+	if dir != `C:\ProgramData\Bokkie` {
+		t.Errorf("folder = %q, want the one that could not be written", dir)
+	}
+
+	// And through a wrap, which is how it reaches the window.
+	if _, ok := UnwritableFolder(fmt.Errorf("load config: %w", err)); !ok {
+		t.Error("the folder was lost when the error was wrapped")
+	}
+	if _, ok := UnwritableFolder(errors.New("something else entirely")); ok {
+		t.Error("an unrelated error was reported as an unwritable folder")
 	}
 }

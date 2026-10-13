@@ -107,14 +107,21 @@ const DatabaseName = "bokkie.db"
 // is what buries that command under two paragraphs telling them to phone.
 var ErrDataFolderUnwritable = errors.New("the data folder cannot be written to")
 
-// adoptedUnwritable is the upgraded station that cannot open its own ledger.
+// UnwritableError is the upgraded station that cannot open its own ledger, and
+// the folder it happened to.
 //
-// It is its own error because it is the one failure this whole step must not
-// produce: a folder holding a year of lending, found correctly, and then not
-// openable by the person who double-clicked the program. The message says what
-// to do rather than naming a log file nobody can act on.
-func adoptedUnwritable(dir string, cause error) error {
-	return fmt.Errorf("%w.\n\n"+
+// Typed, rather than a formatted string, because the window offers to fix it —
+// and the thing doing the fixing needs the path, not a paragraph with the path
+// somewhere inside it.
+type UnwritableError struct {
+	Dir   string
+	Cause error
+}
+
+func (e *UnwritableError) Unwrap() error { return ErrDataFolderUnwritable }
+
+func (e *UnwritableError) Error() string {
+	return fmt.Sprintf("%s.\n\n"+
 		"Bokkie found its records in %s but cannot write there.\n"+
 		"\n"+
 		"That folder was made by an older version of Bokkie, which ran as a\n"+
@@ -123,13 +130,28 @@ func adoptedUnwritable(dir string, cause error) error {
 		"\n"+
 		"Nothing has been changed and no records have been lost.\n"+
 		"\n"+
-		"To fix it, open Command Prompt as an administrator — right-click it\n"+
-		"and choose \"Run as administrator\" — and run this one line:\n"+
+		"Run Bokkie again and choose \"Let Bokkie fix this\" — it will ask for\n"+
+		"permission once and then open normally.\n"+
 		"\n"+
-		"    icacls \"%s\" /grant \"%%USERNAME%%\":(OI)(CI)M /T\n"+
-		"\n"+
-		"Then open Bokkie again the normal way. It does not need an\n"+
-		"administrator after that.\n"+
-		"\n"+
-		"(%w)", ErrDataFolderUnwritable, dir, dir, cause)
+		"(%v)", ErrDataFolderUnwritable, e.Dir, e.Cause)
+}
+
+// UnwritableFolder returns the folder an error like this is about, and whether
+// it was one.
+func UnwritableFolder(err error) (string, bool) {
+	var unwritable *UnwritableError
+	if errors.As(err, &unwritable) {
+		return unwritable.Dir, true
+	}
+	return "", false
+}
+
+// adoptedUnwritable is the upgraded station that cannot open its own ledger.
+//
+// It is its own error because it is the one failure this whole step must not
+// produce: a folder holding a year of lending, found correctly, and then not
+// openable by the person who double-clicked the program. The message says what
+// to do rather than naming a log file nobody can act on.
+func adoptedUnwritable(dir string, cause error) error {
+	return &UnwritableError{Dir: dir, Cause: cause}
 }

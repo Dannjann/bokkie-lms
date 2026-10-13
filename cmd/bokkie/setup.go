@@ -18,6 +18,12 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
 
+// defaultPort is where the station listens unless the settings file says
+// otherwise. It is repeated here because the window has to say something
+// sensible even when that file cannot be read, which is the case the repair
+// below exists for.
+const defaultPort = 8080
+
 // setupState is what the guided window knows about this machine before it
 // offers anything.
 type setupState struct {
@@ -38,6 +44,12 @@ type setupState struct {
 	// OldServiceInstalled is a service left behind by a 2.6 install, which
 	// starts the station on its own and must not.
 	OldServiceInstalled bool
+
+	// DataFolder is where the records are, and DataFolderUnwritable is this
+	// computer being unable to write them — an upgrade from a version that ran
+	// as a service, whose folder belongs to an account this one is not.
+	DataFolder           string
+	DataFolderUnwritable bool
 }
 
 type setupAction int
@@ -58,6 +70,7 @@ const (
 	actionUpdate
 	actionRemoveService
 	actionAlreadyRunning
+	actionFixDataFolder
 )
 
 // setupChoice is one line of the menu.
@@ -78,6 +91,7 @@ type setupChoice struct {
 var adminActions = map[setupAction]bool{
 	actionUpdate:        true,
 	actionRemoveService: true,
+	actionFixDataFolder: true,
 }
 
 // serviceActions are the names older builds used for the things that
@@ -108,6 +122,17 @@ func menuFor(state setupState) []setupChoice {
 	}
 	shortcut := choice(actionShortcut, "Put a Bokkie shortcut on this computer's desktop")
 	closeIt := choice(actionQuit, "Close")
+
+	// Nothing else is worth offering while Bokkie cannot read its own records.
+	// It will not start, so every other choice ends in the same failure, and a
+	// menu of them is a menu of wrong turns.
+	if state.DataFolderUnwritable {
+		return []setupChoice{
+			choice(actionFixDataFolder, "Let Bokkie fix this — give this computer permission to its own records"),
+			choice(actionDoctor, "Check what is wrong (changes nothing)"),
+			closeIt,
+		}
+	}
 
 	choices := []setupChoice{shortcut}
 
@@ -185,6 +210,7 @@ var actionNames = map[setupAction]string{
 	actionDoctor:        "doctor",
 	actionUpdate:        "update",
 	actionRemoveService: "remove-service",
+	actionFixDataFolder: "fix-data-folder",
 }
 
 func nameOf(a setupAction) string { return actionNames[a] }

@@ -411,3 +411,37 @@ func TestDescribeInstallationReportsWhatIsAnswering(t *testing.T) {
 		t.Error("nothing was answering and the state said it was running")
 	}
 }
+
+// Every other choice ends in the same failure while Bokkie cannot read its own
+// records — it will not start — so a menu of them is a menu of wrong turns.
+func TestAnUnwritableFolderIsOfferedARepairAndNothingElse(t *testing.T) {
+	got := menuFor(setupState{
+		ThisVersion:          "v1.0.0",
+		DataFolder:           `C:\ProgramData\Bokkie`,
+		DataFolderUnwritable: true,
+	})
+
+	if got[0].Action != actionFixDataFolder {
+		t.Errorf("first choice = %v, want the repair", got[0].Action)
+	}
+	if !got[0].NeedsAdmin {
+		t.Error("the repair does not ask for administrator rights; changing a folder's permissions needs them")
+	}
+
+	for _, a := range actions(got) {
+		switch a {
+		case actionServe, actionShortcut, actionUpdate, actionRemoveService:
+			t.Errorf("a station that cannot read its records was offered %v, which would fail the same way", a)
+		}
+	}
+	if !contains(actions(got), actionDoctor) {
+		t.Error("the check was not offered; it is the one thing that still works")
+	}
+}
+
+// The ordinary menu must not grow a repair for a folder that is fine.
+func TestAWritableFolderIsNotOfferedARepair(t *testing.T) {
+	if contains(actions(menuFor(setupState{ThisVersion: "v1.0.0"})), actionFixDataFolder) {
+		t.Error("a station with a writable folder was offered to repair it")
+	}
+}

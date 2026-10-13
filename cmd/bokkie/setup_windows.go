@@ -80,13 +80,27 @@ func guided(elevated bool, do string) (string, error) {
 	// until somebody has chosen an action: most people running this file are at
 	// a counter PC that wants a desktop icon, and both the runbook and the
 	// download page promise them that path installs nothing.
-	cfg, err := config.Load("")
-	if err != nil {
-		return "", err
+	// A folder this computer cannot write is not a reason to refuse to show a
+	// window: it is the one thing the window exists to offer to fix. The port
+	// falls back to the default so the rest of the state can still be read.
+	cfg, cfgErr := config.Load("")
+	port := defaultPort
+	if cfgErr == nil {
+		port = cfg.Port
 	}
-	serving, servingErr := service.ServingVersion(cfg.Port)
+
+	serving, servingErr := service.ServingVersion(port)
 	state := describeInstallation(exe, installed, serving, servingErr)
-	state.OldServiceInstalled = oldServiceInstalled(cfg)
+	if cfgErr == nil {
+		state.OldServiceInstalled = oldServiceInstalled(cfg)
+		state.DataFolder = cfg.DataDir
+	} else if folder, ok := config.UnwritableFolder(cfgErr); ok {
+		state.DataFolder, state.DataFolderUnwritable = folder, true
+		fmt.Println()
+		fmt.Println(cfgErr.Error())
+	} else {
+		return "", cfgErr
+	}
 
 	// The elevated child was told what to do and must not ask again: the
 	// person answered that question in the window that raised the prompt.
@@ -132,6 +146,22 @@ func guided(elevated bool, do string) (string, error) {
 	}
 
 	switch action {
+	case actionFixDataFolder:
+		// The folder is read from the configuration again rather than carried
+		// here on a command line: the elevated child re-runs the same lookup
+		// and gets the same answer, which is one fewer thing to quote and one
+		// fewer thing to get wrong.
+		folder, ok := config.UnwritableFolder(cfgErr)
+		if !ok {
+			return "There is nothing to fix: Bokkie can already write its records.", nil
+		}
+		if err := winsetup.Grant(folder); err != nil {
+			return "", err
+		}
+		return "Bokkie can now write its records in\n    " + folder + "\n\n" +
+			"Nothing was changed inside that folder. Open Bokkie again the\n" +
+			"normal way — it will not need permission after this.", nil
+
 	case actionAlreadyRunning:
 		return "Bokkie is already running on this computer.\n\n" +
 			"Look for its window — it is the one you close to stop the station.\n" +

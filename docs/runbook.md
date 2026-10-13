@@ -328,6 +328,20 @@ station is still reachable by address, `http://192.168.1.x:8080`, which
 Bokkie also writes this into its own log within a few seconds of starting, so
 the host says so without anybody asking.
 
+### "Bokkie found its records but cannot write there"
+
+This happens once, on a station upgraded from an older version. That version
+ran as a Windows service and its records folder belongs to the service's
+account rather than to you.
+
+**Bokkie fixes this itself.** The window offers **Let Bokkie fix this** — choose
+it, allow the permission prompt, and open Bokkie again the normal way. It does
+not need permission after that, and nothing inside the folder is changed: every
+advance, payment and backup stays exactly where it is.
+
+If the prompt is refused, nothing has been changed and the same choice is there
+next time.
+
 ### "Another program is already using port 8080"
 
 Some other program on the host computer got there first. Bokkie refuses to
