@@ -87,6 +87,13 @@ type Deps struct {
 	// switched off in config.yaml has no name to withdraw.
 	Discovery Discovery
 
+	// Station is the running app, for the control screens. See control.go for
+	// why it is an interface and why it is deliberately only four methods.
+	//
+	// nil is legitimate: a test that is about the lending API has no station to
+	// control, and the control routes simply do not register without one.
+	Station Station
+
 	// SPA is the built frontend, embedded in the binary. Ignored when DevProxy
 	// is set.
 	SPA fs.FS
@@ -148,11 +155,18 @@ func NewHandler(d Deps) *Handler {
 		mux.Handle("/", newSPAHandler(d.SPA))
 	}
 
+	// withControl sits outside both gates below it. See control.go: the person
+	// who opens the station's window has not logged in, and the question "may
+	// that machine switch the station off" is not the one the network gate
+	// answers.
+	inner := http.Handler(withNetworkGate(d, withSession(d, mux)))
+	if d.Station != nil {
+		inner = withControl(d, inner)
+	}
+
 	handler := withRequestID(
 		withRequestLog(d.Logger,
-			withPanicRecovery(d.Logger,
-				withNetworkGate(d,
-					withSession(d, mux)))))
+			withPanicRecovery(d.Logger, inner)))
 
 	return &Handler{Handler: handler, Routes: rt.routes}
 }

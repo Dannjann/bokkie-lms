@@ -84,6 +84,8 @@ func waitThenStop(ctx context.Context, log *slog.Logger, server *app.App, stop <
 	select {
 	case <-stop:
 		log.Info("the window was closed; stopping")
+	case <-server.StopWanted():
+		log.Info("the Stop button was pressed; stopping")
 	case sig := <-signals:
 		log.Info("stopping", "signal", sig)
 	case <-ctx.Done():

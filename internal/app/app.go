@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/api"
@@ -70,6 +71,11 @@ type App struct {
 	// to be able to move the LAN name when it changes.
 	store     *settings.Store
 	discovery *discovery.Publisher
+
+	// stopWanted closes when the Stop button is pressed on the station's own
+	// screen. stopOnce keeps a second press from closing it twice.
+	stopWanted chan struct{}
+	stopOnce   sync.Once
 }
 
 // Options are the run-time choices that are not configuration: things decided
@@ -131,7 +137,23 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 
 	publisher := discovery.NewPublisher(log, cfg.MDNS.Hostname, cfg.Port, cfg.MDNS.Enabled)
 
+	// The App is built before the handler because the handler holds it: the
+	// control screens ask the running station how it is doing, and a station
+	// that did not exist yet could not be asked.
+	a := &App{
+		cfg:          cfg,
+		log:          log,
+		db:           database,
+		store:        store,
+		discovery:    publisher,
+		backups:      backups,
+		ledgerChecks: ledger.NewChecker(ledgerSvc, log),
+		serveErr:     make(chan error, 1),
+		stopWanted:   make(chan struct{}),
+	}
+
 	handler := api.NewHandler(api.Deps{
+		Station:      a,
 		Logger:       log,
 		DB:           database,
 		Started:      time.Now(),
@@ -153,23 +175,32 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		DevProxy:     opts.DevProxy,
 	})
 
-	return &App{
-		cfg:          cfg,
-		log:          log,
-		db:           database,
-		store:        store,
-		discovery:    publisher,
-		backups:      backups,
-		ledgerChecks: ledger.NewChecker(ledgerSvc, log),
-		srv: &http.Server{
-			Handler:           handler,
-			ReadHeaderTimeout: readHeaderTimeout,
-			IdleTimeout:       60 * time.Second,
-			ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
-		},
-		serveErr: make(chan error, 1),
-	}, nil
+	a.srv = &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       60 * time.Second,
+		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+	}
+	return a, nil
 }
+
+// Port is where the station is listening, for the control screens.
+func (a *App) Port() int { return a.cfg.Port }
+
+// Hostname is the LAN name without ".local", for the control screens.
+func (a *App) Hostname() string { return a.cfg.MDNS.Hostname }
+
+// RequestStop asks the process to shut the station down.
+//
+// It signals rather than shutting down itself: whoever is running the station
+// owns its lifetime — the window, a signal, a service manager — and a handler
+// that called Stop directly would be tearing the server down out from under
+// the request it is still answering.
+func (a *App) RequestStop() { a.stopOnce.Do(func() { close(a.stopWanted) }) }
+
+// StopWanted closes when something inside the app has asked to stop. The Stop
+// button on the station's own screen is the only thing that does.
+func (a *App) StopWanted() <-chan struct{} { return a.stopWanted }
 
 // Start binds the port and begins serving in the background. It returns once
 // the listener is open, so a caller that gets a nil error knows the station can
