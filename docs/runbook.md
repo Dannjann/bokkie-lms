@@ -5,9 +5,16 @@ programming knowledge. If something here does not match what you see on screen,
 stop and call the developer rather than improvising — nothing in this system
 loses data on its own, but a hurried fix can.
 
-The one thing worth knowing before anything else: **every payment and advance
-ever recorded is in one file**, `bokkie.db`, inside the data folder. Backups are
-copies of that file. Restoring means putting a copy back.
+Two things worth knowing before anything else.
+
+**Bokkie runs only while its window is open on the host computer.** After a
+power cut, a restart, or a Windows update, **somebody has to open it again** —
+it does not come back on its own, by design. Until they do, the counter
+computers will say they cannot reach the page, and that is not a fault.
+
+**Every payment and advance ever recorded is in one file**, `bokkie.db`, inside
+the data folder. Backups are copies of that file. Restoring means putting a
+copy back.
 
 ---
 
@@ -29,9 +36,27 @@ actually using, rather than trusting the table above.
 
 ## Everyday
 
-### Starting and stopping the service
+### Opening and closing the station
 
-The service starts with the computer. You should not need to touch it.
+Bokkie runs in a window on the host computer, and only while that window is
+open.
+
+- **To open it:** double-click `BokkieSetup.exe` and choose **Start Bokkie
+  here**. A window appears showing that it is running and the address to use.
+- **To close it:** close that window, or press **Stop Bokkie** on it. Either
+  way a backup is taken on the way out, so closing it is itself a save.
+
+The window has three things on it: whether Bokkie is running, an **Open
+Bokkie** button that opens the address the counter computers use, and when the
+last backup was taken. Underneath there is a link to the check described below.
+
+**Nothing opens it for you.** Not a restart, not a Windows update, not logging
+in. That is deliberate — Bokkie is open when a person has opened it and at no
+other time.
+
+### Starting and stopping the service (macOS and Linux hosts only)
+
+On a Mac or Linux host the service starts with the computer.
 
 | | Windows | macOS | Linux |
 |---|---|---|---|

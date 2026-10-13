@@ -200,3 +200,26 @@ jobs:
         run: |
           $svc = Get-Service bokkie -ErrorAction SilentlyContinue
           if ($svc) { throw "the bokkie service is still registered after uninstall" }
+
+      # The hard requirement, asserted rather than intended. Bokkie is open
+      # when a person has opened its window and at no other time, so nothing
+      # may be left behind that Windows would start on its own. The five are
+      # checked by name because a requirement to not do five things erodes one
+      # convenience at a time.
+      - name: Nothing is left that could start it without a person
+        run: |
+          if (Get-Service bokkie -ErrorAction SilentlyContinue) { throw "a service was left installed" }
+
+          foreach ($k in 'Run','RunOnce') {
+            $v = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\$k" -Name Bokkie -ErrorAction SilentlyContinue
+            if ($v) { throw "a $k registry entry was left behind" }
+          }
+
+          $lnk = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\Bokkie.lnk'
+          if (Test-Path $lnk) { throw "a Startup folder shortcut was left behind" }
+
+          schtasks /query /tn Bokkie 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) { throw "a scheduled task was left behind" }
+
+          Write-Host "nothing can start the station without a person"
+          exit 0

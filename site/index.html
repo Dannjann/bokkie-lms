@@ -67,15 +67,28 @@
 <h2>What happens when you run it</h2>
 <ol>
     <li>A black window opens and asks what you want to do. Choose
-        <strong>Install Bokkie on this computer</strong> by typing its number
-        and pressing Enter.</li>
-    <li>Windows asks for permission to make changes. Say yes.</li>
-    <li><strong>The first window closes and a new one opens.</strong> This is
-        normal and is not a crash &mdash; the second window is the one with
-        permission to do the work.</li>
-    <li>It installs itself, starts, and makes sure it is answering.</li>
-    <li>Open <code>http://bokkie.local:8080</code> in Edge.</li>
+        <strong>Start Bokkie here</strong> by typing its number and pressing
+        Enter.</li>
+    <li>A second window opens showing that Bokkie is running, the address the
+        counter computers use, and when it last backed up.</li>
+    <li>Windows may ask whether to allow Bokkie on the network. Say yes.</li>
+    <li>Open <code>http://bokkie.local:8080</code> on a counter computer, or
+        press <strong>Open Bokkie</strong> on the window.</li>
 </ol>
+<div class="warning">
+    <h2>Bokkie runs only while that window is open</h2>
+    <p>
+        Closing the window stops Bokkie, and the counter computers lose it
+        until somebody opens it again. Nothing is deleted &mdash; a backup is
+        taken on the way out.
+    </p>
+    <p>
+        <strong>It does not start by itself.</strong> After a power cut, a
+        restart, or a Windows update, somebody has to open it again. That is
+        deliberate: Bokkie is open when a person has opened it and at no other
+        time.
+    </p>
+</div>
 <p>
     Bokkie starts with the computer from then on. Nobody needs to be logged in
     for the other computers at the station to reach it.
