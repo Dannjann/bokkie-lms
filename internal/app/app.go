@@ -209,6 +209,10 @@ func (a *App) StopWanted() <-chan struct{} { return a.stopWanted }
 func (a *App) Start() error {
 	// 0.0.0.0, not localhost: the whole point is the other counter PCs and the
 	// phones on the station WiFi.
+	//
+	// Go reads a wildcard listen address as "both families where the host
+	// supports it" — 0.0.0.0 and ":" produce the same dual-stack socket — so
+	// this is not the IPv4-only bind it looks like.
 	addr := fmt.Sprintf("0.0.0.0:%d", a.cfg.Port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {

@@ -67,7 +67,12 @@ func cmdServe(args []string) error {
 		// the person opening it is switching the station on, and what they
 		// need to see first is whether it came up and where to reach it.
 		var closeWindow func()
-		stop, closeWindow = windowClosed(log, fmt.Sprintf("http://localhost:%d/station", cfg.Port))
+		// 127.0.0.1, not localhost. A name that has to be resolved is a step
+		// that can go wrong in the one window somebody is watching, and this
+		// is the single connection the program itself makes — so it makes it
+		// to an address rather than to a name. Every health check in the
+		// codebase already dials 127.0.0.1 for the same reason.
+		stop, closeWindow = windowClosed(log, fmt.Sprintf("http://127.0.0.1:%d/station", cfg.Port))
 		// The station can stop without the window being closed — the Stop
 		// button, or Ctrl+C. Leaving it open would show a screen with nothing
 		// behind it, and leave a browser profile in the temp folder that
