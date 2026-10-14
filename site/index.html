@@ -75,6 +75,11 @@
     <li>Open <code>http://bokkie.local:8080</code> on a counter computer, or
         press <strong>Open Bokkie</strong> on the window.</li>
 </ol>
+<p>
+    That second window is the station&rsquo;s switch. It also shows when Bokkie
+    last backed up, and has a <strong>Stop Bokkie</strong> button and a check
+    that explains what is wrong when something is.
+</p>
 <div class="warning">
     <h2>Bokkie runs only while that window is open</h2>
     <p>
@@ -89,9 +94,22 @@
         time.
     </p>
 </div>
+<h2>Upgrading a computer that had an older Bokkie</h2>
 <p>
-    Bokkie starts with the computer from then on. Nobody needs to be logged in
-    for the other computers at the station to reach it.
+    The first time you run this on a station that had an older version, it may
+    say it found your records but cannot write to them. That is expected: the
+    older version ran as a Windows service, and the folder holding your records
+    belongs to that service rather than to you.
+</p>
+<p>
+    Choose <strong>Let Bokkie fix this</strong> and allow the permission prompt
+    once. Nothing inside the folder is changed &mdash; every advance, payment
+    and backup stays exactly where it is &mdash; and Bokkie will not ask again.
+</p>
+<p>
+    It will also offer to <strong>remove the old Bokkie service</strong>. Say
+    yes. That service is what used to start the station on its own, which this
+    version deliberately does not do.
 </p>
 
 <h2>On the counter computers</h2>
