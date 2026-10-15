@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useHealthStore } from '@/stores/health'
-import { pageTitle } from '@/pageTitle'
+import { pageParent } from '@/pageTitle'
 
 defineProps<{ menuOpen: boolean }>()
 defineEmits<{ toggleMenu: [] }>()
@@ -11,8 +11,17 @@ defineEmits<{ toggleMenu: [] }>()
 const route = useRoute()
 const { health, error, loading } = storeToRefs(useHealthStore())
 
-const title = computed(() => pageTitle.value || route.meta.title || '')
-const parent = computed(() => route.meta.parent)
+/**
+ * Back sits at the leading edge, named after where it goes — "‹ Customers",
+ * not "Back". That is where every platform puts it, and where a hand reaching
+ * for it already goes. It used to be a text button at the far right of each
+ * screen's header, after the actions, which on a phone wrapped it onto a line
+ * of its own beneath them.
+ *
+ * A page that knows a better answer than its route — a statement belongs to
+ * one customer, not to the list — says so through setPageParent.
+ */
+const parent = computed(() => pageParent.value ?? route.meta.parent ?? null)
 
 /**
  * Three states, not two. "Checking" matters on a station LAN: a cable pulled
@@ -29,7 +38,13 @@ const connection = computed(() => {
 </script>
 
 <template>
-  <header class="topbar">
+  <header class="topbar" :class="{ 'topbar--child': parent }">
+    <!--
+      On a phone the menu and Back compete for the same corner. A top-level
+      screen gets the menu; a screen with somewhere to go back to gets Back,
+      the way a navigation stack works — the menu is one tap further away, on
+      the screen Back leads to.
+    -->
     <button
       type="button"
       class="topbar__menu"
@@ -41,15 +56,21 @@ const connection = computed(() => {
       <i :class="menuOpen ? 'pi pi-times' : 'pi pi-bars'" aria-hidden="true" />
     </button>
 
-    <nav class="topbar__crumbs" aria-label="Breadcrumb">
-      <template v-if="parent">
-        <RouterLink :to="parent.to" class="topbar__crumb">{{ parent.label }}</RouterLink>
-        <i class="pi pi-angle-right topbar__separator" aria-hidden="true" />
-      </template>
-      <span class="topbar__here" aria-current="page">{{ title }}</span>
-    </nav>
+    <RouterLink
+      v-if="parent"
+      :to="parent.to"
+      class="topbar__back"
+      :aria-label="`Back to ${parent.label}`"
+    >
+      <i class="pi pi-chevron-left" aria-hidden="true" />
+      <span class="topbar__back-label">{{ parent.label }}</span>
+    </RouterLink>
 
-    <span class="topbar__connection" :class="`topbar__connection--${connection.tone}`">
+    <span
+      class="topbar__connection"
+      :class="`topbar__connection--${connection.tone}`"
+      role="status"
+    >
       <span class="topbar__dot" aria-hidden="true" />
       {{ connection.label }}
     </span>
@@ -60,61 +81,63 @@ const connection = computed(() => {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   height: var(--shell-topbar-height);
-  padding: 0 1.25rem;
-  background: var(--shell-surface);
+  padding: 0 1.25rem 0 0.75rem;
+  background: rgb(255 255 255 / 0.85);
+  backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--shell-border);
+}
+
+.topbar__menu,
+.topbar__back {
+  display: flex;
+  align-items: center;
+  min-height: var(--shell-hit);
+  border-radius: 8px;
+  color: var(--p-primary-color);
 }
 
 .topbar__menu {
   display: none;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  margin-left: -0.5rem;
+  justify-content: center;
+  min-width: var(--shell-hit);
   padding: 0;
   border: none;
-  border-radius: 6px;
   background: transparent;
-  color: var(--p-surface-700);
+  font-size: 1.125rem;
   cursor: pointer;
 }
 
-.topbar__menu:hover {
-  background: var(--p-surface-100);
+.topbar__back {
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0 0.625rem 0 0.375rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
 }
 
-.topbar__crumbs {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
+.topbar__back i {
   font-size: 0.875rem;
 }
 
-.topbar__crumb {
-  color: var(--shell-muted);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.topbar__crumb:hover {
-  color: var(--p-primary-color);
-  text-decoration: underline;
-}
-
-.topbar__separator {
-  font-size: 0.75rem;
-  color: var(--p-surface-400);
-}
-
-.topbar__here {
-  font-weight: 600;
-  color: var(--p-surface-800);
+.topbar__back-label {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.topbar__menu:hover,
+.topbar__back:hover {
+  background: var(--p-primary-50);
+  text-decoration: none;
+}
+
+.topbar__menu:focus-visible,
+.topbar__back:focus-visible {
+  outline: 2px solid var(--p-primary-color);
+  outline-offset: 0;
 }
 
 .topbar__connection {
@@ -152,8 +175,16 @@ const connection = computed(() => {
 }
 
 @media (max-width: 60rem) {
+  .topbar {
+    padding-left: 0.5rem;
+  }
+
   .topbar__menu {
-    display: grid;
+    display: flex;
+  }
+
+  .topbar--child .topbar__menu {
+    display: none;
   }
 }
 </style>

@@ -38,7 +38,7 @@
   height: 2rem;
   flex: none;
   border-radius: 7px;
-  background: var(--p-primary-color, #0d9488);
+  background: var(--p-primary-color, #0270c4);
   color: #fff;
   font-weight: 700;
 }
@@ -82,7 +82,7 @@
 }
 
 .auth__field input:focus-visible {
-  outline: 2px solid var(--p-primary-color, #0d9488);
+  outline: 2px solid var(--p-primary-color, #0270c4);
   outline-offset: 1px;
   border-color: transparent;
 }
@@ -110,17 +110,17 @@
   font-weight: 600;
   border: none;
   border-radius: 6px;
-  background: var(--p-primary-color, #0d9488);
+  background: var(--p-primary-color, #0270c4);
   color: var(--p-primary-contrast-color, #fff);
   cursor: pointer;
 }
 
 .auth__submit:hover:not(:disabled) {
-  background: var(--p-primary-hover-color, #0f766e);
+  background: var(--p-primary-hover-color, #035a9f);
 }
 
 .auth__submit:focus-visible {
-  outline: 2px solid var(--p-primary-color, #0d9488);
+  outline: 2px solid var(--p-primary-color, #0270c4);
   outline-offset: 2px;
 }
 

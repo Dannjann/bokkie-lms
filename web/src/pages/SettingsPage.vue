@@ -426,6 +426,15 @@ onMounted(() => {
   width: 9rem;
 }
 
+/*
+ * InputNumber sizes its inner <input> on its own, so the 9rem above only
+ * reached the wrapper and the field spilled over the "= 5% a month" beside it.
+ */
+.settings__narrow :deep(.p-inputnumber-input) {
+  width: 100%;
+  min-width: 0;
+}
+
 .settings__aside {
   display: inline-flex;
   align-items: center;

@@ -19,7 +19,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
 import { entryLabel, getStatement, type Statement } from '@/api/payments'
 import { formatPesos, toISODate } from '@/format'
-import { setPageTitle } from '@/pageTitle'
+import { setPageParent, setPageTitle } from '@/pageTitle'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,6 +49,7 @@ async function load(): Promise<void> {
     )
     statement.value = loaded
     setPageTitle(`${loaded.customer.name} — statement`)
+    setPageParent({ label: loaded.customer.name, to: `/customers/${id.value}` })
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
   } finally {
@@ -80,7 +81,7 @@ onMounted(load)
     <template v-else-if="statement">
       <PageHeader>
         <template #title>
-          <p class="statement__code numeric label">{{ statement.customer.code }}</p>
+          <p class="statement__code label">Statement · <span class="numeric">{{ statement.customer.code }}</span></p>
           <h1 class="statement__name">{{ statement.customer.name }}</h1>
         </template>
         <template #actions>
@@ -90,13 +91,6 @@ onMounted(load)
             severity="secondary"
             outlined
             @click="router.push({ name: 'payment-new', query: { customer: id } })"
-          />
-          <Button
-            label="Back to customer"
-            icon="pi pi-arrow-left"
-            severity="secondary"
-            text
-            @click="router.push({ name: 'customer', params: { id } })"
           />
         </template>
       </PageHeader>
@@ -315,6 +309,12 @@ onMounted(load)
 .statement__amount {
   text-align: right;
   white-space: nowrap;
+}
+
+/* The table's own `th` rule is more specific than the class above; without
+   this the heading sat left while its figures sat right. */
+.statement__table th.statement__amount {
+  text-align: right;
 }
 
 .statement__reason {

@@ -489,6 +489,12 @@ function submit(): void {
   font-variant-numeric: tabular-nums;
 }
 
+/* The table's own `th` rule is more specific than the class above; without
+   this the heading sat left while its figures sat right. */
+.payment-form__table th.payment-form__amount {
+  text-align: right;
+}
+
 .payment-form__balance {
   width: 15rem;
   flex-shrink: 0;
@@ -503,8 +509,6 @@ function submit(): void {
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--shell-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .payment-form__row {

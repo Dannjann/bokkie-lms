@@ -127,15 +127,6 @@ onMounted(load)
             <Tag v-else-if="voucher.status === 'voided'" severity="danger" value="Voided" />
           </h1>
         </template>
-        <template #actions>
-          <Button
-            label="Back to advances"
-            icon="pi pi-arrow-left"
-            severity="secondary"
-            text
-            @click="router.push({ name: 'advances' })"
-          />
-        </template>
       </PageHeader>
 
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
@@ -347,6 +338,12 @@ onMounted(load)
 .advance__amount {
   text-align: right;
   white-space: nowrap;
+}
+
+/* The table's own `th` rule is more specific than the class above; without
+   this the heading sat left while its figures sat right. */
+.advance__table th.advance__amount {
+  text-align: right;
 }
 
 .advance__reason {

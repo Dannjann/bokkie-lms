@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import PageHeader from '@/components/PageHeader.vue'
 import { importCustomers, type ImportReport } from '@/api/customers'
-
-const router = useRouter()
 
 const file = ref<File | null>(null)
 const report = ref<ImportReport | null>(null)
@@ -44,15 +41,6 @@ async function run(dryRun: boolean): Promise<void> {
 <template>
   <div class="import">
     <PageHeader title="Import customers">
-      <template #actions>
-        <Button
-          label="Back to customers"
-          icon="pi pi-arrow-left"
-          severity="secondary"
-          text
-          @click="router.push({ name: 'customers' })"
-        />
-      </template>
     </PageHeader>
 
     <section class="card card--padded import__intro">

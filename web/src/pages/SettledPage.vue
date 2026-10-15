@@ -32,7 +32,7 @@ onMounted(run)
 
 <template>
   <ReportShell
-    title="Settlements"
+    title="Settled"
     description="Every settlement in the period — open one to read it back or reprint it."
     mode="period"
     v-model:from="from"

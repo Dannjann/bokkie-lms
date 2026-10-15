@@ -381,7 +381,7 @@ onMounted(async () => {
   width: 1%;
 }
 
-.audit__table :deep(.audit__who) {
+.audit__table :deep(td.audit__who) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8125rem;
   white-space: nowrap;

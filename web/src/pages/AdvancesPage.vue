@@ -130,7 +130,7 @@ onMounted(load)
         :value="vouchers"
         :loading="loading"
         lazy
-        paginator
+        :paginator="total > 25"
         :rows="perPage"
         :first="first"
         :total-records="total"

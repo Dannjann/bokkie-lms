@@ -180,7 +180,7 @@ onMounted(() => {
 
       <p class="settle-new__hint">
         Interest is principal × rate × days ÷ 30 on each open advance, and on any principal carried
-        from his last settlement. His recorded payments are then applied, interest first.
+        from the farmer's last settlement. Their recorded payments are then applied, interest first.
       </p>
 
       <div class="settle-new__actions">

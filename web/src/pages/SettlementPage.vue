@@ -228,13 +228,6 @@ onMounted(load)
             outlined
             @click="print"
           />
-          <Button
-            label="Back to settlements"
-            icon="pi pi-arrow-left"
-            severity="secondary"
-            text
-            @click="router.push({ name: 'settlements' })"
-          />
         </template>
       </PageHeader>
 

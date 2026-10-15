@@ -63,7 +63,7 @@ onBeforeUnmount(() => clearInterval(timer))
 
 .shell__sidebar {
   min-height: 0;
-  border-right: 1px solid var(--shell-nav-bg-deep);
+  border-right: 1px solid var(--shell-nav-border);
 }
 
 .shell__body {

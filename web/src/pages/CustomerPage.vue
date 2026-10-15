@@ -176,13 +176,6 @@ onMounted(() => {
             outlined
             @click="router.push({ name: 'statement', params: { id: customer.id } })"
           />
-          <Button
-            label="Back to customers"
-            icon="pi pi-arrow-left"
-            severity="secondary"
-            text
-            @click="router.push({ name: 'customers' })"
-          />
         </template>
       </PageHeader>
 

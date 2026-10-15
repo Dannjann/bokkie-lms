@@ -187,15 +187,6 @@ onMounted(load)
             />
           </h1>
         </template>
-        <template #actions>
-          <Button
-            label="Back to payments"
-            icon="pi pi-arrow-left"
-            severity="secondary"
-            text
-            @click="router.push({ name: 'payments' })"
-          />
-        </template>
       </PageHeader>
 
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
@@ -492,6 +483,12 @@ onMounted(load)
 .payment__amount {
   text-align: right;
   white-space: nowrap;
+}
+
+/* The table's own `th` rule is more specific than the class above; without
+   this the heading sat left while its figures sat right. */
+.payment__table th.payment__amount {
+  text-align: right;
 }
 
 .payment__reason {

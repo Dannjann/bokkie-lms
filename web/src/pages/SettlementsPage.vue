@@ -90,7 +90,7 @@ onMounted(load)
   <div>
     <PageHeader
       title="Settlements"
-      description="A farmer is settled when he delivers: interest up to a cut-off date, then his recorded payments applied, interest first."
+      description="A farmer is settled when they deliver: interest up to a cut-off date, then their recorded payments applied, interest first."
     >
       <template #actions>
         <Button
@@ -136,7 +136,7 @@ onMounted(load)
         :value="settlements"
         :loading="loading"
         lazy
-        paginator
+        :paginator="total > 25"
         :rows="perPage"
         :first="first"
         :total-records="total"

@@ -146,12 +146,16 @@ export const router = createRouter({
       // The four reports. Manager-only in the UI and at the server, reads
       // included: they are portfolio views, and what an encoder needs about one
       // farmer is on the customer screen and the statement.
+      //
+      // No `parent`: each report is its own entry in the sidebar, so there is
+      // nothing above it to go back to. They used to name a "Reports" parent
+      // that was really Current Advances, which made Back on the Aging screen
+      // land somewhere unrelated.
       path: '/reports/current-advances',
       name: 'report-current-advances',
       component: () => import('@/pages/CurrentAdvancesPage.vue'),
       meta: {
         title: 'Current Advances',
-        parent: { label: 'Reports', to: '/reports/current-advances' },
         manager: true,
       },
     },
@@ -161,7 +165,6 @@ export const router = createRouter({
       component: () => import('@/pages/ROIPage.vue'),
       meta: {
         title: 'Return of Investment',
-        parent: { label: 'Reports', to: '/reports/current-advances' },
         manager: true,
       },
     },
@@ -171,7 +174,6 @@ export const router = createRouter({
       component: () => import('@/pages/AgingPage.vue'),
       meta: {
         title: 'Aging',
-        parent: { label: 'Reports', to: '/reports/current-advances' },
         manager: true,
       },
     },
@@ -180,8 +182,8 @@ export const router = createRouter({
       name: 'report-settled',
       component: () => import('@/pages/SettledPage.vue'),
       meta: {
-        title: 'Settlements',
-        parent: { label: 'Reports', to: '/reports/current-advances' },
+        // Matches the sidebar's label, so the window title and the menu agree.
+        title: 'Settled',
         manager: true,
       },
     },
@@ -198,8 +200,9 @@ export const router = createRouter({
     },
     {
       // Hangs off the customer as well as off the index: this is one farmer's
-      // history and both ways in are legitimate. The crumb points back to
-      // Customers because that is where the record lives.
+      // history and both ways in are legitimate. Back goes to that farmer once
+      // the page knows who it is (setPageParent); Customers is the fallback for
+      // the moment before it does.
       path: '/customers/:id(\\d+)/statement',
       name: 'statement',
       component: () => import('@/pages/StatementPage.vue'),

@@ -145,7 +145,7 @@ h2 { font-size: 1rem; margin: 0 0 .5rem; }
 .confirm { margin: .5rem 0; font-weight: 600; }
 
 button { font: inherit; padding: .5rem .9rem; border-radius: .35rem; border: 1px solid currentColor; background: transparent; cursor: pointer; margin-right: .5rem; }
-button.primary { background: #2f6b4f; border-color: #2f6b4f; color: #fff; }
+button.primary { background: var(--p-primary-color, #0270c4); border-color: var(--p-primary-color, #0270c4); color: #fff; }
 button.danger { background: #b4453a; border-color: #b4453a; color: #fff; }
 
 .more { margin: 1.5rem 0; }

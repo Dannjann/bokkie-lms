@@ -128,7 +128,7 @@ onMounted(load)
         :value="payments"
         :loading="loading"
         lazy
-        paginator
+        :paginator="total > 25"
         :rows="perPage"
         :first="first"
         :total-records="total"
