@@ -289,7 +289,7 @@ func asPaymentError(err error) (statusError, bool) {
 		// 409 rather than 400: nothing about the request is malformed, the
 		// payment simply moved on — which is what a second click looks like.
 		return conflict("%s", err.Error()), true
-	case errors.Is(err, payment.ErrNotPosted):
+	case errors.Is(err, payment.ErrNotPosted), errors.Is(err, payment.ErrSettled):
 		return conflict("%s", err.Error()), true
 	default:
 		return statusError{}, false

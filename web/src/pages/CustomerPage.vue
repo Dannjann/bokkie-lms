@@ -150,10 +150,10 @@ onMounted(() => {
         </template>
         <template #actions>
           <!--
-            The two things somebody opens a customer to do, once there is money
-            on the record: take a payment, or read them their history. Both are
-            here rather than in the sidebar because this is where the balance
-            they are asking about is.
+            The things somebody opens a customer to do, once there is money on
+            the record: take a payment, settle them up, or read them their
+            history. All are here rather than in the sidebar because this is
+            where the balance they are asking about is.
           -->
           <Button
             label="Record payment"
@@ -161,18 +161,20 @@ onMounted(() => {
             @click="router.push({ name: 'payment-new', query: { customer: customer.id } })"
           />
           <Button
+            label="Settle"
+            icon="pi pi-calculator"
+            severity="secondary"
+            outlined
+            @click="
+              router.push({ name: 'settlement-new', query: { customer_id: String(customer.id) } })
+            "
+          />
+          <Button
             label="Statement"
             icon="pi pi-file"
             severity="secondary"
             outlined
             @click="router.push({ name: 'statement', params: { id: customer.id } })"
-          />
-          <Button
-            label="Back to customers"
-            icon="pi pi-arrow-left"
-            severity="secondary"
-            text
-            @click="router.push({ name: 'customers' })"
           />
         </template>
       </PageHeader>

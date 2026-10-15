@@ -4,6 +4,8 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { navigation, type NavItem } from '@/nav'
 import { useSessionStore } from '@/stores/session'
+import Menu from 'primevue/menu'
+import type { MenuItem } from 'primevue/menuitem'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 
 const session = useSessionStore()
@@ -76,6 +78,20 @@ async function lock(): Promise<void> {
   }
 }
 
+/**
+ * The account menu. Lock stays a button of its own beside it, because it is
+ * the one used many times a day; changing a password and signing out are rare,
+ * and three icon buttons in a row had squeezed everyone's name down to
+ * "Maria Sa…".
+ */
+const accountMenu = ref<InstanceType<typeof Menu> | null>(null)
+
+const accountItems = computed<MenuItem[]>(() => [
+  { label: 'Change password…', icon: 'pi pi-key', command: () => (passwordOpen.value = true) },
+  { separator: true },
+  { label: 'Sign out', icon: 'pi pi-sign-out', command: () => void signOut() },
+])
+
 async function signOut(): Promise<void> {
   busy.value = true
   try {
@@ -132,18 +148,8 @@ async function signOut(): Promise<void> {
       <span class="sidebar__avatar" aria-hidden="true">{{ initials }}</span>
       <span class="sidebar__identity">
         <span class="sidebar__name">{{ user.display_name }}</span>
-        <span class="sidebar__role">{{ user.role }}</span>
+        <span class="sidebar__role">{{ user.role === 'manager' ? 'Manager' : 'Encoder' }}</span>
       </span>
-      <button
-        type="button"
-        class="sidebar__action"
-        title="Change your password"
-        aria-label="Change your password"
-        :disabled="busy"
-        @click="passwordOpen = true"
-      >
-        <i class="pi pi-key" aria-hidden="true" />
-      </button>
       <button
         type="button"
         class="sidebar__action"
@@ -157,13 +163,16 @@ async function signOut(): Promise<void> {
       <button
         type="button"
         class="sidebar__action"
-        title="Sign out"
-        aria-label="Sign out"
+        title="Account"
+        aria-label="Account"
+        aria-haspopup="menu"
+        aria-controls="account-menu"
         :disabled="busy"
-        @click="signOut"
+        @click="accountMenu?.toggle($event)"
       >
-        <i class="pi pi-sign-out" aria-hidden="true" />
+        <i class="pi pi-ellipsis-h" aria-hidden="true" />
       </button>
+      <Menu id="account-menu" ref="accountMenu" :model="accountItems" popup />
     </div>
 
     <ChangePasswordDialog v-model="passwordOpen" />
@@ -186,22 +195,30 @@ async function signOut(): Promise<void> {
   height: var(--shell-topbar-height);
   padding: 0 1rem;
   flex: none;
-  border-bottom: 1px solid var(--shell-nav-border);
   color: inherit;
   text-decoration: none;
+}
+
+.sidebar__brand:hover {
+  text-decoration: none;
+}
+
+.sidebar__brand:focus-visible {
+  outline: 2px solid var(--shell-nav-accent);
+  outline-offset: -2px;
 }
 
 .sidebar__mark {
   display: grid;
   place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2rem;
+  height: 2rem;
   flex: none;
-  border-radius: 6px;
-  background: var(--p-primary-color);
+  border-radius: 8px;
+  background: linear-gradient(160deg, var(--p-primary-400), var(--p-primary-600));
   color: #fff;
   font-weight: 700;
-  font-size: 0.9375rem;
+  font-size: 1rem;
 }
 
 .sidebar__brand-text {
@@ -214,13 +231,13 @@ async function signOut(): Promise<void> {
   font-weight: 600;
   font-size: 0.9375rem;
   line-height: 1.2;
-  color: var(--shell-nav-fg-active);
+  color: var(--shell-nav-fg-hover);
 }
 
 .sidebar__station {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.3;
-  color: var(--shell-nav-fg);
+  color: var(--shell-nav-fg-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -230,31 +247,29 @@ async function signOut(): Promise<void> {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.75rem 0.625rem 1rem;
+  padding: 0.5rem 0.625rem 1rem;
 }
 
 .sidebar__section + .sidebar__section {
-  margin-top: 1rem;
-  padding-top: 0.875rem;
-  border-top: 1px solid var(--shell-nav-border);
+  margin-top: 1.125rem;
 }
 
+/* Sentence case, the way a platform sidebar heads its groups. */
 .sidebar__section-label {
-  margin: 0 0 0.375rem;
+  margin: 0 0 0.25rem;
   padding: 0 0.625rem;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: #64748b;
+  color: var(--shell-nav-fg-muted);
 }
 
 .sidebar__item {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.5rem 0.625rem;
-  border-radius: 6px;
+  min-height: var(--shell-hit);
+  padding: 0 0.625rem;
+  border-radius: 8px;
   font-size: 0.875rem;
   color: inherit;
   text-decoration: none;
@@ -264,11 +279,13 @@ async function signOut(): Promise<void> {
   font-size: 0.9375rem;
   width: 1.125rem;
   flex: none;
+  color: var(--p-primary-color);
 }
 
 a.sidebar__item:hover {
-  background: rgb(255 255 255 / 0.06);
+  background: var(--shell-nav-hover-bg);
   color: var(--shell-nav-fg-hover);
+  text-decoration: none;
 }
 
 a.sidebar__item:focus-visible {
@@ -280,33 +297,33 @@ a.sidebar__item:focus-visible {
 a.sidebar__item--active:hover {
   background: var(--shell-nav-active-bg);
   color: var(--shell-nav-fg-active);
-  font-weight: 500;
-  box-shadow: inset 2px 0 0 var(--shell-nav-accent);
+  font-weight: 600;
 }
 
 .sidebar__item--soon {
-  color: #526581;
+  color: var(--shell-nav-fg-muted);
   cursor: default;
+}
+
+.sidebar__item--soon i {
+  color: inherit;
 }
 
 .sidebar__soon {
   margin-left: auto;
-  padding: 0.05rem 0.35rem;
+  padding: 0.05rem 0.4rem;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.05);
-  font-size: 0.625rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  background: var(--shell-nav-bg-deep);
+  font-size: 0.6875rem;
 }
 
 .sidebar__user {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 0.75rem;
+  gap: 0.375rem;
+  padding: 0.625rem 0.625rem 0.625rem 0.75rem;
   border-top: 1px solid var(--shell-nav-border);
-  background: var(--shell-nav-bg-deep);
 }
 
 .sidebar__avatar {
@@ -315,9 +332,10 @@ a.sidebar__item--active:hover {
   width: 2rem;
   height: 2rem;
   flex: none;
+  margin-right: 0.25rem;
   border-radius: 50%;
-  background: #334155;
-  color: var(--shell-nav-fg-active);
+  background: var(--p-primary-100);
+  color: var(--p-primary-700);
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -331,40 +349,40 @@ a.sidebar__item--active:hover {
 
 .sidebar__name {
   font-size: 0.8125rem;
-  color: var(--shell-nav-fg-active);
+  font-weight: 500;
+  color: var(--shell-nav-fg-hover);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .sidebar__role {
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+  color: var(--shell-nav-fg-muted);
 }
 
 .sidebar__action {
   display: grid;
   place-items: center;
-  width: 1.875rem;
-  height: 1.875rem;
+  width: var(--shell-hit);
+  height: var(--shell-hit);
   flex: none;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
-  color: var(--shell-nav-fg);
+  color: var(--shell-nav-fg-muted);
   cursor: pointer;
 }
 
 .sidebar__action:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.08);
-  color: var(--shell-nav-fg-active);
+  background: var(--shell-nav-hover-bg);
+  color: var(--p-primary-color);
 }
 
 .sidebar__action:focus-visible {
   outline: 2px solid var(--shell-nav-accent);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 
 .sidebar__action:disabled {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Dannjann/bokkie-lms/internal/audit"
 	"github.com/Dannjann/bokkie-lms/internal/auth"
+	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
 // The first-run flow: an empty users table puts the app into setup mode, one
@@ -142,8 +143,11 @@ func TestAMutationWritesItsBeforeAndAfter(t *testing.T) {
 	if entry == nil {
 		t.Fatal("the settings change left no audit entry")
 	}
-	if !strings.Contains(entry.before, `"14"`) {
-		t.Errorf("before_json = %q, want the old value 14", entry.before)
+	// The default, read from its definition rather than written here: this
+	// test is about the audit row carrying a before and an after, not about
+	// what the retention happens to be.
+	if !strings.Contains(entry.before, `"`+settings.BackupRetention.Default+`"`) {
+		t.Errorf("before_json = %q, want the previous value %s", entry.before, settings.BackupRetention.Default)
 	}
 	if !strings.Contains(entry.after, `"21"`) {
 		t.Errorf("after_json = %q, want the new value 21", entry.after)

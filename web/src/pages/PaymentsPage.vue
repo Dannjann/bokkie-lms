@@ -10,7 +10,13 @@ import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
-import { listPayments, methodLabel, type PaymentStatus, type PaymentSummary } from '@/api/payments'
+import {
+  listPayments,
+  methodLabel,
+  paymentStatusLabel,
+  type PaymentStatus,
+  type PaymentSummary,
+} from '@/api/payments'
 import { formatPesos } from '@/format'
 
 const router = useRouter()
@@ -30,7 +36,7 @@ const perPage = ref(25)
 const statusOptions = [
   { label: 'All', value: 'all' },
   { label: 'Drafts', value: 'draft' },
-  { label: 'Posted', value: 'posted' },
+  { label: 'Recorded or settled', value: 'posted' },
   { label: 'Voided', value: 'voided' },
 ]
 
@@ -80,7 +86,7 @@ onMounted(load)
   <div>
     <PageHeader
       title="Payments"
-      description="Receipts are numbered when they are posted, and undone by voiding, never by editing."
+      description="A payment is numbered when it is recorded and applied when the farmer is settled. It is undone by voiding, never by editing."
     >
       <template #actions>
         <Button label="New payment" icon="pi pi-plus" @click="router.push({ name: 'payment-new' })" />
@@ -122,7 +128,7 @@ onMounted(load)
         :value="payments"
         :loading="loading"
         lazy
-        paginator
+        :paginator="total > 25"
         :rows="perPage"
         :first="first"
         :total-records="total"
@@ -159,6 +165,14 @@ onMounted(load)
           <template #body="{ data }">
             <Tag v-if="data.status === 'draft'" severity="warn" value="Draft" />
             <Tag v-else-if="data.status === 'voided'" severity="danger" value="Voided" />
+            <RouterLink
+              v-else-if="data.settlement_no > 0"
+              :to="{ name: 'settlement', params: { id: data.settlement_id } }"
+              @click.stop
+            >
+              <Tag severity="success" :value="`Settled (No. ${data.settlement_no})`" />
+            </RouterLink>
+            <Tag v-else severity="info" :value="paymentStatusLabel(data.status, 0)" />
           </template>
         </Column>
       </DataTable>

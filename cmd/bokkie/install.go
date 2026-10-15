@@ -3,9 +3,12 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 
+	"github.com/Dannjann/bokkie-lms/internal/diagnose"
 	"github.com/Dannjann/bokkie-lms/internal/service"
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
@@ -14,6 +17,16 @@ import (
 // firewall and starts it — one command on all three platforms, because the
 // person running it is usually standing at the station with the owner waiting.
 func cmdInstall(args []string) error {
+	if runtime.GOOS == "windows" {
+		// The last door. The menu stopped offering an install in 2.7, and the
+		// USB wrapper that called this verb is no longer staged — but the verb
+		// itself was still here, and a verb that registers an auto-starting
+		// service is the hard requirement undone by anybody who types it.
+		return errors.New("bokkie is not installed on Windows any more: it runs while its window is open and only then.\n" +
+			"Double-click the program and choose \"Start Bokkie here\", or run \"bokkie serve\".\n" +
+			"If this computer still has the old Bokkie service on it, the window offers to remove it")
+	}
+
 	opts, log, closeLog, err := serviceCommand("install", args)
 	if err != nil {
 		return err
@@ -39,6 +52,9 @@ func cmdInstall(args []string) error {
 // Programs at all, while the runbook promised it did. The Windows runner found
 // it by checking the promise rather than the path that makes it.
 func installHere(log *slog.Logger, opts service.Options) error {
+	if err := portIsOurs(opts.Port); err != nil {
+		return err
+	}
 	if err := service.Install(log, opts); err != nil {
 		return winsetup.Partial(err)
 	}
@@ -52,7 +68,58 @@ func installHere(log *slog.Logger, opts service.Options) error {
 		// and failing an install over it would be the tail wagging the dog.
 		log.Warn("could not add Bokkie to Add/Remove Programs", "error", err)
 	}
+
+	reportReachability(log, opts.DataDir)
 	return nil
+}
+
+// portIsOurs refuses an install onto a port another program already owns.
+//
+// Refusing here follows the rule the rest of the installer already follows: a
+// refusal happens before anything on the host changes. Without it the service
+// registers, fails to bind, and leaves a machine with a service that cannot
+// start and a person reading "the service is not answering" — which describes
+// the symptom and names nothing about the cause.
+//
+// A port held by Bokkie itself is not a clash. That is a repair or an update,
+// which is most of what this path is used for.
+func portIsOurs(port int) error {
+	if !diagnose.PortOpen(port) {
+		return nil
+	}
+	if _, err := service.ServingVersion(port); err == nil {
+		return nil
+	}
+	return fmt.Errorf("another program on this computer is already using port %d, so Bokkie cannot start there.\n"+
+		"Nothing has been changed.\n\n"+
+		"Either stop that program, or give Bokkie a different port by editing the\n"+
+		"port line in the settings file in Bokkie's data folder, then install again.\n"+
+		"Run \"bokkie doctor\" to see what is on the port", port)
+}
+
+// reportReachability checks, from the host and at the end of every install,
+// that the name in the shortcut on every counter PC actually resolves to this
+// machine and answers.
+//
+// It is printed, never fatal. The install genuinely succeeded: the service is
+// registered, running and answering on its own address, and a station that
+// serves fine but cannot advertise a name is a working station. What it must
+// not do is say "Bokkie is installed, open http://bokkie.local:8080" while
+// that address goes nowhere — which is how the first real install was reported
+// as broken when it was not.
+func reportReachability(log *slog.Logger, dataDir string) {
+	report := diagnoseHost(dataDir)
+	if report.Healthy() {
+		log.Info("the station is reachable", "address", report.Reach)
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("Bokkie is installed and running, but not everything about the")
+	fmt.Println("network checked out:")
+	fmt.Println()
+	fmt.Print(report)
+	fmt.Println("Run \"bokkie doctor\" at any time to check this again.")
 }
 
 // cmdUninstall stops and deregisters the service. The data directory and the

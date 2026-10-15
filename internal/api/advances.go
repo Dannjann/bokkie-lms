@@ -291,7 +291,7 @@ func voucherEntityID(v advance.Voucher) string { return strconv.FormatInt(v.ID, 
 func advanceID(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
-		return 0, errors.New("that is not a voucher id")
+		return 0, errors.New("that is not an advance slip id")
 	}
 	return id, nil
 }
@@ -318,12 +318,12 @@ func asAdvanceError(err error) (statusError, bool) {
 	case errors.As(err, &ve):
 		return badRequest("%s", ve.Message), true
 	case errors.Is(err, advance.ErrNotFound):
-		return statusError{http.StatusNotFound, "no such voucher"}, true
+		return statusError{http.StatusNotFound, "no such advance slip"}, true
 	case errors.Is(err, advance.ErrNotDraft):
 		// 409 rather than 400: nothing about the request is malformed, the
 		// voucher simply moved on — which is what a second click looks like.
 		return conflict("%s", err.Error()), true
-	case errors.Is(err, advance.ErrNotPosted):
+	case errors.Is(err, advance.ErrNotPosted), errors.Is(err, advance.ErrSettled):
 		return conflict("%s", err.Error()), true
 	default:
 		return statusError{}, false

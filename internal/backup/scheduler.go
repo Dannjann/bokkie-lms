@@ -27,6 +27,12 @@ type Scheduler struct {
 	done    chan struct{}
 	once    sync.Once
 	started atomic.Bool
+
+	// running serialises backups. Nothing used to be able to ask for one while
+	// the nightly job was mid-VACUUM; now closing the window does, and two at
+	// once would leave a file that fails its own verification — which is worse
+	// than one fewer backup, because somebody will trust it.
+	running sync.Mutex
 }
 
 // NewScheduler builds the nightly job. folder comes from config.yaml, not from
@@ -107,6 +113,9 @@ func (s *Scheduler) loop() {
 // the scheduler and the "Backup now" action call, so there is one path and one
 // log line shape whichever triggered it.
 func (s *Scheduler) RunNow(ctx context.Context) (Result, error) {
+	s.running.Lock()
+	defer s.running.Unlock()
+
 	result, err := Run(ctx, s.db, Options{
 		Folder:    s.folder,
 		Retention: s.settings.Int(settings.BackupRetention),

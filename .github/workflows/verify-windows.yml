@@ -1,12 +1,15 @@
-# This is the only Windows machine bokkie has. It proves the service registers,
-# starts, answers and comes out again — against the exact binary a draft release
-# is holding, before anybody can download it.
+# This is the only Windows machine bokkie has.
 #
-# It does not prove: that bokkie.local resolves on a Windows 10 counter PC — the
-# single most likely support call, and no runner will ever show it; that
-# SmartScreen lets the download through; or that Windows Defender does not
-# quarantine an unsigned, freshly published executable. Those need the real
-# machine, and they are the step's gate rather than this file's job.
+# Since step 2.7 the station runs while a person has its window open and at no
+# other time, so this exercises that: serve, answer, check itself, stop, and
+# leave nothing behind that Windows could start on its own.
+#
+# It does not prove: that a browser launched with its own profile directory
+# exits when its window is closed (there is no desktop here — serve runs with
+# --no-window); that bokkie.local resolves on a Windows 10 counter PC, which is
+# the single most likely support call and which no runner will ever show; that
+# SmartScreen lets the download through; or that Defender leaves an unsigned,
+# freshly published executable alone. Those need the real machine.
 #
 # `make ci` and the pre-push hook remain the gate for whether the code is good.
 # Nothing here decides that.
@@ -28,7 +31,7 @@ permissions:
   contents: write
 
 jobs:
-  install-and-remove:
+  serve-and-stop:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -71,9 +74,7 @@ jobs:
       # The one line in the diff that no test and no type-check can judge.
       # GetConsoleProcessList is declared by hand against kernel32; if the proc
       # lookup is wrong it returns 0, and a double-click then shows usage in a
-      # window that flashes and vanishes — the exact failure this step exists
-      # to close. Every other step here passes arguments, so without this the
-      # call is never made on Windows at all.
+      # window that flashes and vanishes — the exact failure this closes.
       - name: The console can be counted
         run: |
           $count = .\BokkieSetup.exe setup --probe-console
@@ -83,56 +84,126 @@ jobs:
           }
           Write-Host "console process count: $count"
 
-      - name: Install
-        run: .\BokkieSetup.exe install
+      # Installing is gone. `bokkie install` refuses on Windows since 2.7,
+      # because a verb that registers an auto-starting service is the hard
+      # requirement undone by anybody who types it.
+      - name: Installing is refused
+        run: |
+          $out = .\BokkieSetup.exe install 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -eq 0) { throw "bokkie install succeeded on Windows; it must refuse" }
+          if ($out -notmatch 'while its window is open') { throw "the refusal does not say what to do instead:`n$out" }
+          exit 0
+
+      - name: Start the station
+        run: |
+          $p = Start-Process -FilePath .\BokkieSetup.exe -ArgumentList 'serve','--no-window' -PassThru
+          $p.Id | Out-File station.pid
+          Write-Host "station pid $($p.Id)"
 
       - name: It answers
         run: |
-          $body = Invoke-RestMethod http://localhost:8080/healthz
+          $deadline = (Get-Date).AddSeconds(60)
+          do {
+            Start-Sleep -Seconds 2
+            try { $body = Invoke-RestMethod http://localhost:8080/healthz } catch { $body = $null }
+          } while (-not $body -and (Get-Date) -lt $deadline)
+
+          if (-not $body) { throw "the station never answered on 8080" }
           if ($body.status -ne "ok") { throw "healthz said $($body.status)" }
           Write-Host "healthz: $($body | ConvertTo-Json -Compress)"
 
-      # A service that only runs while somebody is logged in is the mistake
-      # internal/service's package comment is written about, and it is not
-      # discovered until the morning the station reboots.
-      - name: It starts with the computer
+      # The diagnostic is only worth having if it reads a working station
+      # correctly. It does NOT have to report an all-clear: this runner has no
+      # mDNS resolver, so bokkie.local cannot resolve here and doctor saying so
+      # is doctor being right.
+      - name: The self-check reads the station correctly
         run: |
-          $qc = sc.exe qc bokkie | Out-String
-          if ($qc -notmatch "AUTO_START") { throw "the service is not set to start automatically:`n$qc" }
-          Write-Host $qc
+          $out = .\BokkieSetup.exe doctor 2>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch '\[\s*ok\s*\].*running on this computer') {
+            throw "doctor did not see the station it has just watched answer"
+          }
+          if ($out -notmatch '\[\s*ok\s*\].*starts Bokkie on its own') {
+            throw "doctor did not confirm that nothing starts the station by itself"
+          }
+          if (($out -match '\[ FAIL \]') -and ($out -notmatch '->')) {
+            throw "doctor reported a fault with nothing to do about it"
+          }
+          exit 0
 
-      - name: It is in Add/Remove Programs
+      - name: Bokkie's log
+        if: always()
+        run: Get-Content (Join-Path $env:LOCALAPPDATA 'Bokkie\logs\*.log') -ErrorAction SilentlyContinue | Select-Object -Last 40
+
+      # Port 80 being taken is a supported outcome, not a failure: the app logs
+      # it and carries on, because refusing to serve a station over a
+      # convenience would be the tail wagging the dog.
+      - name: The short address reaches the app, or says why not
         run: |
-          $key = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Bokkie"
-          $entry = Get-ItemProperty $key
-          if (-not $entry.UninstallString) { throw "no UninstallString under $key" }
-          Write-Host "$($entry.DisplayName) $($entry.DisplayVersion) -> $($entry.UninstallString)"
+          $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Bokkie\logs\*.log') -ErrorAction SilentlyContinue | Out-String
+          $bound = $log -match 'also answering on the short address'
+          $taken = $log -match 'port 80 is not available'
+          Write-Host "bound=$bound taken=$taken"
 
-      # The spec asks for this by name: the runner cannot click a shortcut, so
-      # it reads the .lnk back. Without it FindEdge, the known-folder lookup,
-      # the PowerShell call and ShortcutScript's real round trip are
-      # unexercised anywhere — and the shortcut is what every counter PC runs.
-      - name: The desktop shortcut is a real shortcut
+          if ($taken) {
+            Write-Host "Port 80 was already in use on this runner. What holds it:"
+            netstat -ano | Select-String ':80\s' | Select-Object -First 5
+            exit 0
+          }
+          if (-not $bound) { throw "the log says neither that port 80 was bound nor that it was unavailable" }
+
+          $r = Invoke-WebRequest http://localhost/healthz -MaximumRedirection 5
+          if ($r.StatusCode -ne 200) { throw "port 80 answered $($r.StatusCode)" }
+          Write-Host "http://localhost -> $($r.StatusCode)"
+
+      # The Stop button on the station's own screen, through the same endpoint.
+      - name: Stopping it from its own screen stops it
         run: |
-          "" | .\BokkieSetup.exe setup --elevated --do=shortcut
-          $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Bokkie.lnk'
-          if (-not (Test-Path $lnk)) { throw "no shortcut at $lnk" }
-          $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
-          if ($s.TargetPath -notmatch 'msedge\.exe$') { throw "shortcut target is $($s.TargetPath)" }
-          if ($s.Arguments -ne '--app=http://bokkie.local:8080') { throw "shortcut arguments are $($s.Arguments)" }
-          Write-Host "$($s.TargetPath) $($s.Arguments)"
+          Invoke-RestMethod -Method Post http://localhost:8080/api/control/stop | Out-Null
 
-      - name: Uninstall
-        run: .\BokkieSetup.exe uninstall
+          $deadline = (Get-Date).AddSeconds(30)
+          do {
+            Start-Sleep -Seconds 2
+            try { Invoke-RestMethod http://localhost:8080/healthz | Out-Null; $up = $true }
+            catch { $up = $false }
+          } while ($up -and (Get-Date) -lt $deadline)
 
-      # The data folder surviving an uninstall is a promise the runbook makes to
-      # somebody who may have pressed Uninstall by accident.
-      - name: The database is still there
+          if ($up) { throw "the station was still answering 30s after it was told to stop" }
+          Write-Host "the station stopped, and the port is free"
+
+      # The promise the runbook makes to somebody who closed the window.
+      - name: The database is still there, and so is a backup
         run: |
-          if (-not (Test-Path "C:\ProgramData\Bokkie")) { throw "the data folder was removed by uninstall" }
-          Get-ChildItem "C:\ProgramData\Bokkie"
+          $data = Join-Path $env:LOCALAPPDATA 'Bokkie'
+          if (-not (Test-Path (Join-Path $data 'bokkie.db'))) { throw "the database is missing after a stop" }
+          $backups = Get-ChildItem (Join-Path $data 'backups') -Filter 'bokkie-*.db' -ErrorAction SilentlyContinue
+          if (-not $backups) { throw "closing the station left no backup" }
+          foreach ($b in $backups) {
+            if ($b.Name -like '*.partial') { throw "a half-written backup was left under a real name: $($b.Name)" }
+          }
+          Write-Host "$($backups.Count) backup(s), none partial"
 
-      - name: The service is gone
+      # The hard requirement, asserted after a real serve rather than after an
+      # install/uninstall cycle. Bokkie is open when a person has opened its
+      # window and at no other time, so nothing may be left behind that Windows
+      # would start on its own. The five are checked by name because a
+      # requirement to not do five things erodes one convenience at a time.
+      - name: Nothing is left that could start it without a person
+        if: always()
         run: |
-          $svc = Get-Service bokkie -ErrorAction SilentlyContinue
-          if ($svc) { throw "the bokkie service is still registered after uninstall" }
+          if (Get-Service bokkie -ErrorAction SilentlyContinue) { throw "a service was left installed" }
+
+          foreach ($k in 'Run','RunOnce') {
+            $v = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\$k" -Name Bokkie -ErrorAction SilentlyContinue
+            if ($v) { throw "a $k registry entry was left behind" }
+          }
+
+          $lnk = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\Bokkie.lnk'
+          if (Test-Path $lnk) { throw "a Startup folder shortcut was left behind" }
+
+          schtasks /query /tn Bokkie 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) { throw "a scheduled task was left behind" }
+
+          Write-Host "nothing can start the station without a person"
+          exit 0

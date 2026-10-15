@@ -16,7 +16,7 @@ const error = ref('')
 const busy = ref(false)
 
 /**
- * A blank receipt, or one already addressed to a farmer.
+ * A blank payment, or one already addressed to a farmer.
  *
  * The customer page's "Record payment" button arrives here with ?customer=, so
  * that the person who has just looked at a balance does not have to type the
@@ -36,6 +36,7 @@ async function prefill(): Promise<void> {
       date: toISODate(new Date()),
       amount: '',
       method: 'cash',
+      lines: [] as Payment['lines'],
       particular: '',
     } as Payment
   } catch {
@@ -64,7 +65,7 @@ void prefill()
   <div>
     <PageHeader
       title="New payment"
-      description="Saved as a draft. It moves no money and gets no OR No. until it is posted."
+      description="Saved as a draft. Recording it gives it an OR No.; it is applied to the balance when the farmer is settled."
     />
 
     <Message v-if="error" severity="error" :closable="false" class="payment-new__error">

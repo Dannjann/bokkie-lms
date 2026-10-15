@@ -79,9 +79,7 @@ gh release create "$TAG" \
     dist/bokkie-linux-arm64 \
     dist/latest.json \
     dist/latest.json.sig \
-    "dist/Install Bokkie.cmd" \
     "dist/Install Bokkie.command" \
-    "dist/Update Bokkie.cmd" \
     "dist/Update Bokkie.command" \
     dist/pick-binary.sh
 

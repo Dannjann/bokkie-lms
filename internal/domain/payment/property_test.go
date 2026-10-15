@@ -20,26 +20,17 @@ import (
 )
 
 // The example-based tests check the cases somebody thought of. This one
-// generates sequences nobody thought of — advances, interest charges, payment
-// drafts edited and abandoned, posted and voided, interleaved across customers
-// and under both application orders — and asserts the six things that have to
-// hold for a payment to be worth anything:
+// generates sequences nobody thought of — payments drafted, edited, abandoned,
+// recorded and voided, interleaved across customers — and asserts what has to
+// hold now that recording a payment does not touch the balance:
 //
-//  1. A posted payment moves what is owed down by exactly its amount.
-//  2. The split adds up to the amount, and neither half is negative.
-//  3. A payment never clears more of a component than was owed on it, and the
-//     rule decides which one goes first.
-//  4. A voided payment puts both halves of the balance exactly back.
-//  5. A statement's closing balance equals the balance the rest of the system
-//     shows, at any cut date.
-//  6. OR Nos. are unique, consecutive from orno.start, and never reused.
-//
-// A counterexample here is a balance a farmer could have disputed.
-//
-// The model deliberately tracks only the *combined* debt, which needs no
-// knowledge of how a payment divides. That keeps it from being a second copy of
-// Split that would agree with a wrong one — the division itself is checked
-// against the properties above rather than against a reimplementation.
+//  1. Nothing this package does writes to the ledger. Applying a payment is a
+//     settlement's job (internal/domain/settlement), and how a payment divides
+//     between principal and interest is tested there and in TestTheSplit.
+//  2. OR Nos. are unique, consecutive from orno.start, and never reused.
+//  3. What is waiting to be settled is exactly what has been recorded and not
+//     voided.
+//  4. A palay payment's amount is the sum of its lines' costs.
 
 const (
 	propertyCustomers = 3
@@ -87,119 +78,53 @@ func newPropertyService(t *rapid.T, dir string, rule Rule) (*Service, *ledger.Se
 }
 
 // genDraft draws a payment that is always valid, so a failure is never just the
-// generator producing nonsense. Amounts run well past what a customer is likely
-// to owe, because overpayment is allowed and is where the interesting cases are.
+// generator producing nonsense.
 func genDraft(t *rapid.T, label string) Draft {
-	return Draft{
+	d := Draft{
 		CustomerID: rapid.Int64Range(1, propertyCustomers).Draw(t, label+"/customer"),
 		Date:       today.AddDays(-rapid.IntRange(0, 60).Draw(t, label+"/day")),
 		Amount:     money.FromCentavos(rapid.Int64Range(1, 5_000_000).Draw(t, label+"/amount")),
 		Method:     rapid.SampledFrom(Methods).Draw(t, label+"/method"),
 		Particular: "generated",
 	}
+	if d.Method == MethodPalay {
+		n := rapid.IntRange(1, 4).Draw(t, label+"/lines")
+		for i := 0; i < n; i++ {
+			d.Lines = append(d.Lines, LineDraft{
+				Class: "SLG",
+				Sacks: rapid.Int64Range(0, 100).Draw(t, fmt.Sprintf("%s/line%d/sacks", label, i)),
+				Kilos: KilosFromTenths(rapid.Int64Range(10, 200_000).Draw(t, fmt.Sprintf("%s/line%d/kilos", label, i))),
+				Price: money.FromCentavos(rapid.Int64Range(100, 3_000).Draw(t, fmt.Sprintf("%s/line%d/price", label, i))),
+			})
+		}
+	}
+	return d
 }
 
-func TestPropertyPaymentsHoldUnderArbitrarySequences(t *testing.T) {
+func TestPropertyRecordingPaymentsHoldsUnderArbitrarySequences(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		rule := rapid.SampledFrom([]Rule{InterestFirst, PrincipalFirst}).Draw(rt, "rule")
-		svc, entries, database := newPropertyService(rt, dir, rule)
+		svc, _, database := newPropertyService(rt, dir, InterestFirst)
 
-		// The model: what each customer owes in total, principal and interest
-		// together. A payment reduces it by its amount and a void puts that
-		// back, neither of which needs to know how the payment divided.
-		owed := map[int64]int64{}
+		var drafts, recorded []int64
+		voided := map[int64]bool{}
 
-		// What each posted payment applied, so a void can be checked against
-		// the halves it actually moved rather than against the halves a second
-		// implementation thinks it should have moved.
-		applied := map[int64][2]int64{} // payment id → {principal, interest}
-
-		var drafts, live []int64 // ids of drafts, and of posted-not-voided payments
-		nextOrNo := int64(propertyOrNoStart)
-		seenOrNos := map[int64]bool{}
-
-		run := func(fn func(tx *sql.Tx) error) error {
-			tx, err := database.BeginTx(ctx, nil)
-			if err != nil {
-				rt.Fatalf("begin: %v", err)
-			}
-			defer tx.Rollback()
-
-			if err := fn(tx); err != nil {
-				return err
-			}
-			if err := tx.Commit(); err != nil {
-				rt.Fatalf("commit: %v", err)
-			}
-			return nil
-		}
-
-		drop := func(ids []int64, id int64) []int64 {
-			out := ids[:0]
-			for _, candidate := range ids {
-				if candidate != id {
-					out = append(out, candidate)
-				}
-			}
-			return out
-		}
-
-		balanceOf := func(customerID int64) ledger.Balance {
-			b, err := entries.BalanceFor(ctx, customerID)
-			if err != nil {
-				rt.Fatalf("balance for customer %d: %v", customerID, err)
-			}
-			return b
-		}
-
-		steps := rapid.IntRange(1, 20).Draw(rt, "steps")
+		steps := rapid.IntRange(1, 25).Draw(rt, "steps")
 		for step := 0; step < steps; step++ {
 			label := fmt.Sprintf("step%d", step)
-
-			switch rapid.SampledFrom([]string{"lend", "charge", "create", "edit", "delete", "post", "void"}).
-				Draw(rt, label+"/action") {
-
-			case "lend":
-				customerID := rapid.Int64Range(1, propertyCustomers).Draw(rt, label+"/customer")
-				amount := money.FromCentavos(rapid.Int64Range(1, 5_000_000).Draw(rt, label+"/amount"))
-				if _, err := entries.Post(ctx, ledger.Entry{
-					CustomerID: customerID, Date: today.AddDays(-30), Type: ledger.TypeAdvance,
-					Principal: amount, By: dan,
-				}); err != nil {
-					rt.Fatalf("lend: %v", err)
-				}
-				owed[customerID] += amount.Centavos()
-
-			case "charge":
-				// Interest does not exist until step 7, but the ledger can hold
-				// it today and a payment has to divide correctly when it does.
-				// Generating it here is what stops step 7 from being the first
-				// time the interest half of the split is ever exercised.
-				customerID := rapid.Int64Range(1, propertyCustomers).Draw(rt, label+"/customer")
-				amount := money.FromCentavos(rapid.Int64Range(1, 200_000).Draw(rt, label+"/amount"))
-				if _, err := entries.Post(ctx, ledger.Entry{
-					CustomerID: customerID, Date: today.AddDays(-15), Type: ledger.TypeInterest,
-					Interest: amount, By: dan,
-				}); err != nil {
-					rt.Fatalf("charge interest: %v", err)
-				}
-				owed[customerID] += amount.Centavos()
-
+			switch rapid.SampledFrom([]string{"create", "edit", "delete", "record", "void"}).Draw(rt, label+"/action") {
 			case "create":
+				d := genDraft(rt, label)
 				var p Payment
-				if err := run(func(tx *sql.Tx) error {
-					var err error
-					p, err = svc.CreateTx(ctx, tx, genDraft(rt, label), dan)
+				if err := inTxRapid(rt, database, func(tx *sql.Tx) (err error) {
+					p, err = svc.CreateTx(ctx, tx, d, dan)
 					return err
 				}); err != nil {
-					rt.Fatalf("create a draft: %v", err)
+					rt.Fatalf("create: %v", err)
 				}
-				if p.OrNo != 0 {
-					rt.Fatalf("a draft was numbered %d", p.OrNo)
-				}
+				checkLines(rt, p)
 				drafts = append(drafts, p.ID)
 
 			case "edit":
@@ -207,256 +132,146 @@ func TestPropertyPaymentsHoldUnderArbitrarySequences(t *testing.T) {
 					continue
 				}
 				id := rapid.SampledFrom(drafts).Draw(rt, label+"/draft")
-				if err := run(func(tx *sql.Tx) error {
-					_, err := svc.UpdateTx(ctx, tx, id, genDraft(rt, label))
+				d := genDraft(rt, label)
+				var p Payment
+				if err := inTxRapid(rt, database, func(tx *sql.Tx) (err error) {
+					p, err = svc.UpdateTx(ctx, tx, id, d)
 					return err
 				}); err != nil {
-					rt.Fatalf("edit draft %d: %v", id, err)
+					rt.Fatalf("edit: %v", err)
 				}
+				checkLines(rt, p)
 
 			case "delete":
 				if len(drafts) == 0 {
 					continue
 				}
-				id := rapid.SampledFrom(drafts).Draw(rt, label+"/draft")
-				if err := run(func(tx *sql.Tx) error { return svc.DeleteTx(ctx, tx, id) }); err != nil {
-					rt.Fatalf("delete draft %d: %v", id, err)
+				i := rapid.IntRange(0, len(drafts)-1).Draw(rt, label+"/draft")
+				id := drafts[i]
+				if err := inTxRapid(rt, database, func(tx *sql.Tx) error { return svc.DeleteTx(ctx, tx, id) }); err != nil {
+					rt.Fatalf("delete: %v", err)
 				}
-				drafts = drop(drafts, id)
+				drafts = append(drafts[:i], drafts[i+1:]...)
 
-			case "post":
+			case "record":
 				if len(drafts) == 0 {
 					continue
 				}
-				id := rapid.SampledFrom(drafts).Draw(rt, label+"/draft")
-
-				draft, err := svc.ByID(ctx, id)
-				if err != nil {
-					rt.Fatalf("read draft %d: %v", id, err)
-				}
-				before := balanceOf(draft.CustomerID)
-
-				var p Payment
-				if err := run(func(tx *sql.Tx) error {
-					var err error
-					p, err = svc.PostTx(ctx, tx, id, dan)
+				i := rapid.IntRange(0, len(drafts)-1).Draw(rt, label+"/draft")
+				id := drafts[i]
+				if err := inTxRapid(rt, database, func(tx *sql.Tx) error {
+					_, err := svc.PostTx(ctx, tx, id, dan)
 					return err
 				}); err != nil {
-					rt.Fatalf("post draft %d: %v", id, err)
+					rt.Fatalf("record: %v", err)
 				}
-
-				// Invariant 6: consecutive from the setting, and never twice.
-				if p.OrNo != nextOrNo {
-					rt.Fatalf("payment %d was numbered %d, want %d", id, p.OrNo, nextOrNo)
-				}
-				if seenOrNos[p.OrNo] {
-					rt.Fatalf("OR No. %d was handed out twice", p.OrNo)
-				}
-				seenOrNos[p.OrNo] = true
-				nextOrNo++
-
-				principal, interest := assertTheSplit(rt, svc, p, before, rule)
-				applied[p.ID] = [2]int64{principal, interest}
-
-				owed[p.CustomerID] -= p.Amount.Centavos()
-				drafts = drop(drafts, id)
-				live = append(live, id)
+				drafts = append(drafts[:i], drafts[i+1:]...)
+				recorded = append(recorded, id)
 
 			case "void":
-				if len(live) == 0 {
+				if len(recorded) == 0 {
 					continue
 				}
-				id := rapid.SampledFrom(live).Draw(rt, label+"/payment")
-
-				var p Payment
-				if err := run(func(tx *sql.Tx) error {
-					var err error
-					p, err = svc.VoidTx(ctx, tx, id, manager, "generated void")
+				id := rapid.SampledFrom(recorded).Draw(rt, label+"/payment")
+				err := inTxRapid(rt, database, func(tx *sql.Tx) error {
+					_, err := svc.VoidTx(ctx, tx, id, manager, "generated")
 					return err
-				}); err != nil {
-					rt.Fatalf("void payment %d: %v", id, err)
+				})
+				if voided[id] {
+					if err == nil {
+						rt.Fatalf("payment %d was voided twice", id)
+					}
+					continue
 				}
-
-				// Invariant 4: both halves back, exactly as they were moved.
-				after := balanceOf(p.CustomerID)
-				was := applied[p.ID]
-				if err := assertVoidRestored(rt, svc, p, after, was); err != nil {
-					rt.Fatal(err)
-				}
-
-				owed[p.CustomerID] += p.Amount.Centavos()
-				live = drop(live, id)
-			}
-
-			// Invariant 1, and the check that drafts move nothing: the model
-			// knows only the combined debt, so anything a draft did to a real
-			// balance shows up here.
-			for id := int64(1); id <= propertyCustomers; id++ {
-				b := balanceOf(id)
-				total, err := b.Total()
 				if err != nil {
-					rt.Fatalf("total the balance of customer %d: %v", id, err)
+					rt.Fatalf("void: %v", err)
 				}
-				if total.Centavos() != owed[id] {
-					rt.Fatalf("after %s, customer %d owes %d centavos in total, want %d",
-						label, id, total.Centavos(), owed[id])
-				}
+				voided[id] = true
 			}
 		}
 
-		// Invariant 5, at the end and at a cut somewhere in the middle: a
-		// statement's closing balance is the balance the rest of the system
-		// shows.
-		cut := today.AddDays(-rapid.IntRange(0, 60).Draw(rt, "cut"))
-		for id := int64(1); id <= propertyCustomers; id++ {
-			stmt, err := entries.Statement(ctx, id, ledger.Date{}, ledger.Date{})
-			if err != nil {
-				rt.Fatalf("statement for customer %d: %v", id, err)
-			}
-			cached := balanceOf(id)
-			if stmt.Closing.Principal != cached.Principal || stmt.Closing.Interest != cached.Interest {
-				rt.Fatalf("customer %d: the statement closes at %s/%s and the balance says %s/%s",
-					id, stmt.Closing.Principal, stmt.Closing.Interest, cached.Principal, cached.Interest)
-			}
-			if n := len(stmt.Rows); n > 0 {
-				last := stmt.Rows[n-1].Running
-				if last.Principal != stmt.Closing.Principal || last.Interest != stmt.Closing.Interest {
-					rt.Fatalf("customer %d: the last row runs to %s/%s but the statement closes at %s/%s",
-						id, last.Principal, last.Interest, stmt.Closing.Principal, stmt.Closing.Interest)
-				}
-			}
-
-			partial, err := entries.Statement(ctx, id, ledger.Date{}, cut)
-			if err != nil {
-				rt.Fatalf("statement for customer %d up to %s: %v", id, cut, err)
-			}
-			at, err := entries.BalanceAt(ctx, id, cut)
-			if err != nil {
-				rt.Fatalf("balance at %s for customer %d: %v", cut, id, err)
-			}
-			if partial.Closing.Principal != at.Principal || partial.Closing.Interest != at.Interest {
-				rt.Fatalf("customer %d: a statement to %s closes at %s/%s, BalanceAt says %s/%s",
-					id, cut, partial.Closing.Principal, partial.Closing.Interest, at.Principal, at.Interest)
-			}
+		// 1. Nothing touched the ledger.
+		var entries int
+		if err := database.QueryRow(`SELECT COUNT(*) FROM ledger_entries`).Scan(&entries); err != nil {
+			rt.Fatal(err)
+		}
+		if entries != 0 {
+			rt.Fatalf("recording and voiding payments wrote %d ledger entries", entries)
 		}
 
-		// And the ledger's own first invariant, over a ledger written by real
-		// documents rather than by a generator.
-		found, err := entries.Discrepancies(ctx)
+		// 2. OR Nos. are consecutive from the start, one per recorded payment.
+		rows, err := database.Query(`SELECT or_no FROM payments WHERE or_no IS NOT NULL ORDER BY or_no`)
 		if err != nil {
-			rt.Fatalf("compare the cache against the ledger: %v", err)
+			rt.Fatal(err)
 		}
-		if len(found) != 0 {
-			rt.Fatalf("the cached balances disagree with the entries behind them: %v", found)
+		want := int64(propertyOrNoStart)
+		for rows.Next() {
+			var n int64
+			if err := rows.Scan(&n); err != nil {
+				rt.Fatal(err)
+			}
+			if n != want {
+				rt.Fatalf("OR No. %d where %d was next", n, want)
+			}
+			want++
+		}
+		rows.Close()
+		if got := want - propertyOrNoStart; got != int64(len(recorded)) {
+			rt.Fatalf("%d OR Nos. for %d recorded payments", got, len(recorded))
+		}
+
+		// 3. Waiting to be settled is recorded and not voided.
+		waiting := 0
+		for id := int64(1); id <= propertyCustomers; id++ {
+			ps, err := svc.Unsettled(ctx, id, today)
+			if err != nil {
+				rt.Fatal(err)
+			}
+			for _, p := range ps {
+				if voided[p.ID] || p.Status != StatusPosted {
+					rt.Fatalf("payment %d is %s and waiting to be settled", p.ID, p.Status)
+				}
+				checkLines(rt, p)
+			}
+			waiting += len(ps)
+		}
+		if want := len(recorded) - len(voided); waiting != want {
+			rt.Fatalf("%d payments are waiting, want the %d recorded and not voided", waiting, want)
 		}
 	})
 }
 
-// assertTheSplit is invariants 2 and 3, checked against the entry that was
-// actually written rather than against a second implementation of the rule.
-//
-// It returns what was applied to each half, so that voiding can be checked
-// against the same figures.
-func assertTheSplit(t *rapid.T, svc *Service, p Payment, before ledger.Balance, rule Rule) (principal, interest int64) {
-	t.Helper()
+// checkLines asserts property 4.
+func checkLines(rt *rapid.T, p Payment) {
+	if p.Method != MethodPalay {
+		if len(p.Lines) != 0 {
+			rt.Fatalf("a %s payment has %d lines", p.Method, len(p.Lines))
+		}
+		return
+	}
+	total := money.Zero
+	for _, l := range p.Lines {
+		cost, err := Cost(l.Kilos, l.Price)
+		if err != nil || cost != l.Cost {
+			rt.Fatalf("a line of %s kg at %s is stored at %s", l.Kilos, l.Price, l.Cost)
+		}
+		total, _ = total.Add(l.Cost)
+	}
+	if total != p.Amount {
+		rt.Fatalf("palay payment %d is for %s and its lines add up to %s", p.ID, p.Amount, total)
+	}
+}
 
-	written, err := svc.Entries(context.Background(), p.ID)
+func inTxRapid(rt *rapid.T, database *sql.DB, fn func(tx *sql.Tx) error) error {
+	tx, err := database.BeginTx(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("read what payment %d wrote: %v", p.ID, err)
+		rt.Fatalf("begin: %v", err)
 	}
-	if len(written) != 1 {
-		t.Fatalf("payment %d wrote %d entries, want one", p.ID, len(written))
+	if err := fn(tx); err != nil {
+		tx.Rollback()
+		return err
 	}
-	e := written[0]
-
-	// The deltas are negative; what was *applied* is their negation.
-	principal, interest = -e.Principal.Centavos(), -e.Interest.Centavos()
-
-	// Invariant 2: the split divides the payment, it never changes its size.
-	if principal+interest != p.Amount.Centavos() {
-		t.Fatalf("payment %d of %s split into %d and %d", p.ID, p.Amount, principal, interest)
-	}
-	if principal < 0 || interest < 0 {
-		t.Fatalf("payment %d split into a negative half: %d and %d", p.ID, principal, interest)
-	}
-
-	// Invariant 3, stated as properties rather than as a second implementation
-	// of the rule — which is the whole point of checking it here.
-	owedInterest, owedPrincipal := before.Interest.Centavos(), before.Principal.Centavos()
-	amount := p.Amount.Centavos()
-
-	atMost := func(owed int64) int64 {
-		if owed < 0 {
-			return 0
-		}
-		return owed
-	}
-	debt := owedPrincipal + owedInterest
-
-	// Never clears more interest than was owed. This holds under both rules:
-	// under interest-first because interest is taken first and capped, and
-	// under principal-first because the excess beyond the whole debt goes to
-	// principal rather than to interest.
-	if interest > atMost(owedInterest) {
-		t.Fatalf("payment %d cleared %d of interest, more than the %d owed", p.ID, interest, owedInterest)
-	}
-
-	// Never clears more principal than was owed, unless the payment was for
-	// more than the whole debt — in which case the excess lands here and the
-	// customer is in credit.
-	if principal > atMost(owedPrincipal) && amount <= debt {
-		t.Fatalf("payment %d of %d cleared %d of principal against %d owed, without exceeding the debt of %d",
-			p.ID, amount, principal, owedPrincipal, debt)
-	}
-
-	// And the rule decides which component gets first call on the money.
-	switch rule {
-	case InterestFirst:
-		if owedInterest > 0 && interest != min64(amount, owedInterest) {
-			t.Fatalf("payment %d of %d put %d against the %d of interest owed, under interest-first",
-				p.ID, amount, interest, owedInterest)
-		}
-		if owedInterest <= 0 && interest != 0 {
-			t.Fatalf("payment %d put %d against interest when none was owed (%d)", p.ID, interest, owedInterest)
-		}
-	case PrincipalFirst:
-		if owedPrincipal > 0 && principal < min64(amount, owedPrincipal) {
-			t.Fatalf("payment %d of %d put only %d against the %d of principal owed, under principal-first",
-				p.ID, amount, principal, owedPrincipal)
-		}
-	}
-
-	return principal, interest
+	return tx.Commit()
 }
 
-func min64(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// assertVoidRestored is invariant 4: a voided payment puts back exactly the two
-// halves it took, and leaves both itself and its reversal on the record.
-func assertVoidRestored(t *rapid.T, svc *Service, p Payment, after ledger.Balance, was [2]int64) error {
-	t.Helper()
-
-	written, err := svc.Entries(context.Background(), p.ID)
-	if err != nil {
-		return fmt.Errorf("read what payment %d wrote: %w", p.ID, err)
-	}
-	if len(written) != 2 {
-		return fmt.Errorf("a voided payment has %d entries, want the payment and its reversal", len(written))
-	}
-	if !written[1].IsReversal() {
-		return fmt.Errorf("the second entry of voided payment %d is a %s", p.ID, written[1].Type)
-	}
-
-	// The reversal is the exact negation of what was applied.
-	if written[1].Principal.Centavos() != was[0] || written[1].Interest.Centavos() != was[1] {
-		return fmt.Errorf("payment %d applied %d/%d and its reversal moved %s/%s",
-			p.ID, was[0], was[1], written[1].Principal, written[1].Interest)
-	}
-	_ = after
-	return nil
-}
+var _ = time.Now

@@ -1,6 +1,13 @@
 # Step 7 — Interest
 
-**Status:** ✅ built, gate passed · **Depends on:** Step 6 · **Blocks:** Steps 8, 10
+**Status:** ⛔ superseded by [07.5-settlement.md](07.5-settlement.md) · **Depends on:** Step 6 · **Blocks:** Steps 8, 10
+
+> **Superseded, 2026-10-15.** Reading the legacy program answered Q1 from its
+> code and data ([legacy-findings.md](legacy-findings.md)): the station settles
+> one farmer at a time, charging each advance by the day at a monthly rate
+> chosen on the settlement. That is exactly the case below calls "would still
+> cost code", so the interest run described here was removed and replaced by the
+> settlement. This page is kept as the record of what was built and why.
 
 > **Q1 of the [domain interview](domain-interview.md) is unanswered**, and this
 > step is built anyway. That is a decision, not an oversight, and *Building on

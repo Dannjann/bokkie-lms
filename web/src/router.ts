@@ -19,6 +19,12 @@ declare module 'vue-router' {
     public?: boolean
     /** Managers only, in the UI. The server enforces the real thing. */
     manager?: boolean
+    /**
+     * The station's own screens: about the machine, not the books. Outside
+     * every guard, because the window opens on one before anybody has logged
+     * in and the server refuses them from any machine but the host anyway.
+     */
+    station?: boolean
   }
 }
 
@@ -27,6 +33,22 @@ declare module 'vue-router' {
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // The station's own screens. Public, because the person who opens the
+    // window has not logged in and should not have to in order to see whether
+    // the station is running — and the server refuses these from any machine
+    // but the host regardless of what the browser believes.
+    {
+      path: '/station',
+      name: 'station',
+      component: () => import('@/pages/StationPage.vue'),
+      meta: { title: 'Station', public: true, station: true },
+    },
+    {
+      path: '/station/check',
+      name: 'station-check',
+      component: () => import('@/pages/StationCheckPage.vue'),
+      meta: { title: 'Check', public: true, station: true },
+    },
     {
       path: '/',
       name: 'home',
@@ -73,13 +95,13 @@ export const router = createRouter({
       path: '/advances/new',
       name: 'advance-new',
       component: () => import('@/pages/AdvanceNewPage.vue'),
-      meta: { title: 'New voucher', parent: { label: 'Advances', to: '/advances' } },
+      meta: { title: 'New advance slip', parent: { label: 'Advances', to: '/advances' } },
     },
     {
       path: '/advances/:id(\\d+)',
       name: 'advance',
       component: () => import('@/pages/AdvancePage.vue'),
-      meta: { title: 'Voucher', parent: { label: 'Advances', to: '/advances' } },
+      meta: { title: 'Advance slip', parent: { label: 'Advances', to: '/advances' } },
     },
     {
       path: '/payments',
@@ -100,43 +122,40 @@ export const router = createRouter({
       meta: { title: 'Payment', parent: { label: 'Payments', to: '/payments' } },
     },
     {
-      // Manager-only in the UI and at the server, reads included — the whole
-      // section is, and this guard only saves a pointless round trip.
-      path: '/interest',
-      name: 'interest',
-      component: () => import('@/pages/InterestPage.vue'),
-      meta: { title: 'Interest', manager: true },
+      // Counter work, as it was in the legacy system: a farmer has delivered
+      // and is standing there to be settled up. Open to encoders; voiding is a
+      // manager's, and the server enforces that.
+      path: '/settlements',
+      name: 'settlements',
+      component: () => import('@/pages/SettlementsPage.vue'),
+      meta: { title: 'Settlements' },
     },
     {
-      path: '/interest/new',
-      name: 'interest-new',
-      component: () => import('@/pages/InterestNewPage.vue'),
-      meta: {
-        title: 'New interest run',
-        parent: { label: 'Interest', to: '/interest' },
-        manager: true,
-      },
+      path: '/settlements/new',
+      name: 'settlement-new',
+      component: () => import('@/pages/SettlementNewPage.vue'),
+      meta: { title: 'Settle a farmer', parent: { label: 'Settlements', to: '/settlements' } },
     },
     {
-      path: '/interest/:id(\\d+)',
-      name: 'interest-run',
-      component: () => import('@/pages/InterestRunPage.vue'),
-      meta: {
-        title: 'Interest run',
-        parent: { label: 'Interest', to: '/interest' },
-        manager: true,
-      },
+      path: '/settlements/:id(\\d+)',
+      name: 'settlement',
+      component: () => import('@/pages/SettlementPage.vue'),
+      meta: { title: 'Settlement', parent: { label: 'Settlements', to: '/settlements' } },
     },
     {
       // The four reports. Manager-only in the UI and at the server, reads
       // included: they are portfolio views, and what an encoder needs about one
       // farmer is on the customer screen and the statement.
+      //
+      // No `parent`: each report is its own entry in the sidebar, so there is
+      // nothing above it to go back to. They used to name a "Reports" parent
+      // that was really Current Advances, which made Back on the Aging screen
+      // land somewhere unrelated.
       path: '/reports/current-advances',
       name: 'report-current-advances',
       component: () => import('@/pages/CurrentAdvancesPage.vue'),
       meta: {
         title: 'Current Advances',
-        parent: { label: 'Reports', to: '/reports/current-advances' },
         manager: true,
       },
     },
@@ -146,7 +165,6 @@ export const router = createRouter({
       component: () => import('@/pages/ROIPage.vue'),
       meta: {
         title: 'Return of Investment',
-        parent: { label: 'Reports', to: '/reports/current-advances' },
         manager: true,
       },
     },
@@ -156,20 +174,21 @@ export const router = createRouter({
       component: () => import('@/pages/AgingPage.vue'),
       meta: {
         title: 'Aging',
-        parent: { label: 'Reports', to: '/reports/current-advances' },
         manager: true,
       },
     },
     {
-      path: '/reports/liquidated',
-      name: 'report-liquidated',
-      component: () => import('@/pages/LiquidatedPage.vue'),
+      path: '/reports/settled',
+      name: 'report-settled',
+      component: () => import('@/pages/SettledPage.vue'),
       meta: {
-        title: 'Liquidated',
-        parent: { label: 'Reports', to: '/reports/current-advances' },
+        // Matches the sidebar's label, so the window title and the menu agree.
+        title: 'Settled',
         manager: true,
       },
     },
+    // The report's old address, for a bookmark made before it was renamed.
+    { path: '/reports/liquidated', redirect: '/reports/settled' },
     {
       // The index over every farmer's statement. Not manager-gated, unlike the
       // four reports — the encoder at the counter is the person who has to tell
@@ -181,8 +200,9 @@ export const router = createRouter({
     },
     {
       // Hangs off the customer as well as off the index: this is one farmer's
-      // history and both ways in are legitimate. The crumb points back to
-      // Customers because that is where the record lives.
+      // history and both ways in are legitimate. Back goes to that farmer once
+      // the page knows who it is (setPageParent); Customers is the fallback for
+      // the moment before it does.
       path: '/customers/:id(\\d+)/statement',
       name: 'statement',
       component: () => import('@/pages/StatementPage.vue'),
@@ -206,7 +226,7 @@ export const router = createRouter({
     },
     {
       // Manager-only to change, and manager-only to look at: the Ref. No. start
-      // and the interest rule are not things to be browsed mid-shift.
+      // and the usual rate are not things to be browsed mid-shift.
       path: '/settings',
       name: 'settings',
       component: () => import('@/pages/SettingsPage.vue'),
@@ -250,6 +270,19 @@ router.beforeEach(async (to) => {
   // truth, and the API's 401s are what correct it if a session dies mid-use.
   if (!session.loaded) {
     await session.load()
+  }
+
+  // The station's own screens are outside all of this. They are about the
+  // machine rather than the books: whether it is serving, at what address, when
+  // it last backed up, and how to stop it.
+  //
+  // Exempting them from the setup redirect is not a convenience. The window
+  // opens on /station in application mode, with no address bar — so on a brand
+  // new station the redirect to /setup would take the Stop button, the address
+  // and the backup time away for the whole of the first session, which is the
+  // session somebody is watching.
+  if (to.meta.station) {
+    return true
   }
 
   if (session.needsSetup) {

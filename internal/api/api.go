@@ -26,10 +26,10 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/backup"
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
-	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
 	"github.com/Dannjann/bokkie-lms/internal/domain/report"
+	"github.com/Dannjann/bokkie-lms/internal/domain/settlement"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
@@ -59,13 +59,14 @@ type Deps struct {
 	// do the only thing it exists for.
 	Advances *advance.Service
 
-	// Payments is the receipt: the other document that writes to the ledger,
-	// and the only one that writes entries in the other direction.
+	// Payments records what farmers bring in. Recording one does not move the
+	// balance; a settlement applies it.
 	Payments *payment.Service
 
-	// Interest is the run: the third document, and the only one that writes to
-	// every borrower's balance at once rather than to one farmer's.
-	Interest *interest.Service
+	// Settlements settle one farmer up to a cut-off: they charge the interest
+	// and apply the recorded payments, which makes them the document that
+	// writes interest and payments to the ledger.
+	Settlements *settlement.Service
 
 	// Reports is the only one of these that cannot write. It has no
 	// transaction, no INSERT and no method that takes one, which is Q4 of the
@@ -86,6 +87,13 @@ type Deps struct {
 	// setting must not need a working mDNS responder, and an install with mDNS
 	// switched off in config.yaml has no name to withdraw.
 	Discovery Discovery
+
+	// Station is the running app, for the control screens. See control.go for
+	// why it is an interface and why it is deliberately only four methods.
+	//
+	// nil is legitimate: a test that is about the lending API has no station to
+	// control, and the control routes simply do not register without one.
+	Station Station
 
 	// SPA is the built frontend, embedded in the binary. Ignored when DevProxy
 	// is set.
@@ -148,11 +156,18 @@ func NewHandler(d Deps) *Handler {
 		mux.Handle("/", newSPAHandler(d.SPA))
 	}
 
+	// withControl sits outside both gates below it. See control.go: the person
+	// who opens the station's window has not logged in, and the question "may
+	// that machine switch the station off" is not the one the network gate
+	// answers.
+	inner := http.Handler(withNetworkGate(d, withSession(d, mux)))
+	if d.Station != nil {
+		inner = withControl(d, inner)
+	}
+
 	handler := withRequestID(
 		withRequestLog(d.Logger,
-			withPanicRecovery(d.Logger,
-				withNetworkGate(d,
-					withSession(d, mux)))))
+			withPanicRecovery(d.Logger, inner)))
 
 	return &Handler{Handler: handler, Routes: rt.routes}
 }
@@ -305,31 +320,26 @@ func registerRoutes(rt *router, d Deps) {
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/payments/{id}/void",
 		"payment.voided", "payment", handleVoidPayment(d))
 
-	// --- Interest -----------------------------------------------------------
+	// --- Settlements --------------------------------------------------------
 	//
-	// ManagerOnly throughout, reads included, and that is the one place this
-	// section departs from the two above. Everything else opens its everyday
-	// half to encoders because a farmer is standing at the counter and the work
-	// is theirs. Nothing about a run is counter work — nobody is standing
-	// there, it is not typed off a slip, and it changes what every farmer owes
-	// at once. The preview is held back with the rest because the preview is
-	// the dangerous artifact: it is the screen that ends in a Post button.
+	// Counter work, as in the legacy system: the farmer has delivered and is
+	// being settled up. Voiding is a manager's.
 
-	rt.read(ManagerOnly, "/api/interest-runs", handleListInterestRuns(d))
-	rt.read(ManagerOnly, "/api/interest-runs/{id}", handleGetInterestRun(d))
+	rt.read(Authenticated, "/api/settlements", handleListSettlements(d))
+	rt.read(Authenticated, "/api/settlements/{id}", handleGetSettlement(d))
 
-	rt.mutate(ManagerOnly, http.MethodPost, "/api/interest-runs",
-		"interest.draft.created", "interest", handleCreateInterestRun(d))
-	rt.mutate(ManagerOnly, http.MethodPut, "/api/interest-runs/{id}",
-		"interest.draft.updated", "interest", handleUpdateInterestRun(d))
-	rt.mutate(ManagerOnly, http.MethodDelete, "/api/interest-runs/{id}",
-		"interest.draft.deleted", "interest", handleDeleteInterestRun(d))
+	rt.mutate(Authenticated, http.MethodPost, "/api/settlements",
+		"settlement.draft.created", "settlement", handleCreateSettlement(d))
+	rt.mutate(Authenticated, http.MethodPut, "/api/settlements/{id}",
+		"settlement.draft.updated", "settlement", handleUpdateSettlement(d))
+	rt.mutate(Authenticated, http.MethodDelete, "/api/settlements/{id}",
+		"settlement.draft.deleted", "settlement", handleDeleteSettlement(d))
 
-	rt.mutate(ManagerOnly, http.MethodPost, "/api/interest-runs/{id}/post",
-		"interest.posted", "interest", handlePostInterestRun(d))
+	rt.mutate(Authenticated, http.MethodPost, "/api/settlements/{id}/post",
+		"settlement.posted", "settlement", handlePostSettlement(d))
 
-	rt.mutate(ManagerOnly, http.MethodPost, "/api/interest-runs/{id}/void",
-		"interest.voided", "interest", handleVoidInterestRun(d))
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/settlements/{id}/void",
+		"settlement.voided", "settlement", handleVoidSettlement(d))
 
 	// The statement hangs off the customer rather than off the ledger, because
 	// that is the question being asked: what does this farmer owe, and why.
@@ -352,7 +362,7 @@ func registerRoutes(rt *router, d Deps) {
 	rt.read(ManagerOnly, "/api/reports/current-advances", handleCurrentAdvances(d))
 	rt.read(ManagerOnly, "/api/reports/roi", handleROI(d))
 	rt.read(ManagerOnly, "/api/reports/aging", handleAging(d))
-	rt.read(ManagerOnly, "/api/reports/liquidated", handleLiquidated(d))
+	rt.read(ManagerOnly, "/api/reports/settled", handleSettled(d))
 
 	// --- Audit --------------------------------------------------------------
 	//

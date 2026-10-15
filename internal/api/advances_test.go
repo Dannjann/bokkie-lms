@@ -120,7 +120,8 @@ func TestAnEncoderEntersAndPostsAVoucher(t *testing.T) {
 	var posted advance.Voucher
 	decode(t, resp, &posted)
 
-	if posted.Status != advance.StatusPosted || posted.RefNo != 1 {
+	// 1426 continues the legacy sequence: refno.start defaults to the old system's next number.
+	if posted.Status != advance.StatusPosted || posted.RefNo != 1426 {
 		t.Errorf("the posted voucher is %s with Ref. No. %d, want posted and numbered", posted.Status, posted.RefNo)
 	}
 	if got := f.balance(t, f.farmers[0]); got != "500.00" {

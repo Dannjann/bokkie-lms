@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -24,8 +25,15 @@ func TestSettingsAreSeededOnFirstRun(t *testing.T) {
 	if store.Location().String() != "Asia/Manila" {
 		t.Errorf("timezone = %q, want Asia/Manila", store.Location())
 	}
-	if store.Int(BackupRetention) != 14 {
-		t.Errorf("backup retention = %d, want 14", store.Int(BackupRetention))
+	// Against the definition, not a number written here. What this is testing
+	// is that a fresh install is seeded from the defaults; the retention
+	// itself is a product decision that has already moved once.
+	wantRetention, err := strconv.Atoi(BackupRetention.Default)
+	if err != nil {
+		t.Fatalf("the retention default %q is not a number", BackupRetention.Default)
+	}
+	if store.Int(BackupRetention) != wantRetention {
+		t.Errorf("backup retention = %d, want the default %d", store.Int(BackupRetention), wantRetention)
 	}
 	if !store.Bool(BackupEnabled) {
 		t.Error("the nightly backup is off on a fresh install")
@@ -228,8 +236,12 @@ func TestAHandEditedRowFallsBackToTheDefault(t *testing.T) {
 		t.Fatalf("reload: %v", err)
 	}
 
-	if got := store.Int(BackupRetention); got != 14 {
-		t.Errorf("retention = %d, want the default 14 rather than a zero", got)
+	want, err := strconv.Atoi(BackupRetention.Default)
+	if err != nil {
+		t.Fatalf("the retention default %q is not a number", BackupRetention.Default)
+	}
+	if got := store.Int(BackupRetention); got != want {
+		t.Errorf("retention = %d, want the default %d rather than a zero", got, want)
 	}
 }
 

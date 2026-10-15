@@ -18,25 +18,40 @@
    */
   color-scheme: light;
 
-  /* The rail. Slate, not the brand colour: navigation should recede. */
-  --shell-nav-bg: #1e293b;
-  --shell-nav-bg-deep: #172033;
-  --shell-nav-border: #334155;
-  --shell-nav-fg: #94a3b8;
-  --shell-nav-fg-hover: #e2e8f0;
-  --shell-nav-fg-active: #ffffff;
-  --shell-nav-active-bg: rgb(20 184 166 / 0.16);
-  --shell-nav-accent: #2dd4bf;
+  /*
+   * The rail. A pale blue source list, the way a platform sidebar sits beside
+   * its content: it should recede, so it is a tint of the accent rather than a
+   * slab of dark chrome, and the selected item is the one thing on it in
+   * strong colour.
+   */
+  --shell-nav-bg: #eef5fc;
+  --shell-nav-bg-deep: #e4eef9;
+  --shell-nav-border: #d5e3f2;
+  --shell-nav-fg: #334155;
+  --shell-nav-fg-muted: #5b6b80;
+  --shell-nav-fg-hover: #0f172a;
+  --shell-nav-fg-active: #035a9f;
+  --shell-nav-hover-bg: rgb(2 112 196 / 0.07);
+  --shell-nav-active-bg: #d6ebfd;
+  --shell-nav-accent: var(--p-primary-color);
+
+  /*
+   * The smallest thing a finger can reliably hit. Desktop pointers get a
+   * little less, since the counter PCs are mouse-driven and a 44px sidebar
+   * would push half the menu below the fold at 768px tall.
+   */
+  --shell-hit: 2.25rem;
 
   --shell-nav-width: 15.5rem;
   --shell-topbar-height: 3.5rem;
 
-  --shell-content-bg: var(--p-surface-50);
+  --shell-content-bg: #f7f9fc;
   --shell-surface: var(--p-surface-0);
   --shell-border: var(--p-surface-200);
-  --shell-muted: var(--p-surface-500);
+  /* 500 is 4.5:1 on white but slips under it on the tinted well; 600 does not. */
+  --shell-muted: var(--p-surface-600);
 
-  --shell-radius: 10px;
+  --shell-radius: 12px;
   --shell-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 3px rgb(15 23 42 / 0.04);
 }
 
@@ -70,12 +85,15 @@ body {
   gap: 1.25rem;
 }
 
-/* The small uppercase label above a figure or a group. */
+/*
+ * The small label above a figure, a field or a group. Sentence case, as
+ * written: shouting every field label in small caps made "Slip date" read
+ * louder than the date in it, and put this screen's labels at odds with the
+ * forms beside it that already used plain ones.
+ */
 .label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--shell-muted);
 }
 
@@ -91,4 +109,59 @@ body {
 /* Forms are read top to bottom and are never full-bleed on a wide monitor. */
 .form-column {
   max-width: 34rem;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --shell-hit: 2.75rem;
+  }
+}
+
+/*
+ * Links look like links everywhere, in the accent colour. Without this a
+ * customer name inside a table fell back to the browser's own #0000ee with an
+ * underline, which was the only purple-blue on any screen.
+ */
+a {
+  color: var(--p-primary-color);
+  text-decoration: none;
+  text-underline-offset: 0.15em;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--p-primary-color);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/*
+ * A disabled primary button keeps its shape but loses the colour, so it reads
+ * as "not yet" instead of as a washed-out version of "go". Aura's default fades
+ * the whole button to 60%, which put white text on pale blue at under 2:1.
+ */
+.p-button.p-button:disabled:not(.p-button-text):not(.p-button-outlined):not(.p-button-secondary):not(.p-button-danger) {
+  background: var(--p-surface-200);
+  border-color: var(--p-surface-200);
+  color: var(--p-surface-500);
+  opacity: 1;
+}
+
+/*
+ * Column headings: one style for every table, PrimeVue's or hand-built. They
+ * are labels for the figures below, so they are small and quiet and the
+ * figures are what the eye lands on.
+ */
+.p-datatable .p-datatable-thead > tr > th {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--shell-muted);
+  background: var(--shell-surface);
+}
+
+.p-datatable-selectable .p-datatable-tbody > tr:not(.p-datatable-empty-message):hover {
+  background: var(--p-primary-50);
 }

@@ -493,7 +493,7 @@ onMounted(load)
   color: var(--shell-muted);
 }
 
-.users__table :deep(.users__username) {
+.users__table :deep(td.users__username) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8125rem;
   white-space: nowrap;

@@ -18,28 +18,59 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
 
+// defaultPort is where the station listens unless the settings file says
+// otherwise. It is repeated here because the window has to say something
+// sensible even when that file cannot be read, which is the case the repair
+// below exists for.
+const defaultPort = 8080
+
 // setupState is what the guided window knows about this machine before it
 // offers anything.
 type setupState struct {
-	Installed        bool
-	InstalledVersion string
-	ThisVersion      string
-	Elevated         bool
+	// Running is a station answering on the port right now, which since 2.7
+	// means somebody has a window open. It is deliberately not called
+	// "installed": nothing is installed any more, and a review found a menu
+	// that read "answering" as "installed" and offered to repair it — which
+	// would have registered an auto-starting service.
+	Running        bool
+	RunningVersion string
+	ThisVersion    string
+	Elevated       bool
 
 	// RunningFromInstallPath is the person having double-clicked the copy in
 	// Program Files rather than the one they downloaded.
 	RunningFromInstallPath bool
+
+	// OldServiceInstalled is a service left behind by a 2.6 install, which
+	// starts the station on its own and must not.
+	OldServiceInstalled bool
+
+	// DataFolder is where the records are, and DataFolderUnwritable is this
+	// computer being unable to write them — an upgrade from a version that ran
+	// as a service, whose folder belongs to an account this one is not.
+	DataFolder           string
+	DataFolderUnwritable bool
 }
 
 type setupAction int
 
+// The actions a 2.7 window can take. Install, repair, uninstall, stop and start
+// are deliberately absent rather than merely unused: each registered or managed
+// the Windows service this step abolished, and a constant that still exists is
+// one somebody can reach through --do=.
+//
+// actionQuit is the zero value on purpose. A name this list does not know
+// resolves to it, so a --do this build no longer understands closes the window
+// rather than doing something nobody asked for.
 const (
-	actionInstall setupAction = iota
-	actionUpdate
-	actionRepair
+	actionQuit setupAction = iota
 	actionShortcut
-	actionUninstall
-	actionQuit
+	actionServe
+	actionDoctor
+	actionUpdate
+	actionRemoveService
+	actionAlreadyRunning
+	actionFixDataFolder
 )
 
 // setupChoice is one line of the menu.
@@ -53,18 +84,33 @@ type setupChoice struct {
 // it. The shortcut is deliberately absent: it writes one file to one desktop,
 // and a counter PC is where it is usually run, by somebody who does not have an
 // administrator password and should not need one.
+// adminActions are the choices that change this computer for everyone who uses
+// it. Starting the station is deliberately absent: it opens a window and binds
+// a port, and asking a counter PC's user for an administrator password to do
+// that is asking for one they do not have.
 var adminActions = map[setupAction]bool{
-	actionInstall:   true,
-	actionUpdate:    true,
-	actionRepair:    true,
-	actionUninstall: true,
+	actionUpdate:        true,
+	actionRemoveService: true,
+	actionFixDataFolder: true,
 }
+
+// serviceActions are the names older builds used for the things that
+// registered or managed a Windows service. None of them resolves to anything
+// now; the list exists so a test can say so.
+var serviceActions = []string{"install", "repair", "uninstall", "stop", "start"}
 
 // needsAdmin is read both when the menu is built and when a choice is
 // dispatched, so the prompt and the label cannot disagree.
 func needsAdmin(a setupAction) bool { return adminActions[a] }
 
 // menuFor decides what this machine is offered.
+//
+// Since 2.7 there is no install here at all. Every choice that registered a
+// Windows service is gone — a review found two of them still reachable, one of
+// which ("Repair this installation") was offered to a station that was merely
+// *answering*, and would have registered an auto-starting service on a machine
+// that had never had one. Bokkie is open when a person has opened its window
+// and at no other time, and a menu that can undo that is the menu being wrong.
 //
 // The counter PCs are the reason the shortcut is offered first on a machine
 // with nothing installed, and the reason it is marked as needing no
@@ -77,33 +123,47 @@ func menuFor(state setupState) []setupChoice {
 	shortcut := choice(actionShortcut, "Put a Bokkie shortcut on this computer's desktop")
 	closeIt := choice(actionQuit, "Close")
 
-	if !state.Installed {
+	// Nothing else is worth offering while Bokkie cannot read its own records.
+	// It will not start, so every other choice ends in the same failure, and a
+	// menu of them is a menu of wrong turns.
+	if state.DataFolderUnwritable {
 		return []setupChoice{
-			shortcut,
-			choice(actionInstall, "Install Bokkie on this computer (this makes it the host)"),
+			choice(actionFixDataFolder, "Let Bokkie fix this — give this computer permission to its own records"),
+			choice(actionDoctor, "Check what is wrong (changes nothing)"),
 			closeIt,
 		}
 	}
 
-	var first setupChoice
-	switch {
-	// An install that is not answering has no version to compare against, and
-	// "update from an installed copy that is not answering" is not a sentence
-	// anybody should be shown. What it needs is a repair either way.
-	case state.InstalledVersion == "":
-		first = choice(actionRepair, "Repair this installation (Bokkie is installed here but is not answering)")
-	case state.InstalledVersion != state.ThisVersion:
-		first = choice(actionUpdate, "Update Bokkie from "+state.InstalledVersion+" to "+state.ThisVersion)
-	default:
-		first = choice(actionRepair, "Repair this installation (reinstall "+state.InstalledVersion+")")
+	choices := []setupChoice{shortcut}
+
+	// A station that is answering already has a window open somewhere. Offering
+	// to start a second one would bind a port that is taken and confuse
+	// somebody who is looking for the window they already have.
+	if state.Running {
+		choices = append(choices, choice(actionAlreadyRunning,
+			"Bokkie is already running on this computer, version "+state.RunningVersion))
+	} else {
+		choices = append(choices, choice(actionServe,
+			"Start Bokkie here — this makes this computer the host (runs while this window is open)"))
 	}
 
-	return []setupChoice{
-		first,
-		shortcut,
-		choice(actionUninstall, "Remove Bokkie from this computer (the data folder is kept)"),
-		closeIt,
+	choices = append(choices, choice(actionDoctor, "Check what is wrong (changes nothing)"))
+
+	// The leftover from an older install starts the station without anybody
+	// asking, which is the one thing this step exists to stop.
+	if state.OldServiceInstalled {
+		choices = append(choices, choice(actionRemoveService,
+			"Remove the old Bokkie service (it starts on its own, and should not)"))
 	}
+
+	// Updating replaces this computer's copy of the program. It is offered only
+	// when there is something to replace and this file is a different version.
+	if state.Running && state.RunningVersion != "" && state.RunningVersion != state.ThisVersion {
+		choices = append(choices, choice(actionUpdate,
+			"Update Bokkie from "+state.RunningVersion+" to "+state.ThisVersion))
+	}
+
+	return append(choices, closeIt)
 }
 
 // describeInstallation works out what this machine already has.
@@ -119,14 +179,10 @@ func describeInstallation(exePath, installedPath, serving string, servingErr err
 		RunningFromInstallPath: sameFile(exePath, installedPath),
 	}
 
-	switch {
-	case servingErr == nil && serving != "":
-		state.Installed, state.InstalledVersion = true, serving
-	case fileExists(installedPath):
-		// Installed, but with no version to report: the binary is there and
-		// nothing is answering on the port.
-		state.Installed = true
+	if servingErr == nil && serving != "" {
+		state.Running, state.RunningVersion = true, serving
 	}
+	_ = installedPath
 	return state
 }
 
@@ -149,18 +205,19 @@ func fileExists(path string) bool {
 // reads them, and a disagreement between the two would be a window that
 // silently does the wrong thing.
 var actionNames = map[setupAction]string{
-	actionInstall:   "install",
-	actionUpdate:    "update",
-	actionRepair:    "repair",
-	actionShortcut:  "shortcut",
-	actionUninstall: "uninstall",
+	actionShortcut:      "shortcut",
+	actionServe:         "serve",
+	actionDoctor:        "doctor",
+	actionUpdate:        "update",
+	actionRemoveService: "remove-service",
+	actionFixDataFolder: "fix-data-folder",
 }
 
 func nameOf(a setupAction) string { return actionNames[a] }
 
-// actionFor is nameOf backwards. Anything unrecognised is actionQuit rather
-// than the zero value, which is actionInstall: a misspelling must never be
-// read as the one action that turns a counter PC into a second host.
+// actionFor is nameOf backwards. Anything unrecognised is actionQuit, which is
+// also the zero value — so a name this build no longer knows, the install and
+// repair of older versions included, closes the window instead of acting.
 func actionFor(name string) setupAction {
 	for action, known := range actionNames {
 		if known == name {
@@ -175,10 +232,10 @@ func ask(w io.Writer, r io.Reader, state setupState) (setupAction, error) {
 	choices := menuFor(state)
 
 	fmt.Fprintf(w, "\nBokkie %s\n\n", state.ThisVersion)
-	if state.Installed {
-		fmt.Fprintf(w, "This computer has Bokkie %s on it.\n\n", state.InstalledVersion)
+	if state.Running {
+		fmt.Fprintf(w, "Bokkie is running on this computer, version %s.\n\n", state.RunningVersion)
 	} else {
-		fmt.Fprint(w, "This computer does not have Bokkie on it.\n\n")
+		fmt.Fprint(w, "Bokkie is not running on this computer.\n\n")
 	}
 	for i, choice := range choices {
 		fmt.Fprintf(w, "  %d. %s\n", i+1, choice.Label)

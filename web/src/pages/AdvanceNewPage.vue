@@ -31,7 +31,7 @@ async function save(draft: VoucherDraft): Promise<void> {
 <template>
   <div>
     <PageHeader
-      title="New voucher"
+      title="New advance slip"
       description="Saved as a draft. It moves no money and gets no Ref. No. until it is posted."
     />
 

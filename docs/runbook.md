@@ -5,9 +5,16 @@ programming knowledge. If something here does not match what you see on screen,
 stop and call the developer rather than improvising — nothing in this system
 loses data on its own, but a hurried fix can.
 
-The one thing worth knowing before anything else: **every payment and advance
-ever recorded is in one file**, `bokkie.db`, inside the data folder. Backups are
-copies of that file. Restoring means putting a copy back.
+Two things worth knowing before anything else.
+
+**Bokkie runs only while its window is open on the host computer.** After a
+power cut, a restart, or a Windows update, **somebody has to open it again** —
+it does not come back on its own, by design. Until they do, the counter
+computers will say they cannot reach the page, and that is not a fault.
+
+**Every payment and advance ever recorded is in one file**, `bokkie.db`, inside
+the data folder. Backups are copies of that file. Restoring means putting a
+copy back.
 
 ---
 
@@ -29,9 +36,27 @@ actually using, rather than trusting the table above.
 
 ## Everyday
 
-### Starting and stopping the service
+### Opening and closing the station
 
-The service starts with the computer. You should not need to touch it.
+Bokkie runs in a window on the host computer, and only while that window is
+open.
+
+- **To open it:** double-click `BokkieSetup.exe` and choose **Start Bokkie
+  here**. A window appears showing that it is running and the address to use.
+- **To close it:** close that window, or press **Stop Bokkie** on it. Either
+  way a backup is taken on the way out, so closing it is itself a save.
+
+The window has three things on it: whether Bokkie is running, an **Open
+Bokkie** button that opens the address the counter computers use, and when the
+last backup was taken. Underneath there is a link to the check described below.
+
+**Nothing opens it for you.** Not a restart, not a Windows update, not logging
+in. That is deliberate — Bokkie is open when a person has opened it and at no
+other time.
+
+### Starting and stopping the service (macOS and Linux hosts only)
+
+On a Mac or Linux host the service starts with the computer.
 
 | | Windows | macOS | Linux |
 |---|---|---|---|
@@ -63,8 +88,11 @@ A line containing `"status":"ok"` means the server and its database are fine.
 
 - **Encoder** — the everyday counter role.
 - **Manager** — an encoder, plus: managing users, changing settings, running and
-  listing backups, reading the audit log, running interest, reading the four
-  reports, and voiding a posted voucher or receipt.
+  listing backups, reading the audit log, reading the four reports, and voiding
+  a posted advance slip, payment or settlement.
+
+Settling a farmer — charging the interest up to a cut-off date and applying the
+palay or cash they brought in — is counter work, and either role can do it.
 
 Under **Administration** in the sidebar, a manager will find **Users**,
 **Audit log** and **Settings**.
@@ -243,6 +271,103 @@ same, warning and all.
 Bokkie appears in **Add/Remove Programs** like any other program. Removing it
 there stops the service and takes it off the computer, and **leaves the data
 folder and every backup in it exactly where they are**. Nothing is deleted.
+
+---
+
+## When nobody can reach Bokkie
+
+**Run the check before anything else.** It changes nothing, needs no password,
+and prints the whole picture at once:
+
+- **The quick way:** double-click `BokkieSetup.exe` and choose **Check why
+  Bokkie cannot be reached**.
+- **At a command prompt:** `bokkie doctor`
+
+It tells you, in order: whether Bokkie is running on this computer, whether the
+other computers are allowed in, whether the name `bokkie.local` points at this
+machine, and whether it actually answers there. Anything it marks `FAIL` comes
+with what to do about it. Send the developer the whole screen.
+
+### The two addresses
+
+Both of these reach the same system:
+
+```
+http://bokkie.local
+http://bokkie.local:8080
+```
+
+The short one works because Bokkie also answers on the ordinary web port. If
+something else on the host computer is already using that port, only the longer
+one works — the check above says so plainly when that happens.
+
+### "Refused to connect"
+
+That message means the computer found the host but nothing answered. Almost
+always one of:
+
+- **Bokkie is stopped.** The check says so, and how to start it.
+- **The address was typed without `:8080`** on a host where port 80 is taken.
+- **Another machine on the network answers to `bokkie.local`.** The check
+  compares what the name resolves to against this computer's own address and
+  says when they differ.
+
+If the name will not behave, every screen is still reachable by address —
+`http://192.168.1.x:8080`. `bokkie doctor` prints this computer's address.
+
+### "Another machine on this network is answering to that name"
+
+Two computers on the station network are both calling themselves `bokkie.local`,
+and the counter PCs are being sent to the wrong one. The check names both
+addresses — the one the name resolves to, and the one this computer actually
+has — so you can tell them apart.
+
+This almost always means a second copy of Bokkie is running somewhere: a laptop
+it was once installed on for testing, or an old host that was replaced and never
+switched off. **Find that machine and stop Bokkie on it.** Until then the
+station is still reachable by address, `http://192.168.1.x:8080`, which
+`bokkie doctor` prints.
+
+Bokkie also writes this into its own log within a few seconds of starting, so
+the host says so without anybody asking.
+
+### "Bokkie found its records but cannot write there"
+
+This happens once, on a station upgraded from an older version. That version
+ran as a Windows service and its records folder belongs to the service's
+account rather than to you.
+
+**Bokkie fixes this itself.** The window offers **Let Bokkie fix this** — choose
+it, allow the permission prompt, and open Bokkie again the normal way. It does
+not need permission after that, and nothing inside the folder is changed: every
+advance, payment and backup stays exactly where it is.
+
+If the prompt is refused, nothing has been changed and the same choice is there
+next time.
+
+### "Another program is already using port 8080"
+
+Some other program on the host computer got there first. Bokkie refuses to
+install over it rather than registering a service that cannot start, and
+nothing on the computer has been changed.
+
+Two ways out:
+
+1. **Stop the other program**, then run the installer again.
+2. **Give Bokkie a different port.** Open `C:\ProgramData\Bokkie\config.yaml`
+   in Notepad, change the `port:` line to something else — `8081` is a fine
+   choice — save it, and install again. Every address then uses that number
+   instead: `http://bokkie.local:8081`, and the shortcut on each counter PC
+   has to be made again so it points at the new one.
+
+`bokkie doctor` says which of the two you are looking at: it tells a port that
+nothing is on apart from a port that something else answers.
+
+### Stopping and starting it
+
+Double-click `BokkieSetup.exe` and choose **Stop Bokkie** or **Start Bokkie**.
+Stopping does not remove anything and does not touch the database; it starts
+again by itself when the computer restarts.
 
 ---
 

@@ -80,12 +80,27 @@ func guided(elevated bool, do string) (string, error) {
 	// until somebody has chosen an action: most people running this file are at
 	// a counter PC that wants a desktop icon, and both the runbook and the
 	// download page promise them that path installs nothing.
-	cfg, err := config.Load("")
-	if err != nil {
-		return "", err
+	// A folder this computer cannot write is not a reason to refuse to show a
+	// window: it is the one thing the window exists to offer to fix. The port
+	// falls back to the default so the rest of the state can still be read.
+	cfg, cfgErr := config.Load("")
+	port := defaultPort
+	if cfgErr == nil {
+		port = cfg.Port
 	}
-	serving, servingErr := service.ServingVersion(cfg.Port)
+
+	serving, servingErr := service.ServingVersion(port)
 	state := describeInstallation(exe, installed, serving, servingErr)
+	if cfgErr == nil {
+		state.OldServiceInstalled = oldServiceInstalled(cfg)
+		state.DataFolder = cfg.DataDir
+	} else if folder, ok := config.UnwritableFolder(cfgErr); ok {
+		state.DataFolder, state.DataFolderUnwritable = folder, true
+		fmt.Println()
+		fmt.Println(cfgErr.Error())
+	} else {
+		return "", cfgErr
+	}
 
 	// The elevated child was told what to do and must not ask again: the
 	// person answered that question in the window that raised the prompt.
@@ -102,7 +117,7 @@ func guided(elevated bool, do string) (string, error) {
 	// Review Focus 4, and it is checked here rather than in the switch below so
 	// that nobody is made to approve an administrator prompt for an action that
 	// was never going to run. placeExecutable guards it a second time.
-	if state.RunningFromInstallPath && (action == actionInstall || action == actionRepair || action == actionUpdate) {
+	if state.RunningFromInstallPath && action == actionUpdate {
 		return "", winsetup.Verdict("This is the copy of Bokkie that is already installed on this computer.\n\n" +
 			"Run the file you downloaded instead. Nothing has been changed.")
 	}
@@ -112,35 +127,45 @@ func guided(elevated bool, do string) (string, error) {
 	// rather than once at the top.
 	if needsAdmin(action) && !elevated && !winsetup.IsElevated() {
 		if err := winsetup.Elevate(exe, winsetup.ElevatedArgs(nameOf(action))); err != nil {
+			// Declining the prompt for the service removal is the one refusal
+			// that must not be generic. Somebody who is told only "that did not
+			// work" goes on to start the station in its window, reads "Bokkie
+			// runs only while this window is open", and believes it — while the
+			// machine still starts the old service on every reboot.
+			if action == actionRemoveService {
+				return "", winsetup.Verdict(
+					"The old Bokkie service was NOT removed, so this computer will still\n" +
+						"start Bokkie by itself after a restart, whether or not anybody\n" +
+						"opened it.\n\n" +
+						"Run this file again and allow the prompt. Nothing else has been\n" +
+						"changed.")
+			}
 			return "", err
 		}
 		return "", errHandedOff
 	}
 
 	switch action {
-	case actionInstall, actionRepair:
-		// weighSelf decides whether this file may touch the machine at all.
-		// Its refusal is returned, not printed: printing it and carrying on is
-		// how a screen comes to say "nothing has been changed" immediately
-		// before the service is torn down and replaced.
-		if err := permitted(ctx, state, exe); err != nil {
+	case actionFixDataFolder:
+		// The folder is read from the configuration again rather than carried
+		// here on a command line: the elevated child re-runs the same lookup
+		// and gets the same answer, which is one fewer thing to quote and one
+		// fewer thing to get wrong.
+		folder, ok := config.UnwritableFolder(cfgErr)
+		if !ok {
+			return "There is nothing to fix: Bokkie can already write its records.", nil
+		}
+		if err := winsetup.Grant(folder); err != nil {
 			return "", err
 		}
-		opts, log, closeLog, err := setupOptions()
-		if err != nil {
-			return "", err
-		}
-		defer closeLog.Close()
+		return "Bokkie can now write its records in\n    " + folder + "\n\n" +
+			"Nothing was changed inside that folder. Open Bokkie again the\n" +
+			"normal way — it will not need permission after this.", nil
 
-		// The same path the USB stick's Install Bokkie.cmd takes, so both ways
-		// of installing leave the machine in the same state — Control Panel
-		// entry included. service.Install deregisters the existing service
-		// before it replaces the binary, so a failure inside here is a partial
-		// change, which installHere marks.
-		if err := installHere(log, opts); err != nil {
-			return "", err
-		}
-		return winsetup.DoneInstalled, nil
+	case actionAlreadyRunning:
+		return "Bokkie is already running on this computer.\n\n" +
+			"Look for its window — it is the one you close to stop the station.\n" +
+			"If you cannot find it, restart this computer and open Bokkie again.", nil
 
 	case actionUpdate:
 		if err := permitted(ctx, state, exe); err != nil {
@@ -169,11 +194,23 @@ func guided(elevated bool, do string) (string, error) {
 		}
 		return winsetup.DoneShortcut, nil
 
-	case actionUninstall:
-		if err := uninstall("", false); err != nil {
-			return "", err
-		}
-		return winsetup.DoneRemoved, nil
+	case actionDoctor:
+		// Deliberately needs no administrator rights and changes nothing: the
+		// moment to run this is when something is wrong, and a prompt in the
+		// way is one more thing between the person and the answer.
+		fmt.Println()
+		fmt.Print(diagnoseHost(""))
+		return "", nil
+
+	case actionServe:
+		// The station runs here, in this window, until it is closed. Nothing
+		// is installed and nothing is registered — a person opening this is
+		// the only way the station is ever served.
+		return "", cmdServe(nil)
+
+	case actionRemoveService:
+		return "", removeOldService()
+
 	}
 	return "", nil
 }
@@ -220,12 +257,12 @@ func applyDownloadedUpdate(ctx context.Context, log *slog.Logger, exe string) er
 // permitted asks whether this file may touch the machine, and turns a refusal
 // into the error the window prints.
 //
-// One function so that install, repair and update cannot drift apart on the
-// question — the state they are in differs, the rule does not.
+// A station that is running is one with something to lose, which is the
+// distinction weighSelf's asymmetry turns on.
 func permitted(ctx context.Context, state setupState, exe string) error {
 	check, checkErr := verifySelf(ctx, nil, release.LatestBase, exe, buildinfo.Version)
 
-	proceed, notice := weighSelf(state.Installed, check, checkErr)
+	proceed, notice := weighSelf(state.Running, check, checkErr)
 	if !proceed {
 		return notice
 	}
@@ -256,4 +293,62 @@ func copyTo(dst, src string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// oldServiceInstalled reports whether a 2.6 install left a service behind.
+//
+// Such a service starts the station on its own when the computer restarts,
+// which is the one thing this step exists to stop, so a machine still carrying
+// one is offered its removal wherever it appears in the menu.
+func oldServiceInstalled(cfg config.Config) bool {
+	installed, err := service.IsInstalled(service.Options{
+		DataDir: cfg.DataDir,
+		Port:    cfg.Port,
+		LogDir:  cfg.LogDir(),
+	})
+	return err == nil && installed
+}
+
+// removeOldService takes away the service a 2.6 install left behind.
+//
+// Without this the one machine being upgraded is the one machine that still
+// starts on its own — the hard requirement violated on the only host there is.
+func removeOldService() error {
+	opts, log, closeLog, err := setupOptions()
+	if err != nil {
+		return err
+	}
+	defer closeLog.Close()
+
+	installed, err := service.IsInstalled(opts)
+	if err != nil {
+		return err
+	}
+	if !installed {
+		fmt.Println()
+		fmt.Println("There is no Bokkie service on this computer. Nothing to remove.")
+		return nil
+	}
+
+	fmt.Println()
+	fmt.Println("This computer still has the older Bokkie installed as a Windows service,")
+	fmt.Println("which starts on its own when the computer restarts. This version runs")
+	fmt.Println("only while its window is open, so that service is in the way.")
+	fmt.Println()
+
+	if err := service.Uninstall(log, opts); err != nil {
+		// The person has to know the old one is still there, or they will
+		// believe the station only runs when they open it while it does not.
+		fmt.Println("The old service was NOT removed, so this computer will still start")
+		fmt.Println("Bokkie by itself after a restart. Run this file again as an")
+		fmt.Println("administrator and choose the same option.")
+		return err
+	}
+	if err := winsetup.Deregister(); err != nil {
+		log.Warn("the service is gone but the Add/Remove Programs entry is not", "error", err)
+	}
+
+	fmt.Println("The old service has been removed. Bokkie now runs only while its window")
+	fmt.Println("is open, and nothing starts it on its own.")
+	return nil
 }

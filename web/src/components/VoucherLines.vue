@@ -138,7 +138,7 @@ function submit(): void {
   <form class="voucher" @submit.prevent="submit">
     <div class="card card--padded voucher__header">
       <label class="voucher__field">
-        <span class="label">Voucher date</span>
+        <span class="label">Slip date</span>
         <DatePicker
           v-model="voucherDate"
           date-format="yy-mm-dd"

@@ -129,20 +129,22 @@ func TestPropertyReportsAddUpAndAgreeWithTheLedger(t *testing.T) {
 				principal, interest, current.Principal, current.Interest)
 		}
 
-		// 2. ROI's rows add up to its portfolio block.
+		// 2. ROI's rows add up to its totals. The ledger generated here has no
+		//    settlements, so there are no rows — what this guards is that the
+		//    totals are never invented from somewhere other than the rows.
 		roi, err := svc.ROI(ctx, from, asOf)
 		if err != nil {
 			rt.Fatalf("roi: %v", err)
 		}
-		var advanced, repaid, charged money.Money
+		var repaid, collected, returned money.Money
 		for _, row := range roi.Rows {
-			advanced, _ = advanced.Add(row.Advanced)
-			repaid, _ = repaid.Add(row.Repaid)
-			charged, _ = charged.Add(row.InterestCharged)
+			repaid, _ = repaid.Add(row.Principal)
+			collected, _ = collected.Add(row.Interest)
+			returned, _ = returned.Add(row.Amount)
 		}
-		if advanced != roi.Deployed || repaid != roi.Repaid || charged != roi.InterestCharged {
-			rt.Fatalf("the ROI rows sum to %s / %s / %s and the block says %s / %s / %s",
-				advanced, repaid, charged, roi.Deployed, roi.Repaid, roi.InterestCharged)
+		if repaid != roi.Repaid || collected != roi.InterestCollected || returned != roi.Returned {
+			rt.Fatalf("the ROI rows sum to %s / %s / %s and the totals say %s / %s / %s",
+				repaid, collected, returned, roi.Repaid, roi.InterestCollected, roi.Returned)
 		}
 
 		// 3. Outstanding on the ROI block is the whole book, which is what
@@ -187,23 +189,5 @@ func TestPropertyReportsAddUpAndAgreeWithTheLedger(t *testing.T) {
 			}
 		}
 
-		// 5. Nobody is liquidated while they still owe something.
-		liquidated, err := svc.Liquidated(ctx, from, asOf)
-		if err != nil {
-			rt.Fatalf("liquidated: %v", err)
-		}
-		for _, row := range liquidated.Rows {
-			balance, err := entries.BalanceAt(ctx, row.CustomerID, asOf)
-			if err != nil {
-				rt.Fatalf("balance: %v", err)
-			}
-			total, err := balance.Total()
-			if err != nil {
-				rt.Fatalf("total: %v", err)
-			}
-			if total.IsPositive() {
-				rt.Fatalf("customer %d is reported as settled and owes %s", row.CustomerID, total)
-			}
-		}
 	})
 }

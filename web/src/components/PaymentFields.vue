@@ -2,23 +2,38 @@
 /**
  * The payment form: who paid, when, how much, and how.
  *
- * Unlike the voucher this is not a grid — one receipt is one farmer handing
- * money over — so it is an ordinary form, and the thing that makes it a
- * *payment* form is the balance sitting beside the amount. Somebody at the
- * counter needs to see what is owed while they type what was handed over, and
- * to be told before they post that ₱7,000.00 against a ₱5,000.00 debt will put
- * the farmer in credit. Afterwards is too late: undoing it is a manager's job.
+ * Cash is an ordinary form. Palay — which is how the station is paid nearly
+ * every time — is a lot per line off the weighing slips: class, sacks, kilos
+ * and the price per kilo, the way the legacy "Payments From Customer" screen
+ * took it. The amount is then the sum of the lines, worked out by the server.
+ *
+ * The balance beside it is what the farmer owes before this payment is
+ * applied. Recording a payment does not move it: a settlement does, interest
+ * first, which is where somebody sees whether the delivery left him in credit.
  */
 import { computed, ref, watch } from 'vue'
 import AutoComplete, { type AutoCompleteCompleteEvent } from 'primevue/autocomplete'
 import Button from 'primevue/button'
 import DatePicker from 'primevue/datepicker'
 import InputText from 'primevue/inputtext'
-import Message from 'primevue/message'
 import Select from 'primevue/select'
 import { getCustomer, listCustomers, type Balance, type Customer } from '@/api/customers'
-import { paymentMethods, type Payment, type PaymentDraft, type PaymentMethod } from '@/api/payments'
-import { formatCentavos, formatPesos, fromISODate, parseCentavos, toISODate } from '@/format'
+import {
+  palayClasses,
+  paymentMethods,
+  type Payment,
+  type PaymentDraft,
+  type PaymentMethod,
+} from '@/api/payments'
+import {
+  formatCentavos,
+  formatPesos,
+  fromISODate,
+  palayCostCentavos,
+  parseCentavos,
+  parseKiloTenths,
+  toISODate,
+} from '@/format'
 
 const props = defineProps<{
   /** The payment being edited, or null for a new one. */
@@ -34,6 +49,24 @@ const date = ref<Date>(new Date())
 const amount = ref('')
 const method = ref<PaymentMethod>('cash')
 const particular = ref('')
+
+/** A lot as it is being typed: every field still text. */
+interface LineRow {
+  key: number
+  class: string
+  sacks: string
+  kilos: string
+  price: string
+}
+
+let nextKey = 1
+function blankLine(): LineRow {
+  return { key: nextKey++, class: '', sacks: '', kilos: '', price: '' }
+}
+
+const lines = ref<LineRow[]>([blankLine()])
+
+const isPalay = computed(() => method.value === 'palay')
 
 const balance = ref<Balance | null>(null)
 const loadingBalance = ref(false)
@@ -56,6 +89,16 @@ watch(
     amount.value = p.amount
     method.value = p.method
     particular.value = p.particular
+    lines.value =
+      p.lines && p.lines.length > 0
+        ? p.lines.map((l) => ({
+            key: nextKey++,
+            class: l.class,
+            sacks: String(l.sacks),
+            kilos: l.kilos,
+            price: l.price,
+          }))
+        : [blankLine()]
   },
   { immediate: true },
 )
@@ -100,35 +143,68 @@ function customerLabel(c: Customer): string {
 
 const typedCentavos = computed(() => parseCentavos(amount.value))
 
-const owedCentavos = computed(() => {
-  if (!balance.value) return null
-  return parseCentavos(balance.value.total)
-})
+function sacksOf(row: LineRow): number | null {
+  const text = row.sacks.trim()
+  if (text === '') return 0
+  return /^\d+$/.test(text) ? Number(text) : null
+}
 
 /**
- * How much of this payment is more than the farmer owes.
- *
- * Compared in whole centavos parsed out of both strings — the one place this
- * screen does arithmetic on money, and the same discipline the voucher's
- * running total uses. It decides whether to show a warning and nothing else;
- * the server does the real division and its answer is what is stored.
+ * What one lot is worth, as a preview: integer arithmetic on tenths of a kilo
+ * and centavos, the same half-up rounding the server does. Null until the
+ * weight and price both read.
  */
-const overpayment = computed(() => {
-  const typed = typedCentavos.value
-  const owed = owedCentavos.value
-  if (typed === null || owed === null || typed <= owed) return null
-  return formatCentavos(typed - owed)
+function rowCost(row: LineRow): number | null {
+  return palayCostCentavos(row.kilos, row.price)
+}
+
+function rowValid(row: LineRow): boolean {
+  const cost = rowCost(row)
+  return row.class.trim() !== '' && sacksOf(row) !== null && cost !== null && cost > 0
+}
+
+/** The lines' total, or null while any of them is incomplete. */
+const linesTotal = computed(() => {
+  let total = 0
+  for (const row of lines.value) {
+    const cost = rowCost(row)
+    if (cost === null) return null
+    total += cost
+  }
+  return total
 })
 
-const complete = computed(() => customer.value !== null && typedCentavos.value !== null)
+function addLine(): void {
+  lines.value = [...lines.value, blankLine()]
+}
+
+function removeLine(key: number): void {
+  const left = lines.value.filter((l) => l.key !== key)
+  lines.value = left.length > 0 ? left : [blankLine()]
+}
+
+const complete = computed(() => {
+  if (customer.value === null) return false
+  if (isPalay.value) return lines.value.length > 0 && lines.value.every(rowValid)
+  return typedCentavos.value !== null
+})
 
 function submit(): void {
   if (!complete.value || !customer.value) return
   emit('submit', {
     customer_id: customer.value.id,
     date: toISODate(date.value),
-    amount: amount.value,
+    // The server ignores the amount of a palay payment and adds up the lines.
+    amount: isPalay.value ? '' : amount.value,
     method: method.value,
+    lines: isPalay.value
+      ? lines.value.map((row) => ({
+          class: row.class.trim().toUpperCase(),
+          sacks: sacksOf(row) ?? 0,
+          kilos: row.kilos.replace(/[,\s]/g, ''),
+          price: row.price,
+        }))
+      : [],
     particular: particular.value.trim(),
   })
 }
@@ -169,6 +245,16 @@ function submit(): void {
           <div class="payment-form__field">
             <label for="payment-amount">Amount</label>
             <InputText
+              v-if="isPalay"
+              id="payment-amount"
+              :model-value="linesTotal === null ? '—' : formatCentavos(linesTotal)"
+              readonly
+              class="numeric payment-form__amount"
+              aria-describedby="payment-amount-help"
+              fluid
+            />
+            <InputText
+              v-else
               id="payment-amount"
               v-model="amount"
               inputmode="decimal"
@@ -177,6 +263,9 @@ function submit(): void {
               :invalid="amount !== '' && typedCentavos === null"
               fluid
             />
+            <small v-if="isPalay" id="payment-amount-help" class="payment-form__hint">
+              The sum of the lots below.
+            </small>
           </div>
         </div>
 
@@ -207,6 +296,9 @@ function submit(): void {
       -->
       <aside class="payment-form__balance">
         <h2 class="payment-form__balance-heading">Owes now</h2>
+        <p class="payment-form__hint payment-form__hint--small">
+          Before any recorded payment is applied — that happens when the farmer is settled.
+        </p>
 
         <template v-if="balance">
           <div class="payment-form__row">
@@ -227,10 +319,109 @@ function submit(): void {
       </aside>
     </div>
 
-    <Message v-if="overpayment" severity="warn" :closable="false">
-      That is {{ formatPesos(overpayment) }} more than
-      {{ customer ? customer.name : 'this customer' }} owes. Posting it will leave them in credit.
-    </Message>
+    <!--
+      The lots off the weighing slips. Each cost is a preview worked out in
+      whole centavos; the server works it out again and its figure is stored.
+    -->
+    <section v-if="isPalay" class="payment-form__lines" aria-label="Palay delivered">
+      <datalist id="palay-classes">
+        <option v-for="c in palayClasses" :key="c" :value="c" />
+      </datalist>
+      <table class="payment-form__table">
+        <thead>
+          <tr>
+            <th class="payment-form__no">#</th>
+            <th>Class</th>
+            <th class="payment-form__num">Sacks</th>
+            <th class="payment-form__num">Kilos</th>
+            <th class="payment-form__num">Price / kg</th>
+            <th class="payment-form__num">Cost</th>
+            <th class="payment-form__remove"><span class="sr-only">Remove</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(row, index) in lines" :key="row.key">
+            <td class="payment-form__no numeric">{{ index + 1 }}</td>
+            <td>
+              <InputText
+                v-model="row.class"
+                list="palay-classes"
+                autocomplete="off"
+                class="payment-form__class"
+                :aria-label="`Line ${index + 1} class`"
+                fluid
+              />
+            </td>
+            <td>
+              <InputText
+                v-model="row.sacks"
+                inputmode="numeric"
+                class="numeric payment-form__amount"
+                :invalid="sacksOf(row) === null"
+                :aria-label="`Line ${index + 1} sacks`"
+                fluid
+              />
+            </td>
+            <td>
+              <InputText
+                v-model="row.kilos"
+                inputmode="decimal"
+                placeholder="0.0"
+                class="numeric payment-form__amount"
+                :invalid="row.kilos !== '' && parseKiloTenths(row.kilos) === null"
+                :aria-label="`Line ${index + 1} kilos`"
+                fluid
+              />
+            </td>
+            <td>
+              <InputText
+                v-model="row.price"
+                inputmode="decimal"
+                placeholder="0.00"
+                class="numeric payment-form__amount"
+                :invalid="row.price !== '' && parseCentavos(row.price) === null"
+                :aria-label="`Line ${index + 1} price per kilo`"
+                fluid
+              />
+            </td>
+            <td class="payment-form__num numeric">
+              {{ rowCost(row) === null ? '—' : formatPesos(formatCentavos(rowCost(row)!)) }}
+            </td>
+            <td class="payment-form__remove">
+              <Button
+                icon="pi pi-times"
+                severity="secondary"
+                text
+                rounded
+                :aria-label="`Remove line ${index + 1}`"
+                :disabled="busy"
+                @click="removeLine(row.key)"
+              />
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2">
+              <Button
+                label="Add a lot"
+                icon="pi pi-plus"
+                severity="secondary"
+                text
+                size="small"
+                :disabled="busy"
+                @click="addLine"
+              />
+            </td>
+            <td colspan="3" class="payment-form__num payment-form__muted">Total</td>
+            <td class="payment-form__num numeric payment-form__total">
+              {{ linesTotal === null ? '—' : formatPesos(formatCentavos(linesTotal)) }}
+            </td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
+    </section>
 
     <div class="payment-form__actions">
       <Button label="Cancel" severity="secondary" text :disabled="busy" @click="emit('cancel')" />
@@ -298,6 +489,12 @@ function submit(): void {
   font-variant-numeric: tabular-nums;
 }
 
+/* The table's own `th` rule is more specific than the class above; without
+   this the heading sat left while its figures sat right. */
+.payment-form__table th.payment-form__amount {
+  text-align: right;
+}
+
 .payment-form__balance {
   width: 15rem;
   flex-shrink: 0;
@@ -312,8 +509,6 @@ function submit(): void {
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--shell-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .payment-form__row {
@@ -335,6 +530,80 @@ function submit(): void {
   margin: 0;
   font-size: 0.875rem;
   color: var(--shell-muted);
+}
+
+.payment-form__hint--small {
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.payment-form__lines {
+  /* min-width: 0 so the table scrolls inside the card rather than pushing the
+     page sideways at the counter PC's width. */
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.payment-form__table {
+  width: 100%;
+  min-width: 40rem;
+  border-collapse: collapse;
+}
+
+.payment-form__table th {
+  padding: 0.45rem 0.4rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--shell-muted);
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.payment-form__table td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.payment-form__table tfoot td {
+  border-bottom: none;
+}
+
+.payment-form__table .payment-form__num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.payment-form__no {
+  width: 2rem;
+  color: var(--shell-muted);
+}
+
+.payment-form__remove {
+  width: 2.5rem;
+}
+
+.payment-form__class {
+  text-transform: uppercase;
+}
+
+.payment-form__muted {
+  color: var(--shell-muted);
+}
+
+.payment-form__total {
+  font-weight: 600;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .payment-form__actions {

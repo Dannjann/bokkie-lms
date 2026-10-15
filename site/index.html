@@ -19,14 +19,30 @@
 <!-- A plain link, deliberately. GitHub redirects this to the newest published
      release, so the button works with JavaScript switched off and needs no
      editing when a release is cut. -->
-<a class="download" href="https://github.com/Dannjann/bokkie-lms/releases/latest/download/BokkieSetup.exe">
+<a class="download" id="download" href="https://github.com/Dannjann/bokkie-lms/releases/latest/download/BokkieSetup.exe">
     Download Bokkie for Windows
     <small>One file. Windows 10 or later, 64-bit.</small>
 </a>
-<p class="meta">
+<p class="meta" id="meta">
     Version <span id="version">— see latest.json</span> ·
     SHA-256 <span id="sha256">— see latest.json</span>
 </p>
+
+<!-- Shown only when GitHub says, definitively, that no release has been
+     published yet. A release is checked on Windows as a draft before anybody
+     can download it, and during that window the button above would 404. -->
+<div class="warning" id="unreleased" hidden>
+    <h2>There is no public release yet</h2>
+    <p>
+        The first release is built and signed, and is being checked on Windows
+        before it is published. The download button will work as soon as that
+        finishes &mdash; there is nothing to do here but come back.
+    </p>
+    <p>
+        If you need it today, ask the developer for the release folder on a USB
+        stick.
+    </p>
+</div>
 
 <div class="warning">
     <h2>Windows will warn you about this file</h2>
@@ -51,18 +67,49 @@
 <h2>What happens when you run it</h2>
 <ol>
     <li>A black window opens and asks what you want to do. Choose
-        <strong>Install Bokkie on this computer</strong> by typing its number
-        and pressing Enter.</li>
-    <li>Windows asks for permission to make changes. Say yes.</li>
-    <li><strong>The first window closes and a new one opens.</strong> This is
-        normal and is not a crash &mdash; the second window is the one with
-        permission to do the work.</li>
-    <li>It installs itself, starts, and makes sure it is answering.</li>
-    <li>Open <code>http://bokkie.local:8080</code> in Edge.</li>
+        <strong>Start Bokkie here</strong> by typing its number and pressing
+        Enter.</li>
+    <li>A second window opens showing that Bokkie is running, the address the
+        counter computers use, and when it last backed up.</li>
+    <li>Windows may ask whether to allow Bokkie on the network. Say yes.</li>
+    <li>Open <code>http://bokkie.local:8080</code> on a counter computer, or
+        press <strong>Open Bokkie</strong> on the window.</li>
 </ol>
 <p>
-    Bokkie starts with the computer from then on. Nobody needs to be logged in
-    for the other computers at the station to reach it.
+    That second window is the station&rsquo;s switch. It also shows when Bokkie
+    last backed up, and has a <strong>Stop Bokkie</strong> button and a check
+    that explains what is wrong when something is.
+</p>
+<div class="warning">
+    <h2>Bokkie runs only while that window is open</h2>
+    <p>
+        Closing the window stops Bokkie, and the counter computers lose it
+        until somebody opens it again. Nothing is deleted &mdash; a backup is
+        taken on the way out.
+    </p>
+    <p>
+        <strong>It does not start by itself.</strong> After a power cut, a
+        restart, or a Windows update, somebody has to open it again. That is
+        deliberate: Bokkie is open when a person has opened it and at no other
+        time.
+    </p>
+</div>
+<h2>Upgrading a computer that had an older Bokkie</h2>
+<p>
+    The first time you run this on a station that had an older version, it may
+    say it found your records but cannot write to them. That is expected: the
+    older version ran as a Windows service, and the folder holding your records
+    belongs to that service rather than to you.
+</p>
+<p>
+    Choose <strong>Let Bokkie fix this</strong> and allow the permission prompt
+    once. Nothing inside the folder is changed &mdash; every advance, payment
+    and backup stays exactly where it is &mdash; and Bokkie will not ask again.
+</p>
+<p>
+    It will also offer to <strong>remove the old Bokkie service</strong>. Say
+    yes. That service is what used to start the station on its own, which this
+    version deliberately does not do.
 </p>
 
 <h2>On the counter computers</h2>
@@ -76,16 +123,15 @@
 <h2>If the station has no internet</h2>
 <p>
     Everything above needs a connection once, to download one file. If the
-    station has none, copy the whole release folder onto a USB stick from a
-    computer that does, and use the files inside it:
+    station has none, download it on a computer that does and copy it across on
+    a USB stick:
 </p>
 <div class="card">
-    <h3>Install Bokkie.cmd</h3>
-    <p>Double-click it on the host computer. Same install, from the stick.</p>
-</div>
-<div class="card">
-    <h3>Update Bokkie.cmd</h3>
-    <p>Double-click it to move an installed station to a newer version.</p>
+    <h3>BokkieSetup.exe</h3>
+    <p>
+        The same one file. Copy it to the host computer and double-click it &mdash;
+        there is nothing else to run and nothing to install.
+    </p>
 </div>
 <p>
     <a href="https://github.com/Dannjann/bokkie-lms/releases/latest">All files in the current release</a>
@@ -143,11 +189,25 @@
         })
         .catch(function () {
             return fetch('https://api.github.com/repos/' + REPO + '/releases/latest')
-                .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-                .then(function (release) { set('version', release.tag_name); });
+                .then(function (r) {
+                    // 404 here is not a failure to reach GitHub — it is GitHub
+                    // saying there is no published release. Drafts are
+                    // invisible to it, which is the whole point of releasing as
+                    // one, and it is the only answer that justifies taking the
+                    // button away.
+                    if (r.status === 404) {
+                        document.getElementById('download').hidden = true;
+                        document.getElementById('meta').hidden = true;
+                        document.getElementById('unreleased').hidden = false;
+                        return;
+                    }
+                    return r.ok ? r.json().then(function (release) { set('version', release.tag_name); })
+                                : Promise.reject(r.status);
+                });
         })
         .catch(function () {
-            // No connection, or no release published yet. The static text stands.
+            // Could not reach GitHub at all. The button stays: a reader on a
+            // bad connection is not told the project has no release.
         });
 })();
 </script>

@@ -118,15 +118,27 @@ sign:
 # folder is five executables and a JSON file, and the person it is handed to has
 # to know which one to run and how to run it with administrator rights.
 #
-# The Windows shortcut wrapper is gone: a counter PC gets its desktop shortcut
-# from the setup window inside bokkie.exe, which needs no administrator rights
-# and is one fewer file to explain. The .command wrappers stay as they are.
+# Every Windows .cmd wrapper is gone. The shortcut one went in 2.6, and the
+# install and update ones went in 2.7 for a harder reason: they ran
+# `bokkie install`, which registers a service set to start with the computer —
+# the one thing 2.7 exists to abolish. A release that still carried them would
+# have shipped the violation in the box, documented on the downloads page as
+# the offline path. Windows gets one file: the program.
+#
+# The .command wrappers stay. macOS and Linux hosts still run bokkie under
+# launchd and systemd by design (02.7 D7), and that is the way back to an
+# unattended station if it is ever wanted again.
 #
 # Named one by one rather than `scripts/*`: scripts/ also holds developer
 # tooling that builds from source and skips the signature check, and a glob here
 # is how that would end up on a USB stick bound for the station.
 stage-scripts: | dist
-	cp scripts/*.cmd scripts/*.command scripts/pick-binary.sh dist/
+	# Retired wrappers are removed, not merely not-copied. dist/ is not cleaned
+	# between builds and a release folder is whatever is in it, so a .cmd that
+	# stopped being staged would go on shipping from an old build — which is
+	# exactly how the install wrapper survived being retired once already.
+	rm -f dist/*.cmd
+	cp scripts/*.command scripts/pick-binary.sh dist/
 	@chmod +x dist/*.command dist/pick-binary.sh
 
 dist:

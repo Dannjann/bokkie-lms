@@ -20,7 +20,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Dannjann/bokkie-lms/internal/audit"
@@ -140,9 +142,11 @@ func (opts Options) swap(ctx context.Context, log *slog.Logger, result *Result, 
 			return opts.failed(ctx, log, *result, err)
 		}
 	} else {
-		// Someone runs this host by hand. Worth saying out loud, because the
-		// new binary will not be running until they start it.
-		log.Warn("no bokkie service is registered on this machine; the binary is being replaced but nothing will be restarted")
+		// The ordinary case on a Windows station since step 2.7: the station
+		// runs while a person has its window open, so there is no service to
+		// stop and nothing to restart. Said at info level, not warn — it is
+		// how this host is meant to work, not a fault.
+		log.Info("no bokkie service is registered; the new version takes effect the next time the window is opened")
 	}
 
 	restore, err := service.Swap(log, source)
@@ -158,6 +162,16 @@ func (opts Options) swap(ctx context.Context, log *slog.Logger, result *Result, 
 	}
 
 	if !installed {
+		// With no service to bring up, nothing else in this function would
+		// ever look at the binary that was just put in place — and a swap that
+		// produced an unrunnable file would not be discovered until somebody
+		// opened the window and got nothing. Asking it its version is the
+		// cheapest proof that it runs at all.
+		if err := confirmReplacement(log, result.To); err != nil {
+			log.Error("the new binary does not run; putting the previous one back", "error", err)
+			return opts.rollBackFile(ctx, log, *result, restore, err)
+		}
+		service.Discard(log)
 		return nil
 	}
 
@@ -168,6 +182,52 @@ func (opts Options) swap(ctx context.Context, log *slog.Logger, result *Result, 
 
 	service.Discard(log)
 	return nil
+}
+
+// confirmReplacement runs the binary that was just put in place and asks it
+// which version it is.
+//
+// It is the no-service equivalent of startAndConfirm, and it checks the version
+// for the same reason: a file that runs but reports the old version means the
+// swap did not take, and calling that a successful update would leave somebody
+// believing a fix is on the machine when it is not.
+func confirmReplacement(log *slog.Logger, want string) error {
+	path, err := service.InstalledPath()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), confirmTimeout)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, path, "version", "-short").Output()
+	if err != nil {
+		return fmt.Errorf("the replaced binary at %s would not run: %w", path, err)
+	}
+
+	got := strings.TrimSpace(string(out))
+	if got != want {
+		return fmt.Errorf("the replaced binary reports version %s, not %s: the swap did not take effect", got, want)
+	}
+	log.Info("the new binary runs and reports the expected version", "version", got, "path", path)
+	return nil
+}
+
+// confirmTimeout bounds asking a binary its version. It prints one line and
+// exits; anything slower is a binary that is not going to answer.
+const confirmTimeout = 15 * time.Second
+
+// rollBackFile puts the previous binary back when there is no service involved.
+//
+// Separate from rollBack because that one restarts a service afterwards, and
+// doing so here would start something this host is deliberately not running.
+func (opts Options) rollBackFile(ctx context.Context, log *slog.Logger, result Result, restore func() error, cause error) error {
+	if err := restore(); err != nil {
+		return fmt.Errorf("the update failed (%w) and the previous binary could not be put back: %w.\n"+
+			"Copy a known-good bokkie to the installed path by hand", cause, err)
+	}
+	log.Info("the previous binary was put back")
+	return opts.failed(ctx, log, result, cause)
 }
 
 // startAndConfirm is the difference between "the service manager spawned

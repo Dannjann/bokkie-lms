@@ -115,25 +115,25 @@ const actionNames: Record<string, string> = {
   'customer.imported': 'Customers imported from a file',
 
   // Advances
-  'advance.draft.created': 'Voucher started',
-  'advance.draft.updated': 'Voucher draft edited',
-  'advance.draft.deleted': 'Voucher draft discarded',
-  'advance.posted': 'Voucher posted',
-  'advance.voided': 'Voucher voided',
+  'advance.draft.created': 'Advance slip started',
+  'advance.draft.updated': 'Advance slip draft edited',
+  'advance.draft.deleted': 'Advance slip draft discarded',
+  'advance.posted': 'Advance slip posted',
+  'advance.voided': 'Advance slip voided',
 
   // Payments
-  'payment.draft.created': 'Receipt started',
-  'payment.draft.updated': 'Receipt draft edited',
-  'payment.draft.deleted': 'Receipt draft discarded',
-  'payment.posted': 'Payment posted',
+  'payment.draft.created': 'Payment started',
+  'payment.draft.updated': 'Payment draft edited',
+  'payment.draft.deleted': 'Payment draft discarded',
+  'payment.posted': 'Payment recorded',
   'payment.voided': 'Payment voided',
 
-  // Interest
-  'interest.draft.created': 'Interest run drafted',
-  'interest.draft.updated': 'Interest run draft edited',
-  'interest.draft.deleted': 'Interest run draft discarded',
-  'interest.posted': 'Interest posted',
-  'interest.voided': 'Interest run voided',
+  // Settlements
+  'settlement.draft.created': 'Settlement computed',
+  'settlement.draft.updated': 'Settlement recomputed',
+  'settlement.draft.deleted': 'Settlement draft discarded',
+  'settlement.posted': 'Farmer settled',
+  'settlement.voided': 'Settlement voided',
 
   // The system itself
   'setting.changed': 'Setting changed',
@@ -167,7 +167,7 @@ const alarming = new Set([
   // and it is what somebody scans this page looking for.
   'advance.voided',
   'payment.voided',
-  'interest.voided',
+  'settlement.voided',
 ])
 
 /**

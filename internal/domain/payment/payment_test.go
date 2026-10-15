@@ -257,9 +257,11 @@ func TestADraftIsEditedAndDeleted(t *testing.T) {
 
 	p := mustCreate(t, svc, database, draftOf(t, 1, 2000))
 
-	edited := draftOf(t, 2, 3500)
+	// Switching to palay: the amount comes from the lines, 250 kg at ₱14.00.
+	edited := draftOf(t, 2, 1)
 	edited.Method = MethodPalay
 	edited.Particular = "netted against delivery"
+	edited.Lines = []LineDraft{{Class: "slg", Sacks: 5, Kilos: KilosFromTenths(2500), Price: pesos(t, 14)}}
 
 	var after Payment
 	if err := inTx(t, database, func(tx *sql.Tx) error {
@@ -272,6 +274,9 @@ func TestADraftIsEditedAndDeleted(t *testing.T) {
 
 	if after.CustomerID != 2 || after.Amount.Centavos() != 350000 || after.Method != MethodPalay {
 		t.Errorf("editing left customer %d, %s, %s", after.CustomerID, after.Amount, after.Method)
+	}
+	if len(after.Lines) != 1 || after.Lines[0].Class != "SLG" || after.Lines[0].Cost.Centavos() != 350000 {
+		t.Errorf("the palay lines came back as %+v", after.Lines)
 	}
 
 	if err := inTx(t, database, func(tx *sql.Tx) error {
@@ -296,11 +301,10 @@ func TestADeactivatedCustomerCanStillPay(t *testing.T) {
 	}
 
 	p := mustCreate(t, svc, database, draftOf(t, 1, 5000))
-	mustPost(t, svc, database, p.ID, dan)
-
-	if got := balanceOf(t, entries, 1).Principal; !got.IsZero() {
-		t.Errorf("a deactivated customer owes %s after settling up, want nothing", got)
+	if recorded := mustPost(t, svc, database, p.ID, dan); recorded.Status != StatusPosted {
+		t.Errorf("a deactivated customer's payment is %s, want recorded", recorded.Status)
 	}
+	_ = entries
 }
 
 func TestAPaymentForSomebodyNotOnTheBooksIsRefused(t *testing.T) {
@@ -361,5 +365,39 @@ func TestADraftWithNoDateIsDatedToday(t *testing.T) {
 
 	if !p.Date.Equal(today) {
 		t.Errorf("a payment with no date is dated %s, want today %s", p.Date, today)
+	}
+}
+
+// Cost is kilos × price, rounded half-up, which is what the legacy screen did
+// and what a person does with a calculator.
+func TestTheCostOfALineOfPalay(t *testing.T) {
+	cases := []struct {
+		kilos string
+		price int64 // centavos per kilo
+		want  int64 // centavos
+	}{
+		{"500", 1400, 700000},
+		{"1234.5", 1450, 1790025},
+		{"0.1", 1005, 101}, // 100.5 centavos rounds up
+		{"1,000.0", 1570, 1570000},
+	}
+	for _, tc := range cases {
+		k, err := ParseKilos(tc.kilos)
+		if err != nil {
+			t.Fatalf("parse %q: %v", tc.kilos, err)
+		}
+		got, err := Cost(k, money.FromCentavos(tc.price))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Centavos() != tc.want {
+			t.Errorf("%s kg at %s is %s, want %s", tc.kilos, money.FromCentavos(tc.price), got, money.FromCentavos(tc.want))
+		}
+	}
+
+	for _, bad := range []string{"", "12.34", "-5", "abc", "+3"} {
+		if _, err := ParseKilos(bad); err == nil {
+			t.Errorf("ParseKilos(%q) was accepted", bad)
+		}
 	}
 }

@@ -9,20 +9,25 @@ Station**, Pintor Gamu, Isabela.
 |---|---|---|
 | [00-architecture.md](00-architecture.md) | Decisions, stack, data model, operations, roadmap | ✅ Approved |
 | [adr-001-language-choice.md](adr-001-language-choice.md) | Why Go, and the alternatives weighed against it | ✅ Accepted |
-| [domain-interview.md](domain-interview.md) | Questions for the owner — unblocks Steps 7–8 | ⬜ Not started |
+| [domain-interview.md](domain-interview.md) | Questions for the owner — unblocks Steps 7–8 | 🟨 Q1–Q6 answered from the legacy program, to confirm |
+| [legacy-findings.md](legacy-findings.md) | What the old FoxPro program and its data say about Q1–Q9 | ✅ Implemented in Step 7.5, to confirm |
+| [questions-for-the-owner.md](questions-for-the-owner.md) | The same questions in plain language — the sheet you print and take | ⬜ Not asked |
 | [01-foundation.md](01-foundation.md) | Step 1 — build system, runtime, service install | 🟨 Built, gate pending |
 | [02-identity-audit.md](02-identity-audit.md) | Step 2 — auth, roles, audit log, backup | ✅ Built, gate passed |
 | [02.5-install-update.md](02.5-install-update.md) | Step 2.5 — install location, signed USB updates, first inch | 🟨 Built, gate pending |
 | [02.6-github-distribution.md](02.6-github-distribution.md) | Step 2.6 — the Windows setup exe, downloads from GitHub, the download page | 🟨 Built, gate pending |
 | [02.6-implementation-plan.md](02.6-implementation-plan.md) | Step 2.6 — the work order it was built from | ✅ Executed |
+| [02.7-window-is-the-server.md](02.7-window-is-the-server.md) | Step 2.7 — the window is the server; nothing auto-starts | 🟨 Built, gate pending |
+| [02.7-implementation-plan.md](02.7-implementation-plan.md) | Step 2.7 — the work order it was built from | ✅ Executed |
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
 | [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | ✅ Built, gate passed |
 | [04-customers-gate.md](04-customers-gate.md) | Step 4 — two questions still owed to the owner | 🟨 Task 1 done |
 | [05-advances.md](05-advances.md) | Step 5 — advance vouchers, draft→posted, void via reversal | ✅ Built, gate passed |
 | [06-payments.md](06-payments.md) | Step 6 — payments, the principal/interest split, customer statement | ✅ Built, gate passed |
-| [07-interest.md](07-interest.md) | Step 7 — the interest run, its preview, and undoing one | ✅ Built, gate passed |
-| [08-reports.md](08-reports.md) | Step 8 — the four reports, and the page that leaves the room | ✅ Built, gate passed |
+| [07-interest.md](07-interest.md) | Step 7 — the interest run, its preview, and undoing one | ⛔ Superseded by 7.5 |
+| [07.5-settlement.md](07.5-settlement.md) | Step 7.5 — one farmer settled to a cut-off; palay payments; plain-English wording | 🟨 Built, screens to walk |
+| [08-reports.md](08-reports.md) | Step 8 — the four reports, and the page that leaves the room | ✅ Built, revised by 7.5 |
 | [08.5-admin-screens.md](08.5-admin-screens.md) | Step 8.5 — users, audit log, settings, statements index | ✅ Built, gate passed |
 
 Steps 9 and 10 are **features**. They are listed in the roadmap in
@@ -180,6 +185,21 @@ date pickers and selects, here and in Step 6, addressed a wrapper rather than
 the input inside it. And `payment.applies`, shipped in Step 6 with nothing to
 exercise it, finally divides a real payment against real interest. See
 [07-interest.md](07-interest.md).
+
+**Step 7.5 replaced the interest run with the settlement**, because the legacy
+program answered Q1–Q6 once somebody read it. The station never charged
+interest across every farmer at once. It settled one farmer at a time when they
+delivered palay: interest on each open advance from its own date to a cut-off,
+at a monthly rate typed on the day (5% almost always), simple not compound, and
+the delivery applied interest first. The settlement reproduces the legacy
+formula to the centavo on the legacy program's own rows. A payment is now
+*recorded* at the counter, palay lot by lot, and applied to the balance only
+when the farmer is settled. ROI's table is the legacy one, and "Liquidated" is
+now **Settled**, a list of settlements that open and reprint. The screens say
+*advance slip*, *settlement* and *payment*. `refno.start` defaults to 1426,
+continuing the legacy sequence. See [07.5-settlement.md](07.5-settlement.md)
+and [legacy-findings.md](legacy-findings.md). The screens still have to be
+walked at 1024px, as every step since 5 has needed.
 
 **Step 8 is complete and its gate has passed.** The system produces paper. Four
 reports — who owes money, whether the lending is working, how old the debt is,
@@ -345,6 +365,6 @@ bokkie import-customers F.csv         # load the customer master, all or nothing
 
 ```bash
 go test ./internal/domain/payment/... -race    # the receipt, the split, twenty posters
-go test ./internal/domain/interest/... -race   # the rule, the preview, the period guard
+go test ./internal/domain/settlement/... -race # the legacy formula, to the centavo
 go test ./internal/domain/report/... -race     # the four reports, and the FIFO walk
 ```

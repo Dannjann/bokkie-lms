@@ -192,10 +192,11 @@ const uptime = computed(() => {
 })
 
 /** The nav's disabled entries, said once in prose so the order is visible. */
+// Only what is genuinely still to come. Reports and Statements sat here for a
+// while after they shipped, telling people to wait for screens already in the
+// sidebar.
 const upcoming = [
-  { label: 'Reports', note: 'Current Advances, ROI, Liquidated, aging, and A4 printing.' },
-  { label: 'Statements', note: 'Across customers, with the print layout that makes one worth handing over.' },
-  { label: 'Slips', note: 'Vouchers and receipts on the dot-matrix, on continuous form.' },
+  { label: 'Slips', note: 'Advance slips and payment slips on the dot-matrix, on continuous form.' },
 ]
 
 onMounted(() => {

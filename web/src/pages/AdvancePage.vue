@@ -46,7 +46,7 @@ const isDraft = computed(() => voucher.value?.status === 'draft')
 
 function adopt(loaded: Voucher): void {
   voucher.value = loaded
-  setPageTitle(loaded.ref_no ? `Ref. No. ${loaded.ref_no}` : 'Draft voucher')
+  setPageTitle(loaded.ref_no ? `Ref. No. ${loaded.ref_no}` : 'Draft advance slip')
 }
 
 async function load(): Promise<void> {
@@ -126,15 +126,6 @@ onMounted(load)
             <Tag v-if="voucher.status === 'draft'" severity="warn" value="Draft" />
             <Tag v-else-if="voucher.status === 'voided'" severity="danger" value="Voided" />
           </h1>
-        </template>
-        <template #actions>
-          <Button
-            label="Back to advances"
-            icon="pi pi-arrow-left"
-            severity="secondary"
-            text
-            @click="router.push({ name: 'advances' })"
-          />
         </template>
       </PageHeader>
 
@@ -241,7 +232,7 @@ onMounted(load)
 
         <div v-if="isManager && voucher.status === 'posted'" class="advance__actions">
           <Button
-            label="Void this voucher"
+            label="Void this slip"
             icon="pi pi-ban"
             severity="danger"
             outlined
@@ -252,11 +243,11 @@ onMounted(load)
       </template>
     </template>
 
-    <Message v-else severity="error" :closable="false">{{ error || 'No such voucher.' }}</Message>
+    <Message v-else severity="error" :closable="false">{{ error || 'No such advance slip.' }}</Message>
 
-    <Dialog v-model:visible="voiding" modal header="Void this voucher" :style="{ width: '28rem' }">
+    <Dialog v-model:visible="voiding" modal header="Void this slip" :style="{ width: '28rem' }">
       <p class="advance__dialog-text">
-        Every line will be reversed in the ledger. The voucher and its reversals both stay on the
+        Every line will be reversed in the ledger. The slip and its reversals both stay on the
         record, and the reason is written onto each one.
       </p>
       <Textarea v-model="voidReason" rows="3" fluid aria-label="Reason for voiding" />
@@ -347,6 +338,12 @@ onMounted(load)
 .advance__amount {
   text-align: right;
   white-space: nowrap;
+}
+
+/* The table's own `th` rule is more specific than the class above; without
+   this the heading sat left while its figures sat right. */
+.advance__table th.advance__amount {
+  text-align: right;
 }
 
 .advance__reason {
