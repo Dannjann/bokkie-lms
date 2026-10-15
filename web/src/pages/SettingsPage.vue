@@ -21,6 +21,7 @@ import {
 } from '@/api/settings'
 import { backupNow, formatBytes, listBackups, type BackupFile } from '@/api/backups'
 import { useSessionStore } from '@/stores/session'
+import { ratePercent } from '@/format'
 
 /**
  * Everything that changes without a rebuild, and the backup folder underneath.
@@ -100,9 +101,8 @@ function blockedReason(setting: Setting): string {
 
 /** Basis points are how this is stored and not how anyone thinks. */
 function asPercent(value: string): string {
-  const bps = Number(value)
-  if (!Number.isFinite(bps)) return ''
-  return `${(bps / 100).toFixed(2)}%`
+  if (!/^\d+$/.test(value.trim())) return ''
+  return `${ratePercent(Number(value))} a month`
 }
 
 async function load(): Promise<void> {

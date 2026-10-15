@@ -20,10 +20,10 @@ import (
 	bokkiedb "github.com/Dannjann/bokkie-lms/internal/db"
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
-	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
 	"github.com/Dannjann/bokkie-lms/internal/domain/report"
+	"github.com/Dannjann/bokkie-lms/internal/domain/settlement"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 )
 
@@ -135,6 +135,7 @@ func testDeps(t *testing.T, database *sql.DB) Deps {
 	folder := filepath.Join(t.TempDir(), "backups")
 	auditLog := audit.New(database, log)
 	ledgerSvc := ledger.New(database, store, auditLog, log)
+	payments := payment.New(database, ledgerSvc, store, log)
 	return Deps{
 		Logger:       log,
 		DB:           database,
@@ -142,8 +143,8 @@ func testDeps(t *testing.T, database *sql.DB) Deps {
 		Customers:    customer.New(database, auditLog, log),
 		Ledger:       ledgerSvc,
 		Advances:     advance.New(database, ledgerSvc, store, log),
-		Payments:     payment.New(database, ledgerSvc, store, log),
-		Interest:     interest.New(database, ledgerSvc, store, log),
+		Payments:     payments,
+		Settlements:  settlement.New(database, ledgerSvc, payments, store, log),
 		Reports:      report.New(database, ledgerSvc, log),
 		Users:        auth.NewUsers(database),
 		Sessions:     auth.NewSessions(database),

@@ -120,7 +120,7 @@ func handleAging(d Deps) http.HandlerFunc {
 	}
 }
 
-func handleLiquidated(d Deps) http.HandlerFunc {
+func handleSettled(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		from, to, err := periodFrom(r, d)
 		if err != nil {
@@ -134,9 +134,9 @@ func handleLiquidated(d Deps) http.HandlerFunc {
 			return
 		}
 
-		report, err := d.Reports.Liquidated(r.Context(), from, to)
+		report, err := d.Reports.Settled(r.Context(), from, to)
 		if err != nil {
-			reportFailed(w, r, d, err, "build the liquidated report")
+			reportFailed(w, r, d, err, "build the settled report")
 			return
 		}
 		writeJSON(w, http.StatusOK, report)

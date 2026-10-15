@@ -95,13 +95,13 @@ export const router = createRouter({
       path: '/advances/new',
       name: 'advance-new',
       component: () => import('@/pages/AdvanceNewPage.vue'),
-      meta: { title: 'New voucher', parent: { label: 'Advances', to: '/advances' } },
+      meta: { title: 'New advance slip', parent: { label: 'Advances', to: '/advances' } },
     },
     {
       path: '/advances/:id(\\d+)',
       name: 'advance',
       component: () => import('@/pages/AdvancePage.vue'),
-      meta: { title: 'Voucher', parent: { label: 'Advances', to: '/advances' } },
+      meta: { title: 'Advance slip', parent: { label: 'Advances', to: '/advances' } },
     },
     {
       path: '/payments',
@@ -122,32 +122,25 @@ export const router = createRouter({
       meta: { title: 'Payment', parent: { label: 'Payments', to: '/payments' } },
     },
     {
-      // Manager-only in the UI and at the server, reads included — the whole
-      // section is, and this guard only saves a pointless round trip.
-      path: '/interest',
-      name: 'interest',
-      component: () => import('@/pages/InterestPage.vue'),
-      meta: { title: 'Interest', manager: true },
+      // Counter work, as it was in the legacy system: a farmer has delivered
+      // and is standing there to be settled up. Open to encoders; voiding is a
+      // manager's, and the server enforces that.
+      path: '/settlements',
+      name: 'settlements',
+      component: () => import('@/pages/SettlementsPage.vue'),
+      meta: { title: 'Settlements' },
     },
     {
-      path: '/interest/new',
-      name: 'interest-new',
-      component: () => import('@/pages/InterestNewPage.vue'),
-      meta: {
-        title: 'New interest run',
-        parent: { label: 'Interest', to: '/interest' },
-        manager: true,
-      },
+      path: '/settlements/new',
+      name: 'settlement-new',
+      component: () => import('@/pages/SettlementNewPage.vue'),
+      meta: { title: 'Settle a farmer', parent: { label: 'Settlements', to: '/settlements' } },
     },
     {
-      path: '/interest/:id(\\d+)',
-      name: 'interest-run',
-      component: () => import('@/pages/InterestRunPage.vue'),
-      meta: {
-        title: 'Interest run',
-        parent: { label: 'Interest', to: '/interest' },
-        manager: true,
-      },
+      path: '/settlements/:id(\\d+)',
+      name: 'settlement',
+      component: () => import('@/pages/SettlementPage.vue'),
+      meta: { title: 'Settlement', parent: { label: 'Settlements', to: '/settlements' } },
     },
     {
       // The four reports. Manager-only in the UI and at the server, reads
@@ -183,15 +176,17 @@ export const router = createRouter({
       },
     },
     {
-      path: '/reports/liquidated',
-      name: 'report-liquidated',
-      component: () => import('@/pages/LiquidatedPage.vue'),
+      path: '/reports/settled',
+      name: 'report-settled',
+      component: () => import('@/pages/SettledPage.vue'),
       meta: {
-        title: 'Liquidated',
+        title: 'Settlements',
         parent: { label: 'Reports', to: '/reports/current-advances' },
         manager: true,
       },
     },
+    // The report's old address, for a bookmark made before it was renamed.
+    { path: '/reports/liquidated', redirect: '/reports/settled' },
     {
       // The index over every farmer's statement. Not manager-gated, unlike the
       // four reports — the encoder at the counter is the person who has to tell
@@ -228,7 +223,7 @@ export const router = createRouter({
     },
     {
       // Manager-only to change, and manager-only to look at: the Ref. No. start
-      // and the interest rule are not things to be browsed mid-shift.
+      // and the usual rate are not things to be browsed mid-shift.
       path: '/settings',
       name: 'settings',
       component: () => import('@/pages/SettingsPage.vue'),

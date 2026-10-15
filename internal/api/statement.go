@@ -8,9 +8,9 @@ import (
 
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
-	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
+	"github.com/Dannjann/bokkie-lms/internal/domain/settlement"
 )
 
 // The customer statement: an opening balance, every entry over a period, the
@@ -201,13 +201,13 @@ func documentLabels(ctx context.Context, d Deps, rows []ledger.StatementRow) (ma
 		}
 	}
 
-	if ids := byTable[interest.SourceTable]; len(ids) > 0 {
-		runNos, err := d.Interest.RunNosForLines(ctx, ids)
+	if ids := byTable[settlement.SourceTable]; len(ids) > 0 {
+		nos, err := d.Settlements.NumbersFor(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
-		for lineID, runNo := range runNos {
-			labels[documentKey{interest.SourceTable, lineID}] = label("Interest run", runNo)
+		for id, no := range nos {
+			labels[documentKey{settlement.SourceTable, id}] = label("Settlement No.", no)
 		}
 	}
 

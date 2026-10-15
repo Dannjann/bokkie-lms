@@ -9,14 +9,14 @@ import (
 )
 
 // The four reports through the real routes, against a station with money on the
-// books: one farmer still owing, one who has finished paying.
-func newReportFixture(t *testing.T) *interestFixture {
+// books: one farmer who borrowed ₱10,000 ninety days ago and has not been
+// settled, and one lent ₱1,000 today and settled in full.
+func newReportFixture(t *testing.T) *settlementFixture {
 	t.Helper()
 
-	f := newInterestFixture(t)
+	f := newSettlementFixture(t)
 	day := today(t)
 
-	// A second farmer, lent money and paid off in full.
 	var settled struct {
 		ID   int64  `json:"id"`
 		Code string `json:"code"`
@@ -28,31 +28,15 @@ func newReportFixture(t *testing.T) *interestFixture {
 	}
 	decode(t, resp, &settled)
 
-	voucher := request(t, f.handler, http.MethodPost, "/api/advances", f.encoder, map[string]any{
-		"date": day, "notes": "",
-		"lines": []map[string]any{{"customer_id": settled.ID, "particular": "advance", "amount": "1000.00"}},
-	})
-	var v struct {
-		ID int64 `json:"id"`
-	}
-	decode(t, voucher, &v)
-	if posted := request(t, f.handler, http.MethodPost, "/api/advances/"+itoa(v.ID)+"/post",
-		f.encoder, nil); posted.Code != http.StatusOK {
-		t.Fatalf("post the second voucher: status %d: %s", posted.Code, posted.Body)
-	}
-
-	paid := request(t, f.handler, http.MethodPost, "/api/payments", f.encoder, map[string]any{
-		"customer_id": settled.ID, "date": day, "amount": "1000.00", "method": "cash", "particular": "",
-	})
-	var p struct {
-		ID int64 `json:"id"`
-	}
-	decode(t, paid, &p)
-	if posted := request(t, f.handler, http.MethodPost, "/api/payments/"+itoa(p.ID)+"/post",
-		f.encoder, nil); posted.Code != http.StatusOK {
-		t.Fatalf("post the second payment: status %d: %s", posted.Code, posted.Body)
-	}
+	f.advance(t, settled.ID, day, "1000.00")
+	f.deliver(t, settled.ID, day, "100.0", "10.00")
+	f.post(t, f.settle(t, map[string]any{"customer_id": settled.ID, "cutoff": day}).ID)
 	return f
+}
+
+// period is the query string covering everything the fixture did.
+func (f *settlementFixture) period(t *testing.T) string {
+	return "?from=" + daysAgo(t, 100) + "&to=" + today(t)
 }
 
 func TestCurrentAdvancesReportsWhoOwesWhat(t *testing.T) {
@@ -68,8 +52,8 @@ func TestCurrentAdvancesReportsWhoOwesWhat(t *testing.T) {
 	if len(current.Rows) != 1 {
 		t.Fatalf("the report has %d rows, want the one farmer still owing: %+v", len(current.Rows), current.Rows)
 	}
-	if current.Rows[0].Code != f.farmer.Code || current.Total.String() != "5000.00" {
-		t.Errorf("the report shows %+v totalling %s, want %s at 5000.00",
+	if current.Rows[0].Code != f.farmer.Code || current.Total.String() != "10000.00" {
+		t.Errorf("the report shows %+v totalling %s, want %s at 10000.00",
 			current.Rows[0], current.Total, f.farmer.Code)
 	}
 }
@@ -77,27 +61,24 @@ func TestCurrentAdvancesReportsWhoOwesWhat(t *testing.T) {
 func TestROIReportsThePortfolioAndItsRows(t *testing.T) {
 	f := newReportFixture(t)
 
-	resp := request(t, f.handler, http.MethodGet, "/api/reports/roi", f.manager, nil)
+	resp := request(t, f.handler, http.MethodGet, "/api/reports/roi"+f.period(t), f.manager, nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("roi: status %d: %s", resp.Code, resp.Body)
 	}
 
 	var roi report.ROI
 	decode(t, resp, &roi)
-	if roi.Deployed.String() != "6000.00" || roi.Repaid.String() != "1000.00" {
-		t.Errorf("deployed %s and repaid %s, want 6000.00 and 1000.00", roi.Deployed, roi.Repaid)
+	if roi.Deployed.String() != "11000.00" || roi.Repaid.String() != "1000.00" {
+		t.Errorf("deployed %s and repaid %s, want 11000.00 and 1000.00", roi.Deployed, roi.Repaid)
 	}
-	if roi.Outstanding.String() != "5000.00" {
-		t.Errorf("outstanding %s, want 5000.00", roi.Outstanding)
+	if roi.Outstanding.String() != "10000.00" {
+		t.Errorf("outstanding %s, want 10000.00", roi.Outstanding)
 	}
-	if roi.Farmers != 2 || roi.Vouchers != 2 {
-		t.Errorf("%d farmers over %d vouchers, want 2 and 2", roi.Farmers, roi.Vouchers)
+	if roi.Farmers != 1 || roi.Vouchers != 2 {
+		t.Errorf("%d farmers settled over %d advance slips, want 1 and 2", roi.Farmers, roi.Vouchers)
 	}
-	if roi.RepaidShare != "16.6%" {
-		t.Errorf("the recovery rate reads %q, want 16.6%%", roi.RepaidShare)
-	}
-	if len(roi.Rows) != 2 {
-		t.Fatalf("the report has %d rows, want one per active farmer", len(roi.Rows))
+	if len(roi.Rows) != 1 || roi.Rows[0].Amount.String() != "1000.00" || roi.Rows[0].SettlementNo != 1 {
+		t.Fatalf("the report has rows %+v, want the one settlement returning 1000.00", roi.Rows)
 	}
 }
 
@@ -114,32 +95,27 @@ func TestAgingReportsTheOutstandingPrincipalByAge(t *testing.T) {
 	if len(aging.Rows) != 1 {
 		t.Fatalf("the report has %d rows, want the one farmer still owing: %+v", len(aging.Rows), aging.Rows)
 	}
-	// Everything was lent today, so all of it is current.
-	if aging.Current.String() != "5000.00" || aging.Principal.String() != "5000.00" {
-		t.Errorf("current %s of %s outstanding, want all 5000.00 in the current bucket",
-			aging.Current, aging.Principal)
-	}
-	if aging.Over90.String() != "0.00" {
-		t.Errorf("the over-90 bucket holds %s on a book lent today", aging.Over90)
+	if aging.Principal.String() != "10000.00" || aging.Current.String() != "0.00" {
+		t.Errorf("%s outstanding with %s current, want 10000.00 lent ninety days ago and none current",
+			aging.Principal, aging.Current)
 	}
 }
 
-func TestLiquidatedReportsWhoFinishedPaying(t *testing.T) {
+func TestSettledReportsEverySettlement(t *testing.T) {
 	f := newReportFixture(t)
 
-	resp := request(t, f.handler, http.MethodGet, "/api/reports/liquidated", f.manager, nil)
+	resp := request(t, f.handler, http.MethodGet, "/api/reports/settled"+f.period(t), f.manager, nil)
 	if resp.Code != http.StatusOK {
-		t.Fatalf("liquidated: status %d: %s", resp.Code, resp.Body)
+		t.Fatalf("settled: status %d: %s", resp.Code, resp.Body)
 	}
 
-	var liquidated report.Liquidated
-	decode(t, resp, &liquidated)
-	if len(liquidated.Rows) != 1 {
-		t.Fatalf("the report has %d rows, want the one farmer who finished: %+v",
-			len(liquidated.Rows), liquidated.Rows)
+	var settled report.SettledReport
+	decode(t, resp, &settled)
+	if len(settled.Rows) != 1 {
+		t.Fatalf("the report has %d rows, want the one settlement: %+v", len(settled.Rows), settled.Rows)
 	}
-	if liquidated.Rows[0].Advanced.String() != "1000.00" {
-		t.Errorf("the row says %s was advanced, want 1000.00", liquidated.Rows[0].Advanced)
+	if settled.Rows[0].PaidPrincipal.String() != "1000.00" || settled.Rows[0].BalanceAfter.String() != "0.00" {
+		t.Errorf("the row is %+v, want 1000.00 repaid and nothing left", settled.Rows[0])
 	}
 }
 
@@ -155,7 +131,7 @@ func TestAReportRefusesABadDateAndNamesIt(t *testing.T) {
 		{"/api/reports/current-advances?as_of=last+tuesday", "as_of"},
 		{"/api/reports/aging?as_of=2026-13-45", "as_of"},
 		{"/api/reports/roi?from=yesterday", "from"},
-		{"/api/reports/liquidated?to=nonsense", "to"},
+		{"/api/reports/settled?to=nonsense", "to"},
 	}
 
 	for _, tc := range cases {
@@ -185,7 +161,7 @@ func TestReportsAreManagerOnlyAndTheRefusalsAreAudited(t *testing.T) {
 		"/api/reports/current-advances",
 		"/api/reports/roi",
 		"/api/reports/aging",
-		"/api/reports/liquidated",
+		"/api/reports/settled",
 	}
 	for _, path := range paths {
 		if resp := request(t, f.handler, http.MethodGet, path, f.encoder, nil); resp.Code != http.StatusForbidden {
@@ -210,7 +186,7 @@ func TestReportRoutesAreRegisteredWithTheRightAccess(t *testing.T) {
 		"GET /api/reports/current-advances": ManagerOnly,
 		"GET /api/reports/roi":              ManagerOnly,
 		"GET /api/reports/aging":            ManagerOnly,
-		"GET /api/reports/liquidated":       ManagerOnly,
+		"GET /api/reports/settled":          ManagerOnly,
 	}
 
 	found := map[string]bool{}

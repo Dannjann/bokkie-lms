@@ -61,6 +61,11 @@ type Summary struct {
 	Particular string      `json:"particular"`
 	Status     Status      `json:"status"`
 
+	// SettlementNo is the posted settlement that applied this payment, or
+	// zero while it is still waiting to be settled.
+	SettlementID int64 `json:"settlement_id"`
+	SettlementNo int64 `json:"settlement_no"`
+
 	CreatedBy string `json:"created_by"`
 }
 
@@ -109,9 +114,13 @@ func (s *Service) List(ctx context.Context, q Query) (Page, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT p.id, COALESCE(p.or_no, 0), p.customer_id, c.code, c.name,
 		        p.payment_date, p.amount_cents, p.method, p.particular, p.status,
-		        p.created_by_username
+		        p.created_by_username,
+		        COALESCE(st.id, 0), COALESCE(st.settlement_no, 0)
 		   FROM payments p
 		   JOIN customers c ON c.id = p.customer_id
+		   LEFT JOIN settlement_payments sp ON sp.payment_id = p.id
+		         AND sp.settlement_id IN (SELECT id FROM settlements WHERE status = 'posted')
+		   LEFT JOIN settlements st ON st.id = sp.settlement_id
 		   `+where+`
 		  ORDER BY p.payment_date DESC, p.id DESC
 		  LIMIT ? OFFSET ?`,
@@ -125,7 +134,8 @@ func (s *Service) List(ctx context.Context, q Query) (Page, error) {
 		var sum Summary
 		var method, status string
 		if err := rows.Scan(&sum.ID, &sum.OrNo, &sum.CustomerID, &sum.CustomerCode, &sum.CustomerName,
-			&sum.Date, &sum.Amount, &method, &sum.Particular, &status, &sum.CreatedBy); err != nil {
+			&sum.Date, &sum.Amount, &method, &sum.Particular, &status, &sum.CreatedBy,
+			&sum.SettlementID, &sum.SettlementNo); err != nil {
 			return Page{}, fmt.Errorf("list payments: %w", err)
 		}
 		sum.Method, sum.Status = Method(method), Status(status)

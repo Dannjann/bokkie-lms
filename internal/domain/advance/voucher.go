@@ -118,9 +118,9 @@ func (s *Service) refused(ctx context.Context, q queryExecer, id int64, res sql.
 	}
 
 	if want == StatusPosted {
-		return fmt.Errorf("%w: voucher %d is %s", ErrNotPosted, id, status)
+		return fmt.Errorf("%w: advance slip %d is %s", ErrNotPosted, id, status)
 	}
-	return fmt.Errorf("%w: voucher %d is %s", ErrNotDraft, id, status)
+	return fmt.Errorf("%w: advance slip %d is %s", ErrNotDraft, id, status)
 }
 
 // writeLines inserts a draft's lines, after checking that every customer named

@@ -101,3 +101,60 @@ export function fromISODate(text: string): Date | null {
   if (!match) return null
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
 }
+
+/**
+ * A rate as a percentage, by string surgery rather than by arithmetic.
+ *
+ * Basis points are an integer, so this is exact: 500 reads "5%", 25 reads
+ * "0.25%", 1050 reads "10.5%". The trailing zeroes come off because nobody
+ * says "five point zero zero percent".
+ */
+export function ratePercent(bps: number): string {
+  const sign = bps < 0 ? '-' : ''
+  const digits = String(Math.abs(Math.trunc(bps))).padStart(3, '0')
+  const whole = digits.slice(0, -2)
+  const fraction = digits.slice(-2).replace(/0+$/, '')
+  return `${sign}${whole}${fraction ? `.${fraction}` : ''}%`
+}
+
+/**
+ * A percentage typed by a person, as the basis points the server stores.
+ *
+ * A percentage with at most two decimal places and an integer of hundredths
+ * are the same thing, so this is parseCentavos with a percent sign allowed:
+ * "5" is 500, "2.5" is 250, "0" is 0, and nothing passes through a float.
+ */
+export function percentToBps(text: string): number | null {
+  return parseCentavos(text.replace(/%/g, ''))
+}
+
+/**
+ * A weight typed off a weighing slip, as tenths of a kilo.
+ *
+ * The same rules as the server's: commas are noise, one decimal place at most.
+ * A second decimal is refused rather than rounded — the scale does not weigh
+ * to the gram, so it is a typing mistake.
+ */
+export function parseKiloTenths(kilos: string): number | null {
+  const text = kilos.replace(/[,\s]/g, '')
+  if (!/^\d+(\.\d?)?$/.test(text)) return null
+  const [whole, fraction = ''] = text.split('.')
+  return Number(whole) * 10 + Number(fraction.padEnd(1, '0'))
+}
+
+/**
+ * What a lot of palay is worth, in centavos: kilos × price per kilo, rounded
+ * half-up to the centavo — the server's rule, done in integers.
+ *
+ * tenths × centavos-per-kilo is ten times the cost in centavos, so the
+ * division by ten is the only rounding, and it is done on whole numbers.
+ * A preview for the person typing; the server's figure is what is stored.
+ */
+export function palayCostCentavos(kilos: string, price: string): number | null {
+  const tenths = parseKiloTenths(kilos)
+  const centavos = parseCentavos(price)
+  if (tenths === null || centavos === null) return null
+  const tenTimes = tenths * centavos
+  if (!Number.isSafeInteger(tenTimes)) return null
+  return Math.floor((tenTimes + 5) / 10)
+}

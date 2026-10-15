@@ -514,12 +514,41 @@ func balanceFor(ctx context.Context, q querier, customerID int64) (Balance, erro
 // answer. Building it here, while the ledger is the only thing that exists,
 // costs one WHERE clause.
 func (s *Service) BalanceAt(ctx context.Context, customerID int64, on Date) (Balance, error) {
+	return balanceAt(ctx, s.db, customerID, on)
+}
+
+// BalanceAtTx is BalanceAt inside the caller's transaction, for a settlement
+// that must compute against the balance as it stands at the moment it posts.
+func (s *Service) BalanceAtTx(ctx context.Context, tx *sql.Tx, customerID int64, on Date) (Balance, error) {
+	return balanceAt(ctx, tx, customerID, on)
+}
+
+// FirstEntryDateTx is the date of a customer's earliest entry, or the zero Date
+// when they have none. A settlement uses it as the day a carried balance began
+// accruing when there is no earlier settlement to measure from — which, at
+// cutover, is the opening balance.
+func (s *Service) FirstEntryDateTx(ctx context.Context, q interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}, customerID int64) (Date, error) {
+	var text string
+	if err := q.QueryRowContext(ctx,
+		`SELECT COALESCE(MIN(entry_date), '') FROM ledger_entries WHERE customer_id = ?`,
+		customerID).Scan(&text); err != nil {
+		return Date{}, fmt.Errorf("read the first entry of customer %d: %w", customerID, err)
+	}
+	if text == "" {
+		return Date{}, nil
+	}
+	return ParseDate(text)
+}
+
+func balanceAt(ctx context.Context, q querier, customerID int64, on Date) (Balance, error) {
 	if on.IsZero() {
 		return Balance{}, fmt.Errorf("%w: BalanceAt needs a date", ErrInvalidEntry)
 	}
 
 	balance := Balance{CustomerID: customerID}
-	err := s.db.QueryRowContext(ctx, `
+	err := q.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(principal_delta_cents), 0),
 		       COALESCE(SUM(interest_delta_cents), 0),
 		       COALESCE(MAX(entry_date), '')

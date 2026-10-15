@@ -31,8 +31,9 @@ export const settingGroups: { label: string; blurb?: string; keys: string[] }[] 
   { label: 'Station', keys: ['timezone'] },
   {
     label: 'Interest',
-    blurb: 'Nothing is charged until a method and a rate are set.',
-    keys: ['interest.method', 'interest.rate_bps', 'interest.basis'],
+    blurb:
+      'Interest is charged when a farmer is settled: principal × rate × days ÷ 30, simple. Each settlement starts with this rate and can change it.',
+    keys: ['interest.rate_bps'],
   },
   { label: 'Payments', keys: ['payment.applies'] },
   {
@@ -65,9 +66,7 @@ export const timezones = [
 /** A label for a key, so the screen shows "Timezone" rather than "timezone". */
 export const settingLabels: Record<string, string> = {
   timezone: 'Timezone',
-  'interest.method': 'How interest is computed',
-  'interest.rate_bps': 'Rate, in basis points',
-  'interest.basis': 'Charged on',
+  'interest.rate_bps': 'Usual monthly rate, in basis points',
   'payment.applies': 'A payment clears',
   'refno.start': 'First Ref. No.',
   'orno.start': 'First OR No.',
@@ -86,13 +85,6 @@ export const settingLabels: Record<string, string> = {
  * from.
  */
 export const settingChoiceLabels: Record<string, string> = {
-  // interest.method
-  'none': 'Not at all',
-  'monthly-on-balance': 'Monthly, on the balance at the end of the period',
-  'flat-on-advance': 'Once, on what was advanced during the period',
-  // interest.basis
-  'principal': 'Principal only',
-  'principal-and-interest': 'Principal and unpaid interest',
   // payment.applies
   'interest-first': 'Interest first, then principal',
   'principal-first': 'Principal first, then interest',
@@ -106,9 +98,6 @@ export function listSettings(): Promise<{ settings: Setting[] }> {
 export function updateSetting(key: string, value: string): Promise<Setting> {
   return putJson<Setting>('/api/settings', { key, value })
 }
-
-/** The three that make up the interest rule, in the order a form should ask. */
-export const interestKeys = ['interest.method', 'interest.rate_bps', 'interest.basis'] as const
 
 /**
  * Whether the other machines on the station network may reach the app.

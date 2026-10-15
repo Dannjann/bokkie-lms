@@ -34,7 +34,7 @@ onMounted(run)
 <template>
   <ReportShell
     title="Return of Investment Status"
-    description="What the station put out over a period, what came back, and what is still out."
+    description="What the station put out over a period, what came back at each settlement, and what is still out."
     mode="period"
     v-model:from="from"
     v-model:to="to"
@@ -43,7 +43,7 @@ onMounted(run)
     :rows="report?.rows.length ?? 0"
     @refresh="run"
   >
-    <template #empty>Nothing was lent or repaid over this period.</template>
+    <template #empty>Nobody was settled over this period.</template>
 
     <template v-if="report">
       <!--
@@ -56,12 +56,11 @@ onMounted(run)
           <dt>Capital deployed</dt>
           <dd class="numeric">{{ formatPesos(report.deployed) }}</dd>
           <dd class="roi__note">
-            {{ report.farmers }} {{ report.farmers === 1 ? 'farmer' : 'farmers' }},
-            {{ report.vouchers }} {{ report.vouchers === 1 ? 'voucher' : 'vouchers' }}
+            {{ report.vouchers }} {{ report.vouchers === 1 ? 'advance slip' : 'advance slips' }}
           </dd>
         </div>
         <div class="roi__figure">
-          <dt>Repaid</dt>
+          <dt>Principal returned</dt>
           <dd class="numeric">{{ formatPesos(report.repaid) }}</dd>
           <dd v-if="report.repaid_share" class="roi__note">
             {{ report.repaid_share }} of what was deployed
@@ -70,7 +69,7 @@ onMounted(run)
         <div class="roi__figure">
           <dt>Interest charged</dt>
           <dd class="numeric">{{ formatPesos(report.interest_charged) }}</dd>
-          <dd class="roi__note">{{ formatPesos(report.interest_collected) }} collected</dd>
+          <dd class="roi__note">{{ formatPesos(report.interest_collected) }} paid</dd>
         </div>
         <div class="roi__figure">
           <dt>Still outstanding</dt>
@@ -83,34 +82,39 @@ onMounted(run)
         <thead>
           <tr>
             <th class="report__code">Code</th>
-            <th>Farmer</th>
-            <th class="report__amount">Advanced</th>
-            <th class="report__amount">Repaid</th>
+            <th class="report__code">Date</th>
+            <th>Customer name</th>
+            <th class="report__amount">Principal</th>
             <th class="report__amount">Interest</th>
-            <th class="report__amount">Balance</th>
+            <th class="report__amount">Amount</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in report.rows" :key="row.customer_id">
+          <tr v-for="row in report.rows" :key="row.settlement_id">
             <td class="report__code numeric">{{ row.code }}</td>
+            <td class="report__code numeric">{{ row.cutoff }}</td>
             <td>
-              <RouterLink :to="{ name: 'customer', params: { id: row.customer_id } }">
+              <RouterLink
+                :to="{ name: 'settlement', params: { id: row.settlement_id } }"
+                :title="`Settlement No. ${row.settlement_no}`"
+              >
                 {{ row.name }}
               </RouterLink>
             </td>
-            <td class="report__amount numeric">{{ formatPesos(row.advanced) }}</td>
-            <td class="report__amount numeric">{{ formatPesos(row.repaid) }}</td>
-            <td class="report__amount numeric">{{ formatPesos(row.interest_charged) }}</td>
-            <td class="report__amount numeric">{{ formatPesos(row.balance) }}</td>
+            <td class="report__amount numeric">{{ formatPesos(row.principal) }}</td>
+            <td class="report__amount numeric">{{ formatPesos(row.interest) }}</td>
+            <td class="report__amount numeric">{{ formatPesos(row.amount) }}</td>
           </tr>
         </tbody>
         <tfoot>
           <tr class="report__totals">
-            <td colspan="2">{{ report.rows.length }} farmers</td>
-            <td class="report__amount numeric">{{ formatPesos(report.deployed) }}</td>
+            <td colspan="3">
+              {{ report.farmers }} {{ report.farmers === 1 ? 'farmer' : 'farmers' }} settled ·
+              Principal returned / Interest paid / Total
+            </td>
             <td class="report__amount numeric">{{ formatPesos(report.repaid) }}</td>
-            <td class="report__amount numeric">{{ formatPesos(report.interest_charged) }}</td>
-            <td />
+            <td class="report__amount numeric">{{ formatPesos(report.interest_collected) }}</td>
+            <td class="report__amount numeric">{{ formatPesos(report.returned) }}</td>
           </tr>
         </tfoot>
       </table>

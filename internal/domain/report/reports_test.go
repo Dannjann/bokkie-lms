@@ -102,6 +102,66 @@ func charge(t *testing.T, entries *ledger.Service, customer int64, on ledger.Dat
 	}
 }
 
+// settle puts a posted settlement on the books directly, as the settlement
+// package would leave it: a payment applied, split between principal and
+// interest, and the matching ledger entry dated the cut-off. voidedOn, when not
+// zero, voids it on that day.
+func settle(t *testing.T, db *sql.DB, entries *ledger.Service, customer int64, cutoff ledger.Date,
+	principal, interest int64, voidedOn ledger.Date) int64 {
+	t.Helper()
+	ctx := context.Background()
+	amount := mustPesos(principal + interest)
+
+	res, err := db.Exec(`INSERT INTO payments (customer_id, payment_date, amount_cents, method, status,
+	                          created_at, created_by_username)
+	                     VALUES (?, ?, ?, 'cash', 'draft', '2026-01-01T00:00:00Z', 'dan')`,
+		customer, cutoff, amount)
+	if err != nil {
+		t.Fatalf("record a payment: %v", err)
+	}
+	paymentID, _ := res.LastInsertId()
+	if _, err := db.Exec(`UPDATE payments SET status = 'posted', or_no = ?, posted_at = '2026-01-01T00:00:00Z',
+	                          posted_by_username = 'dan' WHERE id = ?`, paymentID, paymentID); err != nil {
+		t.Fatalf("record a payment: %v", err)
+	}
+
+	res, err = db.Exec(`INSERT INTO settlements (customer_id, cutoff_date, rate_bps, status, created_at, created_by_username)
+	                    VALUES (?, ?, 500, 'draft', '2026-01-01T00:00:00Z', 'dan')`, customer, cutoff)
+	if err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	id, _ := res.LastInsertId()
+	if _, err := db.Exec(`INSERT INTO settlement_payments (settlement_id, payment_id, principal_cents, interest_cents)
+	                      VALUES (?, ?, ?, ?)`, id, paymentID, mustPesos(principal), mustPesos(interest)); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE settlements SET status = 'posted', settlement_no = ?, posted_at = '2026-01-01T00:00:00Z',
+	                          posted_by_username = 'dan' WHERE id = ?`, id, id); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+
+	p, _ := mustPesos(principal).Neg()
+	i, _ := mustPesos(interest).Neg()
+	entryID, err := entries.Post(ctx, ledger.Entry{
+		CustomerID: customer, Date: cutoff, Type: ledger.TypePayment, Principal: p, Interest: i,
+		SourceTable: "payments", SourceID: paymentID, By: dan,
+	})
+	if err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+
+	if !voidedOn.IsZero() {
+		if _, err := db.Exec(`UPDATE settlements SET status = 'voided', voided_at = ?, voided_by_username = 'manager',
+		                          void_reason = 'wrong rate' WHERE id = ?`, voidedOn.String()+"T02:00:00Z", id); err != nil {
+			t.Fatalf("void: %v", err)
+		}
+		if _, err := entries.Reverse(ctx, entryID, manager, "wrong rate"); err != nil {
+			t.Fatalf("void: %v", err)
+		}
+	}
+	return id
+}
+
 var (
 	january = ledger.MustDate(2026, time.January, 15)
 	march   = ledger.MustDate(2026, time.March, 15)
@@ -155,14 +215,14 @@ func TestCurrentAdvancesShowsACreditRatherThanHidingIt(t *testing.T) {
 }
 
 func TestROITotalsAreTheSumOfItsRows(t *testing.T) {
-	svc, entries, _ := openTestService(t)
+	svc, entries, db := openTestService(t)
 	ctx := context.Background()
 
 	lend(t, entries, 1, january, 5000)
 	lend(t, entries, 2, january, 3000)
 	charge(t, entries, 1, march, 150)
-	repay(t, entries, 1, march, 2000, 150)
-	repay(t, entries, 2, march, 3000, 0)
+	settle(t, db, entries, 1, march, 2000, 150, ledger.Date{})
+	settle(t, db, entries, 2, march, 3000, 0, ledger.Date{})
 
 	report, err := svc.ROI(ctx, year, june)
 	if err != nil {
@@ -172,8 +232,8 @@ func TestROITotalsAreTheSumOfItsRows(t *testing.T) {
 	if report.Deployed.String() != "8000.00" {
 		t.Errorf("deployed %s, want 8000.00", report.Deployed)
 	}
-	if report.Repaid.String() != "5000.00" {
-		t.Errorf("repaid %s, want 5000.00", report.Repaid)
+	if report.Repaid.String() != "5000.00" || report.Returned.String() != "5150.00" {
+		t.Errorf("repaid %s and returned %s, want 5000.00 and 5150.00", report.Repaid, report.Returned)
 	}
 	if report.InterestCharged.String() != "150.00" || report.InterestCollected.String() != "150.00" {
 		t.Errorf("interest %s charged and %s collected, want 150.00 and 150.00",
@@ -185,20 +245,20 @@ func TestROITotalsAreTheSumOfItsRows(t *testing.T) {
 	if report.RepaidShare != "62.5%" {
 		t.Errorf("the recovery rate reads %q, want 62.5%%", report.RepaidShare)
 	}
-	if report.Farmers != 2 {
-		t.Errorf("%d farmers, want 2", report.Farmers)
+	if report.Farmers != 2 || len(report.Rows) != 2 {
+		t.Errorf("%d farmers over %d rows, want 2 and 2", report.Farmers, len(report.Rows))
 	}
 
-	// The invariant: the rows add up to the block above them, exactly.
-	var advanced, repaid, interest money.Money
+	// The invariant: the rows add up to the totals, exactly.
+	var repaid, interest, returned money.Money
 	for _, row := range report.Rows {
-		advanced, _ = advanced.Add(row.Advanced)
-		repaid, _ = repaid.Add(row.Repaid)
-		interest, _ = interest.Add(row.InterestCharged)
+		repaid, _ = repaid.Add(row.Principal)
+		interest, _ = interest.Add(row.Interest)
+		returned, _ = returned.Add(row.Amount)
 	}
-	if advanced != report.Deployed || repaid != report.Repaid || interest != report.InterestCharged {
+	if repaid != report.Repaid || interest != report.InterestCollected || returned != report.Returned {
 		t.Errorf("the rows sum to %s / %s / %s and the totals say %s / %s / %s",
-			advanced, repaid, interest, report.Deployed, report.Repaid, report.InterestCharged)
+			repaid, interest, returned, report.Repaid, report.InterestCollected, report.Returned)
 	}
 }
 
@@ -220,8 +280,8 @@ func TestROICountsMoneyStillOutFromBeforeThePeriod(t *testing.T) {
 	if report.Outstanding.String() != "6000.00" {
 		t.Errorf("outstanding %s, want 6000.00 — last year's advance is still out", report.Outstanding)
 	}
-	if report.Farmers != 1 {
-		t.Errorf("%d farmers active this period, want 1", report.Farmers)
+	if report.Farmers != 0 {
+		t.Errorf("%d farmers settled this period, want none", report.Farmers)
 	}
 }
 
@@ -257,45 +317,52 @@ func TestAgingBucketsSumToWhatIsOutstanding(t *testing.T) {
 	}
 }
 
-func TestLiquidatedIsWhoFinishedPaying(t *testing.T) {
-	svc, entries, _ := openTestService(t)
+// "Liquidated" in the legacy system meant settled up on a date, not paid off:
+// a settlement that leaves money owing is still on the report.
+func TestSettledListsEverySettlementIncludingOnesThatLeaveABalance(t *testing.T) {
+	svc, entries, db := openTestService(t)
 
-	// Customer 1 settles in March.
 	lend(t, entries, 1, january, 5000)
-	repay(t, entries, 1, march, 5000, 0)
-	// Customer 2 is still paying.
+	settle(t, db, entries, 1, march, 5000, 0, ledger.Date{})
 	lend(t, entries, 2, january, 3000)
-	repay(t, entries, 2, march, 1000, 0)
-	// Customer 3 never borrowed, and must not count as settled.
+	settle(t, db, entries, 2, march, 1000, 0, ledger.Date{})
 
-	report, err := svc.Liquidated(context.Background(), year, june)
+	report, err := svc.Settled(context.Background(), year, june)
 	if err != nil {
-		t.Fatalf("liquidated: %v", err)
+		t.Fatalf("settled: %v", err)
 	}
-	if len(report.Rows) != 1 {
-		t.Fatalf("got %+v, want only the farmer who finished", report.Rows)
+	if len(report.Rows) != 2 {
+		t.Fatalf("got %+v, want both settlements", report.Rows)
 	}
-	row := report.Rows[0]
-	if row.Code != "BA-0001" || row.SettledOn != march || row.Advanced.String() != "5000.00" {
-		t.Errorf("the row is %+v, want BA-0001 settling on %s having been lent 5000.00", row, march)
+	// What each settlement left is worked out from what it stored as carried
+	// and advanced, which this helper does not fill in; the API test checks
+	// that figure end to end. Here it is enough that both are listed with what
+	// they repaid.
+	paid := map[string]string{}
+	for _, row := range report.Rows {
+		paid[row.Code] = row.PaidPrincipal.String()
+	}
+	if paid["BA-0001"] != "5000.00" || paid["BA-0002"] != "1000.00" {
+		t.Errorf("the rows repaid %v, want BA-0001 5000.00 and BA-0002 1000.00", paid)
 	}
 }
 
-// Settling and then borrowing again is not settled. The report is about who is
-// finished, and somebody who came back for more is not.
-func TestLiquidatedForgetsAFarmerWhoBorrowsAgain(t *testing.T) {
-	svc, entries, _ := openTestService(t)
+// A settlement voided after the period still stood at the end of it, so it is
+// on the report; one voided inside the period is not.
+func TestSettledReadsAsTheBooksReadAtTheEndOfThePeriod(t *testing.T) {
+	svc, entries, db := openTestService(t)
 
 	lend(t, entries, 1, january, 5000)
-	repay(t, entries, 1, march, 5000, 0)
-	lend(t, entries, 1, june.AddDays(-5), 2000)
+	settle(t, db, entries, 1, march, 1000, 0, ledger.MustDate(2026, time.April, 1))
+	lend(t, entries, 2, january, 5000)
+	settle(t, db, entries, 2, march, 1000, 0, ledger.MustDate(2026, time.August, 1))
 
-	report, err := svc.Liquidated(context.Background(), year, june)
+	report, err := svc.Settled(context.Background(), year, june)
 	if err != nil {
-		t.Fatalf("liquidated: %v", err)
+		t.Fatalf("settled: %v", err)
 	}
-	if len(report.Rows) != 0 {
-		t.Fatalf("got %+v, want nobody — they borrowed again", report.Rows)
+	if len(report.Rows) != 1 || report.Rows[0].Code != "BA-0002" {
+		t.Fatalf("got %+v, want only BA-0002, voided after June", report.Rows)
 	}
 }
 
@@ -325,7 +392,7 @@ func TestAVoidedVoucherLeavesNoTraceOnceTheVoidHasHappened(t *testing.T) {
 		t.Fatalf("as at June the report shows %+v; on that day the void had not happened", asAtJune.Rows)
 	}
 
-	// As at today, after it: gone from every one of the four.
+	// As at today, after it: gone from every one of them.
 	today := ledger.DateOf(time.Now().In(station{}.Location()))
 
 	current, err := svc.CurrentAdvances(ctx, today)
@@ -341,8 +408,8 @@ func TestAVoidedVoucherLeavesNoTraceOnceTheVoidHasHappened(t *testing.T) {
 	if err != nil {
 		t.Fatalf("roi: %v", err)
 	}
-	if roi.Deployed.String() != "5000.00" || roi.Farmers != 1 {
-		t.Errorf("roi deployed %s across %d farmers, want 5000.00 and 1", roi.Deployed, roi.Farmers)
+	if roi.Deployed.String() != "5000.00" {
+		t.Errorf("roi deployed %s, want 5000.00", roi.Deployed)
 	}
 
 	aging, err := svc.Aging(ctx, today)
@@ -353,13 +420,6 @@ func TestAVoidedVoucherLeavesNoTraceOnceTheVoidHasHappened(t *testing.T) {
 		t.Errorf("aging totals %s, want 5000.00", aging.Principal)
 	}
 
-	liquidated, err := svc.Liquidated(ctx, year, today)
-	if err != nil {
-		t.Fatalf("liquidated: %v", err)
-	}
-	if len(liquidated.Rows) != 0 {
-		t.Errorf("liquidated lists %+v; a voided voucher does not settle anybody", liquidated.Rows)
-	}
 }
 
 // Nothing out of nothing has no recovery rate. Printing "0.0%" would say the

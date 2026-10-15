@@ -302,14 +302,22 @@ advance_vouchers                    -- the legacy "Ref. No. 1425" header
 advance_lines                       -- one voucher can span several customers
   id, voucher_id, customer_id, line_date, particular, amount_cents
 
-payments
+payments                            -- recorded at the counter; applied by a settlement
   id, or_no, customer_id, payment_date, amount_cents,
-  kind (cash|delivery|adjustment),   -- ← delivery support without a migration
-  reference, status, created_at, created_by
+  method (cash|palay|other), particular, status, created_at, created_by
 
-payment_allocations                 -- which advance a payment paid down
-  id, payment_id, advance_line_id,
-  principal_applied_cents, interest_applied_cents
+payment_lines                       -- a palay delivery, lot by lot
+  id, payment_id, class, sacks, kilos_tenths, price_cents, cost_cents
+
+settlements                         -- one farmer settled up to a cut-off date
+  id, settlement_no, customer_id, cutoff_date, rate_bps (monthly),
+  carried_principal/interest/since/days/charge, status, …
+
+settlement_advances                 -- each open advance charged, and for how many days
+  id, settlement_id, advance_line_id, line_date, principal_cents, days, charge_cents
+
+settlement_payments                 -- each recorded payment applied, and how it divided
+  id, settlement_id, payment_id, principal_cents, interest_cents
 
 ledger_entries                      -- ★ the single source of truth
   id, customer_id, entry_date, entry_type,
@@ -326,7 +334,7 @@ customer_balances                   -- derived cache, rebuildable
 
 users        id, username, display_name, password_hash, role, active
 audit_log    id, at, user_id, action, entity, entity_id, before_json, after_json
-settings     key, value             -- ref_no start, interest rules, slip layout
+settings     key, value             -- ref_no start, default monthly rate, slip layout
 ```
 
 The reversal link points **forward**, from the reversal to the entry it undoes,
@@ -340,7 +348,7 @@ been reversed?" is a lookup on a unique partial index, which is also what makes
 usually true.
 
 `created_by_username` sits beside the nullable `created_by` for the same reason
-it does in `audit_log`: an interest run or a cutover import happens with nobody
+it does in `audit_log`: a cutover import happens with nobody
 signed in, and inventing a user id for it would make the ledger claim something
 it does not know.
 
@@ -470,8 +478,9 @@ it.** Steps 4 through 8 have theirs.
 | 4 | **Customers — CRUD, `BA-####` codes, search, CSV import** | [04-customers.md](04-customers.md) | Step 3 |
 | 5 | **Advances — voucher + line grid, draft→posted, void via reversal** | [05-advances.md](05-advances.md) | Step 4 |
 | 6 | **Payments — entry, the principal/interest split, customer statement** ✅ | [06-payments.md](06-payments.md) | Step 5 |
-| 7 | **Interest — posting run, preview, reversible** ✅ | [07-interest.md](07-interest.md) | Step 6 · Q1 answered by a setting |
-| 8 | **Reports — Current Advances, ROI, Liquidated, aging; A4 print CSS** ✅ | [08-reports.md](08-reports.md) | Step 7 · Q3/Q4 assumed, and recorded |
+| 7 | ~~**Interest — posting run, preview, reversible**~~ superseded by 7.5 | [07-interest.md](07-interest.md) | Step 6 |
+| 7.5 | **Settlement — one farmer to a cut-off, interest by the day, payments applied interest first; palay lines on payments** | [07.5-settlement.md](07.5-settlement.md) | Step 7 · Q1–Q6 answered from the legacy program |
+| 8 | **Reports — Current Advances, ROI, Settled, aging; A4 print CSS** ✅ | [08-reports.md](08-reports.md) | Step 7.5 |
 | 9 | Dot-matrix slips — ESC/P templates, `RawPrinter` wiring | *later* | Step 5 |
 | 10 | Cutover — opening balances, parallel run, go-live | *later* | All |
 

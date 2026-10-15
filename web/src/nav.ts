@@ -6,7 +6,7 @@
  * seeing where advances and payments will live — and that they are coming, not
  * missing — is worth more than a tidy list of two links. When a step lands,
  * `soon` comes off and `to` goes on, and nothing else changes — which is what
- * happened to Advances in step 5, Payments in step 6 and Interest in step 7.
+ * happened to Advances in step 5, Payments in step 6 and Settlements in step 7.
  */
 export interface NavItem {
   label: string
@@ -37,7 +37,8 @@ export const navigation: NavSection[] = [
     items: [
       { label: 'Advances', icon: 'pi pi-wallet', to: '/advances' },
       { label: 'Payments', icon: 'pi pi-money-bill', to: '/payments' },
-      { label: 'Interest', icon: 'pi pi-percentage', to: '/interest', manager: true },
+      // Open to encoders: settling a farmer is counter work.
+      { label: 'Settlements', icon: 'pi pi-calculator', to: '/settlements' },
     ],
   },
   {
@@ -49,7 +50,7 @@ export const navigation: NavSection[] = [
       { label: 'Current Advances', icon: 'pi pi-chart-bar', to: '/reports/current-advances', manager: true },
       { label: 'Return of Investment', icon: 'pi pi-percentage', to: '/reports/roi', manager: true },
       { label: 'Aging', icon: 'pi pi-hourglass', to: '/reports/aging', manager: true },
-      { label: 'Liquidated', icon: 'pi pi-check-circle', to: '/reports/liquidated', manager: true },
+      { label: 'Settled', icon: 'pi pi-check-circle', to: '/reports/settled', manager: true },
       // An index over the per-customer statements, which are also still
       // reachable from the customer. Not a batch print: a statement is one
       // farmer's history and is printed from their own page. This entry carries

@@ -19,6 +19,8 @@ import (
 var moneyPaths = []string{
 	".",
 	"../ledger",
+	"../payment",
+	"../settlement",
 }
 
 // TestNoFloatsInMoneyPaths is the enforcement behind the promise in the package

@@ -46,7 +46,7 @@ const isDraft = computed(() => voucher.value?.status === 'draft')
 
 function adopt(loaded: Voucher): void {
   voucher.value = loaded
-  setPageTitle(loaded.ref_no ? `Ref. No. ${loaded.ref_no}` : 'Draft voucher')
+  setPageTitle(loaded.ref_no ? `Ref. No. ${loaded.ref_no}` : 'Draft advance slip')
 }
 
 async function load(): Promise<void> {
@@ -241,7 +241,7 @@ onMounted(load)
 
         <div v-if="isManager && voucher.status === 'posted'" class="advance__actions">
           <Button
-            label="Void this voucher"
+            label="Void this slip"
             icon="pi pi-ban"
             severity="danger"
             outlined
@@ -252,11 +252,11 @@ onMounted(load)
       </template>
     </template>
 
-    <Message v-else severity="error" :closable="false">{{ error || 'No such voucher.' }}</Message>
+    <Message v-else severity="error" :closable="false">{{ error || 'No such advance slip.' }}</Message>
 
-    <Dialog v-model:visible="voiding" modal header="Void this voucher" :style="{ width: '28rem' }">
+    <Dialog v-model:visible="voiding" modal header="Void this slip" :style="{ width: '28rem' }">
       <p class="advance__dialog-text">
-        Every line will be reversed in the ledger. The voucher and its reversals both stay on the
+        Every line will be reversed in the ledger. The slip and its reversals both stay on the
         record, and the reason is written onto each one.
       </p>
       <Textarea v-model="voidReason" rows="3" fluid aria-label="Reason for voiding" />

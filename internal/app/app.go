@@ -29,10 +29,10 @@ import (
 	"github.com/Dannjann/bokkie-lms/internal/discovery"
 	"github.com/Dannjann/bokkie-lms/internal/domain/advance"
 	"github.com/Dannjann/bokkie-lms/internal/domain/customer"
-	"github.com/Dannjann/bokkie-lms/internal/domain/interest"
 	"github.com/Dannjann/bokkie-lms/internal/domain/ledger"
 	"github.com/Dannjann/bokkie-lms/internal/domain/payment"
 	"github.com/Dannjann/bokkie-lms/internal/domain/report"
+	"github.com/Dannjann/bokkie-lms/internal/domain/settlement"
 	"github.com/Dannjann/bokkie-lms/internal/settings"
 	"github.com/Dannjann/bokkie-lms/web"
 )
@@ -152,6 +152,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		stopWanted:   make(chan struct{}),
 	}
 
+	payments := payment.New(database, ledgerSvc, store, log)
 	handler := api.NewHandler(api.Deps{
 		Station:      a,
 		Logger:       log,
@@ -159,8 +160,8 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, opts Options)
 		Started:      time.Now(),
 		Customers:    customer.New(database, auditLog, log),
 		Advances:     advance.New(database, ledgerSvc, store, log),
-		Payments:     payment.New(database, ledgerSvc, store, log),
-		Interest:     interest.New(database, ledgerSvc, store, log),
+		Payments:     payments,
+		Settlements:  settlement.New(database, ledgerSvc, payments, store, log),
 		Reports:      report.New(database, ledgerSvc, log),
 		Ledger:       ledgerSvc,
 		Users:        auth.NewUsers(database),

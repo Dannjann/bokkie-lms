@@ -15,6 +15,7 @@ import {
   deletePayment,
   getPayment,
   methodLabel,
+  paymentStatusLabel,
   postPayment,
   updatePayment,
   voidPayment,
@@ -47,6 +48,14 @@ const voidReason = ref('')
 
 const isDraft = computed(() => payment.value?.status === 'draft')
 
+/** Recorded, and waiting for a settlement to apply it. */
+const waiting = computed(
+  () => payment.value?.status === 'posted' && payment.value.settlement_no === 0,
+)
+const settled = computed(
+  () => payment.value?.status === 'posted' && payment.value.settlement_no > 0,
+)
+
 /**
  * What the payment actually did, read off the ledger rather than off the
  * receipt.
@@ -74,10 +83,8 @@ const cleared = computed(() => {
   const principal = posted.value.principal.replace(/^-/, '')
   const interest = posted.value.interest.replace(/^-/, '')
 
-  // Only the halves that actually moved. Until step 7 charges interest, every
-  // payment in the system clears principal alone, and "cleared ₱0.00 of
-  // interest" on every receipt is a figure that means nothing and is read
-  // anyway.
+  // Only the halves that actually moved: "cleared ₱0.00 of interest" is a
+  // figure that means nothing and is read anyway.
   const parts: string[] = []
   if (parseCentavos(interest)) parts.push(`${formatPesos(interest)} of interest`)
   if (parseCentavos(principal)) parts.push(`${formatPesos(principal)} of principal`)
@@ -129,7 +136,7 @@ function save(draft: PaymentDraft): void {
 }
 
 function post(): void {
-  void run('Posted.', () => postPayment(id.value))
+  void run('Recorded. It will be applied when the farmer is settled.', () => postPayment(id.value))
 }
 
 function confirmVoid(): void {
@@ -166,8 +173,18 @@ onMounted(load)
           </p>
           <h1 class="payment__heading">
             {{ formatPesos(payment.amount) }}
-            <Tag v-if="payment.status === 'draft'" severity="warn" value="Draft" />
-            <Tag v-else-if="payment.status === 'voided'" severity="danger" value="Voided" />
+            <Tag
+              :severity="
+                payment.status === 'draft'
+                  ? 'warn'
+                  : payment.status === 'voided'
+                    ? 'danger'
+                    : settled
+                      ? 'success'
+                      : 'info'
+              "
+              :value="paymentStatusLabel(payment.status, payment.settlement_no)"
+            />
           </h1>
         </template>
         <template #actions>
@@ -201,6 +218,9 @@ onMounted(load)
           @cancel="router.push({ name: 'payments' })"
         >
           <template #actions>
+            <span class="payment__hint">
+              Recording numbers it; it is applied to the balance when the farmer is settled.
+            </span>
             <Button
               label="Delete draft"
               icon="pi pi-trash"
@@ -210,7 +230,7 @@ onMounted(load)
               @click="discard"
             />
             <Button
-              label="Post"
+              label="Record payment"
               icon="pi pi-check"
               severity="success"
               :disabled="busy"
@@ -246,11 +266,69 @@ onMounted(load)
           </div>
         </section>
 
+        <section v-if="payment.lines && payment.lines.length > 0" class="card payment__grid">
+          <h2 class="payment__section">Palay delivered</h2>
+          <table class="payment__table">
+            <thead>
+              <tr>
+                <th>Class</th>
+                <th class="payment__amount">Sacks</th>
+                <th class="payment__amount">Kilos</th>
+                <th class="payment__amount">Price / kg</th>
+                <th class="payment__amount">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="line in payment.lines" :key="line.id">
+                <td>{{ line.class }}</td>
+                <td class="payment__amount numeric">{{ line.sacks }}</td>
+                <td class="payment__amount numeric">{{ line.kilos }}</td>
+                <td class="payment__amount numeric">{{ formatPesos(line.price) }}</td>
+                <td class="payment__amount numeric">{{ formatPesos(line.cost) }}</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4" class="payment__total-label">Total</td>
+                <td class="payment__amount numeric payment__total">
+                  {{ formatPesos(payment.amount) }}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+
+        <Message v-if="waiting" severity="info" :closable="false">
+          <div class="payment__settle">
+            <span>
+              Recorded and waiting. It is applied to what {{ payment.customer_name }} owes —
+              interest first — when the farmer is settled.
+            </span>
+            <Button
+              label="Settle this farmer"
+              icon="pi pi-calculator"
+              size="small"
+              @click="
+                router.push({
+                  name: 'settlement-new',
+                  query: { customer_id: String(payment.customer_id) },
+                })
+              "
+            />
+          </div>
+        </Message>
+        <Message v-else-if="settled" severity="success" :closable="false">
+          Settled in
+          <RouterLink :to="{ name: 'settlement', params: { id: payment.settlement_id } }">
+            Settlement No. {{ payment.settlement_no }}</RouterLink
+          >.
+        </Message>
+
         <!--
-          Where the split is read from. The receipt does not store how the money
+          Where the split is read from. The payment does not store how the money
           divided; the ledger entry does, and this is that entry.
         -->
-        <section class="card payment__grid">
+        <section v-if="entries.length > 0" class="card payment__grid">
           <h2 class="payment__section">In the ledger</h2>
           <table class="payment__table">
             <thead>
@@ -282,13 +360,16 @@ onMounted(load)
         <section v-if="balance" class="card card--padded payment__record">
           <div class="payment__row payment__row--total">
             <span class="payment__label">
-              {{ payment.customer_name }} owes now
+              {{ payment.customer_name }} owes now{{ waiting ? ', before this payment is applied' : '' }}
             </span>
             <span class="numeric">{{ formatPesos(balance.total) }}</span>
           </div>
         </section>
 
-        <div v-if="isManager && payment.status === 'posted'" class="payment__actions">
+        <p v-if="isManager && settled" class="payment__note payment__note--right">
+          To void this payment, void Settlement No. {{ payment.settlement_no }} first.
+        </p>
+        <div v-if="isManager && waiting" class="payment__actions">
           <Button
             label="Void this payment"
             icon="pi pi-ban"
@@ -305,9 +386,8 @@ onMounted(load)
 
     <Dialog v-model:visible="voiding" modal header="Void this payment" :style="{ width: '28rem' }">
       <p class="payment__dialog-text">
-        The entry will be reversed in the ledger and the farmer will owe this money again. The
-        payment and its reversal both stay on the record, and the reason is written onto the
-        reversal.
+        The payment is cancelled and no settlement will apply it. It stays on the record, with
+        this reason, under its OR No.
       </p>
       <Textarea v-model="voidReason" rows="3" fluid aria-label="Reason for voiding" />
       <template #footer>
@@ -422,6 +502,38 @@ onMounted(load)
   margin: 0.6rem 0.25rem 0.25rem;
   font-size: 0.875rem;
   color: var(--shell-muted);
+}
+
+.payment__note--right {
+  text-align: right;
+}
+
+.payment__hint {
+  margin-right: auto;
+  align-self: center;
+  font-size: 0.8125rem;
+  color: var(--shell-muted);
+}
+
+.payment__settle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.payment__total-label {
+  color: var(--shell-muted);
+  text-align: right;
+}
+
+.payment__total {
+  font-weight: 600;
+}
+
+.payment__table tfoot td {
+  border-bottom: none;
 }
 
 .payment__actions {

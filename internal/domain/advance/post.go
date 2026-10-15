@@ -3,6 +3,7 @@ package advance
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -71,7 +72,7 @@ func (s *Service) PostTx(ctx context.Context, tx *sql.Tx, id int64, by Actor) (V
 		return Voucher{}, err
 	}
 	if len(v.Lines) == 0 {
-		return Voucher{}, ValidationError{Field: "lines", Message: "a voucher with no lines cannot be posted"}
+		return Voucher{}, ValidationError{Field: "lines", Message: "an advance slip with no lines cannot be posted"}
 	}
 
 	entries := make([]ledger.Entry, 0, len(v.Lines))
@@ -119,6 +120,20 @@ func (s *Service) VoidTx(ctx context.Context, tx *sql.Tx, id int64, by Actor, re
 	v, err := byID(ctx, tx, id)
 	if err != nil {
 		return Voucher{}, err
+	}
+
+	var settledBy int64
+	switch err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(st.settlement_no, 0)
+		   FROM settlement_advances sa
+		   JOIN settlements st ON st.id = sa.settlement_id
+		   JOIN advance_lines l ON l.id = sa.advance_line_id
+		  WHERE l.voucher_id = ? AND st.status = 'posted'
+		  LIMIT 1`, id).Scan(&settledBy); {
+	case err == nil:
+		return Voucher{}, fmt.Errorf("%w (settlement %d)", ErrSettled, settledBy)
+	case !errors.Is(err, sql.ErrNoRows):
+		return Voucher{}, fmt.Errorf("check whether advance slip %d is settled: %w", id, err)
 	}
 
 	lineIDs := make([]int64, 0, len(v.Lines))

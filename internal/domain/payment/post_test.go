@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -82,7 +81,9 @@ func TestTheSplit(t *testing.T) {
 	}
 }
 
-func TestPostingNumbersThePaymentAndMovesTheBalance(t *testing.T) {
+// Recording a payment numbers it and leaves the balance alone: the settlement
+// is what applies it, after charging the interest it is meant to clear first.
+func TestRecordingNumbersThePaymentAndLeavesTheBalance(t *testing.T) {
 	svc, entries, database := openStationService(t, station{orNoStart: 4201})
 	ctx := context.Background()
 
@@ -90,106 +91,39 @@ func TestPostingNumbersThePaymentAndMovesTheBalance(t *testing.T) {
 	p := mustPost(t, svc, database, mustCreate(t, svc, database, draftOf(t, 1, 5000)).ID, dan)
 
 	if p.Status != StatusPosted {
-		t.Errorf("a posted payment is %s", p.Status)
+		t.Errorf("a recorded payment is %s", p.Status)
 	}
 	if p.OrNo != 4201 {
 		t.Errorf("the first payment took OR No. %d, want the sequence's start 4201", p.OrNo)
 	}
 	if p.PostedAt == nil || p.PostedBy.Username != "dan" {
-		t.Errorf("posting did not record who did it: %v by %q", p.PostedAt, p.PostedBy.Username)
+		t.Errorf("recording did not say who did it: %v by %q", p.PostedAt, p.PostedBy.Username)
+	}
+	if p.SettlementID != 0 {
+		t.Errorf("a payment nobody has settled says it was settled by %d", p.SettlementID)
 	}
 
-	// Interest first, by default: the 600 of interest goes first and the rest
-	// comes off principal.
 	after := balanceOf(t, entries, 1)
-	if after.Interest.Centavos() != 0 {
-		t.Errorf("interest is %s after a payment that covers it, want nothing", after.Interest)
+	if after.Principal.Centavos() != 1200000 || after.Interest.Centavos() != 60000 {
+		t.Errorf("recording moved the balance to %s / %s", after.Principal, after.Interest)
 	}
-	if after.Principal.Centavos() != 760000 {
-		t.Errorf("principal is %s, want ₱7,600.00", after.Principal)
-	}
-
-	// And the split is on the entry, which is the only place it is stored.
 	written, err := svc.Entries(ctx, p.ID)
 	if err != nil {
-		t.Fatalf("read what posting wrote: %v", err)
+		t.Fatalf("read what recording wrote: %v", err)
 	}
-	if len(written) != 1 {
-		t.Fatalf("posting wrote %d entries, want one", len(written))
+	if len(written) != 0 {
+		t.Errorf("recording wrote %d entries, want none", len(written))
 	}
-	if written[0].Type != ledger.TypePayment {
-		t.Errorf("posting wrote a %s entry", written[0].Type)
+
+	waiting, err := svc.Unsettled(ctx, 1, ledger.MustDate(2099, time.January, 1))
+	if err != nil {
+		t.Fatalf("unsettled: %v", err)
 	}
-	if written[0].Principal.Centavos() != -440000 || written[0].Interest.Centavos() != -60000 {
-		t.Errorf("the entry moved principal %s and interest %s, want -4,400 and -600",
-			written[0].Principal, written[0].Interest)
-	}
-	if written[0].SourceTable != SourceTable || written[0].SourceID != p.ID {
-		t.Errorf("the entry points at %s %d, want %s %d",
-			written[0].SourceTable, written[0].SourceID, SourceTable, p.ID)
+	if len(waiting) != 1 || waiting[0].ID != p.ID {
+		t.Errorf("%d payments are waiting to be settled, want this one", len(waiting))
 	}
 }
 
-func TestTheStationsRuleDecidesTheSplit(t *testing.T) {
-	svc, entries, database := openStationService(t, station{applies: PrincipalFirst})
-
-	owe(t, entries, 1, pesos(t, 12000), pesos(t, 600))
-	mustPost(t, svc, database, mustCreate(t, svc, database, draftOf(t, 1, 5000)).ID, dan)
-
-	after := balanceOf(t, entries, 1)
-	if after.Principal.Centavos() != 700000 {
-		t.Errorf("principal is %s under principal-first, want ₱7,000.00", after.Principal)
-	}
-	if after.Interest.Centavos() != 60000 {
-		t.Errorf("interest is %s under principal-first, want the ₱600.00 still owed", after.Interest)
-	}
-}
-
-// Overpayment is allowed on purpose: refusing it would block a payment typed in
-// before the advance it belongs to, which is an ordinary Tuesday.
-func TestPayingMoreThanIsOwedLeavesTheCustomerInCredit(t *testing.T) {
-	svc, entries, database := openTestService(t)
-
-	owe(t, entries, 1, pesos(t, 1000), money.Zero)
-	mustPost(t, svc, database, mustCreate(t, svc, database, draftOf(t, 1, 3000)).ID, dan)
-
-	after := balanceOf(t, entries, 1)
-	if after.Principal.Centavos() != -200000 {
-		t.Errorf("principal is %s after overpaying by ₱2,000.00, want -₱2,000.00", after.Principal)
-	}
-	if !after.Interest.IsZero() {
-		t.Errorf("interest moved to %s on an overpayment, want nothing", after.Interest)
-	}
-}
-
-// The split is read at the moment the entry is written, which is what makes two
-// payments in a row divide correctly rather than both clearing the same
-// interest.
-func TestASecondPaymentSplitsAgainstWhatIsLeft(t *testing.T) {
-	svc, entries, database := openTestService(t)
-
-	owe(t, entries, 1, pesos(t, 10000), pesos(t, 500))
-	mustPost(t, svc, database, mustCreate(t, svc, database, draftOf(t, 1, 300)).ID, dan)
-	mustPost(t, svc, database, mustCreate(t, svc, database, draftOf(t, 1, 300)).ID, dan)
-
-	after := balanceOf(t, entries, 1)
-	if after.Interest.Centavos() != 0 {
-		t.Errorf("interest is %s after two payments covering ₱500.00, want nothing", after.Interest)
-	}
-	if after.Principal.Centavos() != 990000 {
-		t.Errorf("principal is %s, want ₱9,900.00 — ₱100.00 of the second payment", after.Principal)
-	}
-}
-
-// TestConcurrentPostsGetDistinctOrNos is this step's most important test, and
-// the one to check against a deliberate break: swapping the allocator for a read
-// of MAX followed by a write must make it fail. Step 4 found that the symptom is
-// not a duplicate number but a storm of SQLITE_BUSY, because a deferred
-// transaction cannot upgrade its lock — so a failure here may read as "database
-// is locked" rather than as two receipts sharing a number.
-//
-// A payment reads inside its transaction where a voucher does not, which is
-// exactly why this is run again here rather than taken on trust from step 5.
 func TestConcurrentPostsGetDistinctOrNos(t *testing.T) {
 	const posters = 20
 
@@ -256,23 +190,6 @@ func TestConcurrentPostsGetDistinctOrNos(t *testing.T) {
 		}
 	}
 
-	// Every peso of it landed, exactly once.
-	var total money.Money
-	for id := int64(1); id <= 3; id++ {
-		owed := balanceOf(t, entries, id).Principal
-		lent := pesos(t, 100000)
-		paid, err := lent.Sub(owed)
-		if err != nil {
-			t.Fatal(err)
-		}
-		total, err = total.Add(paid)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	if want := pesos(t, 500*posters); total.Centavos() != want.Centavos() {
-		t.Errorf("%d payments of ₱500.00 moved %s in total, want %s", posters, total, want)
-	}
 }
 
 // What a double-clicked Post button looks like from the server's side. A
@@ -317,9 +234,14 @@ func TestTwoSimultaneousPostsOfOneDraftPostItOnce(t *testing.T) {
 	if succeeded != 1 {
 		t.Errorf("%d of two simultaneous posts succeeded, want exactly one", succeeded)
 	}
-	if got := balanceOf(t, entries, 1).Principal.Centavos(); got != 300000 {
-		t.Errorf("customer 1 owes %d centavos after one ₱2,000.00 payment of a ₱5,000.00 debt, want 300000", got)
+	var numbered int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM payments WHERE or_no IS NOT NULL`).Scan(&numbered); err != nil {
+		t.Fatal(err)
 	}
+	if numbered != 1 {
+		t.Errorf("%d OR Nos. were handed out for one payment", numbered)
+	}
+	_ = entries
 }
 
 func TestPostingARolledBackTransactionMovesNothing(t *testing.T) {
@@ -371,7 +293,9 @@ func TestMovingTheSequenceStartAfterwardsIsIgnored(t *testing.T) {
 	}
 }
 
-func TestVoidingPutsTheBalanceExactlyBack(t *testing.T) {
+// Voiding a payment nobody has settled writes nothing to the ledger, because
+// recording it wrote nothing either.
+func TestVoidingAnUnsettledPaymentMovesNothing(t *testing.T) {
 	svc, entries, database := openTestService(t)
 	ctx := context.Background()
 
@@ -388,42 +312,20 @@ func TestVoidingPutsTheBalanceExactlyBack(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("void: %v", err)
 	}
-
 	if voided.Status != StatusVoided || voided.VoidReason != "receipt written twice" {
 		t.Errorf("voiding left it %s for %q", voided.Status, voided.VoidReason)
 	}
 
 	after := balanceOf(t, entries, 1)
 	if after.Principal != before.Principal || after.Interest != before.Interest {
-		t.Errorf("after voiding the customer owes %s/%s, want the %s/%s they owed before",
-			after.Principal, after.Interest, before.Principal, before.Interest)
+		t.Errorf("voiding moved the balance from %s/%s to %s/%s",
+			before.Principal, before.Interest, after.Principal, after.Interest)
 	}
-
-	// Both halves stay on the record: money came in and then went back out.
-	written, err := svc.Entries(ctx, p.ID)
-	if err != nil {
-		t.Fatal(err)
+	if written, err := svc.Entries(ctx, p.ID); err != nil || len(written) != 0 {
+		t.Errorf("a voided, never-settled payment has %d entries (%v), want none", len(written), err)
 	}
-	if len(written) != 2 {
-		t.Fatalf("a voided payment has %d entries, want the payment and its reversal", len(written))
-	}
-	if !written[1].IsReversal() || written[1].Reason != "receipt written twice" {
-		t.Errorf("the second entry is a %s for %q", written[1].Type, written[1].Reason)
-	}
-	// The reversal is dated the day of the void, not the day of the payment, so
-	// a statement printed in February still says in March what it said then.
-	//
-	// "The day of the void" is the ledger's own clock rather than this
-	// package's frozen one — the ledger service is constructed here the way the
-	// application constructs it, and its clock is not reachable from outside
-	// its package. What the assertion is really about is that the two dates
-	// differ, and that the reversal took the later one.
-	voidedOn := ledger.DateOf(time.Now().In(station{}.Location()))
-	if !written[1].Date.Equal(voidedOn) {
-		t.Errorf("the reversal is dated %s, want the day of the void %s", written[1].Date, voidedOn)
-	}
-	if written[1].Date.Equal(written[0].Date) {
-		t.Errorf("the reversal took the payment's own date %s rather than today's", written[0].Date)
+	if waiting, _ := svc.Unsettled(ctx, 1, today); len(waiting) != 0 {
+		t.Errorf("a voided payment is still waiting to be settled")
 	}
 }
 
@@ -497,28 +399,29 @@ func TestAPostedPaymentCannotBeEditedOrDeleted(t *testing.T) {
 // The ledger and the document must agree about what a payment did before any of
 // it is undone. A partial void is worse than a refused one, because it looks
 // finished.
-func TestVoidingIsRefusedWhenTheLedgerDisagrees(t *testing.T) {
+// A payment recorded before settlements existed wrote its own entry. Voiding
+// it has to take that entry back, or the void refunds nothing.
+func TestVoidingReversesAnEntryLeftFromBeforeSettlements(t *testing.T) {
 	svc, entries, database := openTestService(t)
 	ctx := context.Background()
 
 	owe(t, entries, 1, pesos(t, 5000), money.Zero)
 	p := mustPost(t, svc, database, mustCreate(t, svc, database, draftOf(t, 1, 1000)).ID, dan)
-
-	// A second entry claiming to come from this receipt — which is what a
-	// half-finished hand repair of the database would leave behind.
 	if _, err := entries.Post(ctx, ledger.Entry{
 		CustomerID: 1, Date: today, Type: ledger.TypePayment,
-		Principal: money.FromCentavos(-100), Interest: money.Zero,
+		Principal: pesos(t, -1000), Interest: money.Zero,
 		SourceTable: SourceTable, SourceID: p.ID, By: dan,
 	}); err != nil {
-		t.Fatalf("plant a second entry: %v", err)
+		t.Fatalf("plant the old entry: %v", err)
 	}
 
-	err := inTx(t, database, func(tx *sql.Tx) error {
+	if err := inTx(t, database, func(tx *sql.Tx) error {
 		_, err := svc.VoidTx(ctx, tx, p.ID, manager, "tidy up")
 		return err
-	})
-	if err == nil || !strings.Contains(err.Error(), "refusing to void") {
-		t.Errorf("voiding a payment with two entries gave %v, want a refusal", err)
+	}); err != nil {
+		t.Fatalf("void: %v", err)
+	}
+	if got := balanceOf(t, entries, 1).Principal.Centavos(); got != 500000 {
+		t.Errorf("after the void the farmer owes %d centavos, want 500000", got)
 	}
 }

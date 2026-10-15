@@ -1,6 +1,14 @@
 # Step 8 — Reports
 
-**Status:** ✅ built, gate passed · **Depends on:** Step 7 · **Blocks:** Step 10
+**Status:** ✅ built, gate passed · revised by [07.5-settlement.md](07.5-settlement.md) · **Depends on:** Step 7 · **Blocks:** Step 10
+
+> **Revised, 2026-10-15.** Q3 and Q4 were answered from the legacy program
+> ([legacy-findings.md](legacy-findings.md)). ROI's table is now the legacy
+> one, a row per settlement split into principal returned and interest paid.
+> "Liquidated" turned out to mean *settled up on a date*, not *paid off*, so
+> that report became **Settled**: a list of settlements, each of which opens
+> and reprints. What is written below about the original assumptions is kept
+> as the record.
 
 > **Q3 and Q4 are unanswered, and this step is built anyway** — the same
 > decision taken in Step 7, and a riskier one. An interest rule guessed wrong is

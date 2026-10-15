@@ -1,6 +1,13 @@
 # Step 6 — Payments
 
-**Status:** ✅ built, gate passed · **Depends on:** Step 5 · **Blocks:** Steps 8, 10
+**Status:** ✅ built, gate passed · revised by [07.5-settlement.md](07.5-settlement.md) · **Depends on:** Step 5 · **Blocks:** Steps 8, 10
+
+> **Revised, 2026-10-15.** Posting a payment now *records* it: it takes its OR
+> No. but does not move the balance. A settlement applies it, interest first,
+> after charging interest to the cut-off — the legacy rule. A palay payment
+> carries lines of class, sacks, kilos and price per kilo, and its amount is
+> their sum. The split described below still exists (`payment.Split`); the
+> settlement is what calls it.
 
 ---
 

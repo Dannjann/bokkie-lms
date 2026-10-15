@@ -22,9 +22,15 @@ farmer disputes a balance.
 
 ## How to run it
 
-1. Print this page. Sit with the owner and whoever does the daily encoding —
+**Print [questions-for-the-owner.md](questions-for-the-owner.md), not this
+page.** It asks everything below in plain language, with worked examples in
+pesos instead of terms like *compound* and *pro-rated*, and with room to write.
+This page is the reasoning behind each question and what each answer would cost
+us — useful before the visit and after it, but not something to read aloud.
+
+1. Sit with the owner and whoever does the daily encoding —
    **the encoder often knows things the owner doesn't**, especially about
-   exceptions and workarounds.
+   exceptions and workarounds. Ask the encoder separately.
 2. Ask for a **sample printout of each of the three legacy reports**. A real
    piece of paper answers layout questions faster than any conversation.
 3. Photograph the legacy screens for "Payments From Customer" and "Compute
@@ -62,6 +68,8 @@ repays early**, and **a rate negotiated per customer**. Both are recorded in
 
 **Answer:**
 
+*Legacy evidence ([legacy-findings.md](legacy-findings.md#q1--compute-percentage)):* per-farmer settlement, `principal × monthly rate × days ÷ 30` per advance, simple, rate typed each time (5% almost always). Built as the settlement in [07.5](07.5-settlement.md). **Confirm with the owner.**
+
 ---
 
 ### Q2 — How do farmers repay? ⚠️ shapes the schema
@@ -73,6 +81,8 @@ repays early**, and **a rate negotiated per customer**. Both are recorded in
   or the kg and price too?
 
 **Answer:**
+
+*Legacy evidence ([legacy-findings.md](legacy-findings.md#q2--how-farmers-repay)):* palay, recorded here as class, sacks, kilos and price, with cost = kilos × price. Cash is squeezed in as class `CASH`. Built as palay lines on payments in [07.5](07.5-settlement.md). **Confirm with the owner.**
 
 ---
 
@@ -98,6 +108,8 @@ figure this system has never been told. Both are recorded in
 
 **Answer:**
 
+*Legacy evidence ([legacy-findings.md](legacy-findings.md#q3--return-of-investment-status)):* settlements in a chosen date range, each split into principal recovered and interest earned. No portfolio block. ROI's table now matches; the portfolio block is kept. **Confirm with the owner.**
+
 ---
 
 ### Q4 — What does "Recall Liquidated Transaction" do? ⚠️ no longer blocking
@@ -116,6 +128,8 @@ is a deliberate correction workflow rather than a door left ajar in a report.
 
 **Answer:**
 
+*Legacy evidence ([legacy-findings.md](legacy-findings.md#q4--recall-liquidated-transaction)):* view and reprint a past settlement, **and** edit, re-save or delete (un-liquidate) it. "Liquidated" means settled on a date, not balance zero. Built as the Settled report plus settlement void ([07.5](07.5-settlement.md)). **Confirm with the owner.**
+
 ---
 
 ### Q5 — Payment application order ⚠️ no longer blocking
@@ -132,6 +146,8 @@ override — and it is worth knowing before Step 7 rather than after.
 
 **Answer:**
 
+*Legacy evidence ([legacy-findings.md](legacy-findings.md#q5--payment-application-order)):* interest first, in all 1,097 settlements. Matches the default.
+
 ---
 
 ### Q6 — Can one voucher really span several customers?
@@ -145,6 +161,8 @@ Either way the schema handles it — but it changes what the UI should optimise
 for.
 
 **Answer:**
+
+*Legacy evidence ([legacy-findings.md](legacy-findings.md#q6--one-slip-several-farmers)):* yes, 261 of 745 slips, mostly spanning several days. A Ref. No. is a page that fills up, not a shared loan.
 
 ---
 

@@ -1,19 +1,22 @@
-// Package payment owns the receipt: the document that takes money back.
+// Package payment owns the payment: what a farmer brings in to pay down what
+// they owe — palay, almost always, and occasionally cash.
 //
-// Where an advance voucher is a header with a grid of lines beneath it, a
-// payment is a header and nothing else — one farmer at the counter handing
-// money over and being given a receipt. That is the one place this package
-// deliberately does not mirror internal/domain/advance: the legacy advances
-// screen has a grid and the legacy payments screen does not, and a receipt
-// covering three payers is not a thing that happens.
+// A payment is one farmer. A palay payment has a line per lot (class, sacks,
+// kilos, price per kilo) and its amount is the sum of their costs; a cash
+// payment is an amount typed. Both are typed as a draft and posted once, which
+// gives the payment its OR No. and **records** it.
 //
-// A payment is typed as a draft, posted once — which is the moment it becomes a
-// ledger entry — and undone only by reversing that entry.
+// **Recording a payment does not move the balance.** That is the legacy
+// system's rule, and it was kept on purpose (docs/plans/07.5-settlement.md): a
+// delivery sits recorded until the farmer is settled, and the settlement is
+// what charges the interest to the cut-off and then applies the delivery,
+// interest first. The ledger entry a payment produces is therefore written by
+// internal/domain/settlement, not here — sourced to this payment, so a
+// statement still reads "OR No. 812".
 //
 // What this package does *not* store is the division of a payment between
 // principal and interest. The entry carries both deltas, so the split lives
-// there and is read back through the ledger. A copy of a number is a number
-// that can disagree with the original.
+// there and is read back through the ledger.
 package payment
 
 import (
@@ -74,14 +77,8 @@ func (s Status) Valid() bool {
 
 func (s Status) String() string { return string(s) }
 
-// Method is how the money arrived.
-//
-// It records the method and not the mechanics. Q2 of the domain interview —
-// whether farmers repay in cash or by delivering palay netted against the
-// advance — is unanswered, and this is what makes it answerable from real data
-// later. If the answer turns out to be "the delivery is valued here", what that
-// needs is a delivery document producing a peso figure that feeds a payment,
-// not kilos and a price bolted onto this one.
+// Method is how the payment arrived. A palay payment carries lines and its
+// amount is their sum; cash and other carry an amount and no lines.
 type Method string
 
 const (
@@ -105,13 +102,9 @@ func (m Method) Valid() bool {
 
 func (m Method) String() string { return string(m) }
 
-// Rule is which half of a debt a payment clears first.
-//
-// It comes from the payment.applies setting rather than from a constant because
-// it is Q5 of the domain interview and Q5 is unanswered. Nothing charges
-// interest until step 7, so no payment posted before then can be affected by
-// the answer — which is exactly why settling on a default costs nothing now and
-// would cost a migration later.
+// Rule is which half of a debt a payment clears first. It comes from the
+// payment.applies setting; the legacy system cleared interest first in every
+// one of its 1,097 settlements, which is the default.
 type Rule string
 
 const (
@@ -135,8 +128,17 @@ type Payment struct {
 	Amount money.Money `json:"amount"`
 	Method Method      `json:"method"`
 
+	// Lines are the lots of palay, empty for cash.
+	Lines []Line `json:"lines"`
+
 	Particular string `json:"particular"`
 	Status     Status `json:"status"`
+
+	// SettlementID and SettlementNo name the posted settlement that applied
+	// this payment to the balance. Both are zero for a payment that is
+	// recorded and still waiting to be settled.
+	SettlementID int64 `json:"settlement_id"`
+	SettlementNo int64 `json:"settlement_no"`
 
 	CreatedAt time.Time `json:"created_at"`
 	CreatedBy Actor     `json:"created_by"`
@@ -153,12 +155,22 @@ type Payment struct {
 //
 // No OR No. and no status, for the same reason advance.Draft carries no Ref.
 // No.: a rule the type cannot express is a rule somebody has to remember.
+//
+// For palay, Amount is ignored and worked out from Lines. For cash, Lines must
+// be empty.
 type Draft struct {
 	CustomerID int64       `json:"customer_id"`
 	Date       ledger.Date `json:"date"`
 	Amount     money.Money `json:"amount"`
 	Method     Method      `json:"method"`
+	Lines      []LineDraft `json:"lines"`
 	Particular string      `json:"particular"`
+}
+
+// cleaned is a draft that has been checked, with its lines costed.
+type cleaned struct {
+	Draft
+	costed []Line
 }
 
 // Actor is who did something — the ledger's, aliased, as in the advance
@@ -185,7 +197,12 @@ var (
 
 	// ErrNotPosted means only a posted payment can be voided. A draft is
 	// deleted instead — it moved no money, so there is nothing to reverse.
-	ErrNotPosted = errors.New("only a posted payment can be voided")
+	ErrNotPosted = errors.New("only a recorded payment can be voided")
+
+	// ErrSettled means a settlement has applied this payment to the balance.
+	// Voiding it would leave that settlement describing money that never came
+	// in, so the settlement is voided first — which reopens the payment.
+	ErrSettled = errors.New("that payment has been settled: void the settlement first")
 )
 
 const maxParticularLen = 200
@@ -250,7 +267,7 @@ type queryExecer interface {
 //
 // A method rather than a function on Draft because one of its rules needs the
 // station's clock: a payment may be dated any day up to today and no later.
-func (s *Service) clean(d Draft) (Draft, error) {
+func (s *Service) clean(d Draft) (cleaned, error) {
 	today := s.today()
 
 	out := Draft{
@@ -267,33 +284,45 @@ func (s *Service) clean(d Draft) (Draft, error) {
 		out.Method = MethodCash
 	}
 
+	var costed []Line
+	if out.Method == MethodPalay {
+		lines, total, err := cleanLines(d.Lines)
+		if err != nil {
+			return cleaned{}, err
+		}
+		costed, out.Amount = lines, total
+	} else if len(d.Lines) > 0 {
+		return cleaned{}, ValidationError{
+			Field: "lines", Message: "only a palay payment has lines — a cash payment is an amount"}
+	}
+
 	switch {
 	case out.CustomerID <= 0:
-		return Draft{}, ValidationError{Field: "customer_id", Message: "a payment needs a customer"}
+		return cleaned{}, ValidationError{Field: "customer_id", Message: "a payment needs a customer"}
 	case !out.Amount.IsPositive():
 		// Money moving the other way is an advance or an adjustment, and both
 		// are documents of their own.
-		return Draft{}, ValidationError{Field: "amount", Message: "a payment must be for more than nothing"}
+		return cleaned{}, ValidationError{Field: "amount", Message: "a payment must be for more than nothing"}
 	case out.Date.After(today):
 		// Almost always a wrong year on a January receipt. Letting it through
 		// puts money in the ledger that has not moved yet, which then turns up
 		// on a report as a balance nobody can account for.
-		return Draft{}, ValidationError{
+		return cleaned{}, ValidationError{
 			Field:   "date",
 			Message: fmt.Sprintf("a payment cannot be dated in the future — %s is after %s", out.Date, today),
 		}
 	case !out.Method.Valid():
-		return Draft{}, ValidationError{
+		return cleaned{}, ValidationError{
 			Field:   "method",
 			Message: fmt.Sprintf("%q is not a way money arrives here — cash, palay or other", out.Method),
 		}
 	case len([]rune(out.Particular)) > maxParticularLen:
-		return Draft{}, ValidationError{
+		return cleaned{}, ValidationError{
 			Field:   "particular",
 			Message: fmt.Sprintf("that particular is too long — %d characters at most", maxParticularLen),
 		}
 	}
-	return out, nil
+	return cleaned{Draft: out, costed: costed}, nil
 }
 
 // checkCustomer reports whether the payment names somebody on the books.

@@ -45,6 +45,9 @@ func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, d Draft, by Actor) (
 	if err != nil {
 		return Payment{}, fmt.Errorf("create a payment: %w", err)
 	}
+	if err := writeLines(ctx, tx, id, draft.costed); err != nil {
+		return Payment{}, err
+	}
 	return byID(ctx, tx, id)
 }
 
@@ -73,6 +76,9 @@ func (s *Service) UpdateTx(ctx context.Context, tx *sql.Tx, id int64, d Draft) (
 	// After the write, so this read cannot be the lock upgrade PostTx exists to
 	// avoid. A customer who does not exist rolls the whole thing back.
 	if err := checkCustomer(ctx, tx, draft.CustomerID); err != nil {
+		return Payment{}, err
+	}
+	if err := writeLines(ctx, tx, id, draft.costed); err != nil {
 		return Payment{}, err
 	}
 	return byID(ctx, tx, id)
@@ -133,9 +139,13 @@ const selectPayment = `
 	       p.payment_date, p.amount_cents, p.method, p.particular, p.status,
 	       p.created_at, COALESCE(p.created_by, 0), p.created_by_username,
 	       COALESCE(p.posted_at, ''), COALESCE(p.posted_by, 0), p.posted_by_username,
-	       COALESCE(p.voided_at, ''), COALESCE(p.voided_by, 0), p.voided_by_username, p.void_reason
+	       COALESCE(p.voided_at, ''), COALESCE(p.voided_by, 0), p.voided_by_username, p.void_reason,
+	       COALESCE(st.id, 0), COALESCE(st.settlement_no, 0)
 	  FROM payments p
-	  JOIN customers c ON c.id = p.customer_id`
+	  JOIN customers c ON c.id = p.customer_id
+	  LEFT JOIN settlement_payments sp ON sp.payment_id = p.id
+	        AND sp.settlement_id IN (SELECT id FROM settlements WHERE status = 'posted')
+	  LEFT JOIN settlements st ON st.id = sp.settlement_id`
 
 func byID(ctx context.Context, q queryExecer, id int64) (Payment, error) {
 	p, err := scanPayment(q.QueryRowContext(ctx, selectPayment+` WHERE p.id = ?`, id))
@@ -144,6 +154,9 @@ func byID(ctx context.Context, q queryExecer, id int64) (Payment, error) {
 	}
 	if err != nil {
 		return Payment{}, fmt.Errorf("read payment %d: %w", id, err)
+	}
+	if p.Lines, err = linesOf(ctx, q, id); err != nil {
+		return Payment{}, err
 	}
 	return p, nil
 }
@@ -158,7 +171,8 @@ func scanPayment(row scanner) (Payment, error) {
 		&p.Date, &p.Amount, &method, &p.Particular, &status,
 		&createdAt, &p.CreatedBy.UserID, &p.CreatedBy.Username,
 		&postedAt, &p.PostedBy.UserID, &p.PostedBy.Username,
-		&voidedAt, &p.VoidedBy.UserID, &p.VoidedBy.Username, &p.VoidReason)
+		&voidedAt, &p.VoidedBy.UserID, &p.VoidedBy.Username, &p.VoidReason,
+		&p.SettlementID, &p.SettlementNo)
 	if err != nil {
 		return Payment{}, err
 	}

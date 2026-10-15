@@ -154,24 +154,24 @@ var (
 		Doc:     "How many backup files to keep before the oldest is deleted.",
 	}
 
-	// OrNoStart is RefNoStart's twin for receipts. They are separate sequences
-	// because they are separate pads of paper, and the legacy system's last OR
-	// number goes here on the morning of the cutover. Step 6 consumes it.
+	// OrNoStart is RefNoStart's twin for payments. The legacy system never
+	// numbered payments at all, so there is no sequence to continue: if the
+	// station keeps a paper O.R. pad, its next number goes here at cutover,
+	// and otherwise 1 is right.
 	OrNoStart = Def{
 		Key:     "orno.start",
 		Kind:    KindInt,
 		Default: "1",
-		Doc:     "First OR No. this system issues. Set at cutover to continue the legacy sequence.",
+		Doc:     "First OR No. this system issues. The legacy system had none — set it only if a paper O.R. pad is in use.",
 	}
 
 	// PaymentApplies decides which half of a debt a payment clears first when a
 	// customer owes both principal and interest.
 	//
-	// This is Q5 of the domain interview, and it is unanswered. It is a setting
-	// rather than a constant so that the answer, when it comes, is a change
-	// somebody makes on a screen. Nothing charges interest until step 7, so no
-	// payment posted before then can be affected by it either way — which is
-	// exactly why settling on a default now costs nothing.
+	// This is Q5 of the domain interview. The legacy system cleared interest
+	// first in all 1,097 of its settlements, which is the default; it stays a
+	// setting so that the owner's answer, if it differs, is a change somebody
+	// makes on a screen. A settlement reads it when it is computed.
 	//
 	// It is a choice rather than a string because a typo here changes what
 	// money does. "intrest-first" must be refused at the edge, not silently
@@ -185,65 +185,36 @@ var (
 		Doc:     "Which part of a debt a payment clears first when a customer owes both.",
 	}
 
-	// InterestMethod is how interest is computed, if at all.
+	// InterestRateBps is the station's usual monthly interest rate, in basis
+	// points: 500 is 5% a month.
 	//
-	// This is Q1 of the domain interview — the single most important question
-	// about how the business works — and it is unanswered. It is a setting
-	// rather than a constant for the reason PaymentApplies is one, except that
-	// here the stakes are higher: an interest rule implemented wrong produces
-	// numbers that look plausible and are wrong across every farmer at once.
-	//
-	// The default is "none", which charges nothing and refuses to let a run be
-	// created at all. An install nobody has configured therefore computes no
-	// interest, rather than quietly computing some — and if the answer to Q1
-	// turns out to be "that button was never used", the answer costs a settings
-	// screen and no code.
-	InterestMethod = Def{
-		Key:     "interest.method",
-		Kind:    KindChoice,
-		Default: "none",
-		Options: []string{"none", "monthly-on-balance", "flat-on-advance"},
-		Doc:     "How interest is computed: not at all, on the balance at the end of the period, or once on what was advanced during it.",
-	}
-
-	// InterestRateBps is the rate in basis points: 300 is 3%, 25 is a quarter
-	// of one percent.
+	// It is a default, not a rule. The legacy station typed the rate on every
+	// settlement, and a settlement here starts with this figure and can be
+	// changed — the legacy data has 1,063 settlements at 5%, 29 at 3% and two
+	// at 0%, which is how a charge was waived. Changing it changes the next
+	// settlement, never one already computed.
 	//
 	// Basis points rather than a percentage with a decimal point, because a
-	// rate stored as "3.5" is a float waiting to be parsed into one, and
-	// internal/domain/money has a test that walks the syntax tree and fails on
-	// any float at all. An integer against a denominator of 10,000 is exact.
+	// rate stored as "3.5" is a float waiting to be parsed into one.
 	InterestRateBps = Def{
 		Key:     "interest.rate_bps",
 		Kind:    KindInt,
-		Default: "0",
-		Doc:     "The interest rate in basis points — 300 is 3%. Zero charges nothing.",
+		Default: "500",
+		Doc:     "The usual monthly interest rate in basis points — 500 is 5% a month. Each settlement starts with it and can change it.",
 	}
 
-	// InterestBasis is what "what they owe" means when interest is charged on
-	// a balance: the principal alone, or the principal plus interest already
-	// charged and not yet paid.
+	// RefNoStart is the number the advance-slip sequence continues from at
+	// cutover, so staff see no discontinuity on the morning they switch.
 	//
-	// That is the difference between simple and compound interest, it is a
-	// sub-question of Q1, and it changes what money does — which is why it is a
-	// choice refused at the edge rather than a bool that would leave a screen
-	// having to invent a word for each side.
-	InterestBasis = Def{
-		Key:     "interest.basis",
-		Kind:    KindChoice,
-		Default: "principal",
-		Options: []string{"principal", "principal-and-interest"},
-		Doc:     "Whether interest is charged on unpaid interest as well as on principal.",
-	}
-
-	// RefNoStart is the number the voucher sequence continues from at cutover.
-	// The legacy system's last Ref. No. goes here so staff see no
-	// discontinuity on the morning they switch. Step 5 consumes it.
+	// The default is the legacy system's next number as read from its data on
+	// 2026-10-15: its counter and its highest Ref. No. both stood at 1425. It
+	// moves if they keep encoding, so it is checked again on the day. It only
+	// has an effect until the first slip is posted.
 	RefNoStart = Def{
 		Key:     "refno.start",
 		Kind:    KindInt,
-		Default: "1",
-		Doc:     "First Ref. No. this system issues. Set at cutover to continue the legacy sequence.",
+		Default: "1426",
+		Doc:     "First Ref. No. this system issues. Continues the legacy sequence — check the old system's last number at cutover.",
 	}
 )
 
@@ -258,9 +229,7 @@ var All = []Def{
 	RefNoStart,
 	OrNoStart,
 	PaymentApplies,
-	InterestMethod,
 	InterestRateBps,
-	InterestBasis,
 }
 
 // byKey indexes All for lookup by the string a request carries.

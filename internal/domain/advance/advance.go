@@ -154,15 +154,20 @@ func (e ValidationError) Error() string { return e.Message }
 
 var (
 	// ErrNotFound means there is no voucher with that id.
-	ErrNotFound = errors.New("no such voucher")
+	ErrNotFound = errors.New("no such advance slip")
 
 	// ErrNotDraft means the voucher has already been posted. Editing, deleting
 	// and posting all require a draft, and all three report this.
-	ErrNotDraft = errors.New("that voucher has been posted already")
+	ErrNotDraft = errors.New("that advance slip has been posted already")
 
 	// ErrNotPosted means only a posted voucher can be voided. A draft is
 	// deleted instead — it moved no money, so there is nothing to reverse.
-	ErrNotPosted = errors.New("only a posted voucher can be voided")
+	ErrNotPosted = errors.New("only a posted advance slip can be voided")
+
+	// ErrSettled means a posted settlement has charged interest on a line of
+	// this slip. Voiding the slip alone would leave that interest standing on
+	// an advance that never happened, so the settlement is voided first.
+	ErrSettled = errors.New("a settlement has charged interest on this advance slip: void the settlement first")
 )
 
 // Limits, generous enough that nobody meets them at a counter by accident and
@@ -237,14 +242,14 @@ func (s *Service) clean(d Draft) (Draft, error) {
 
 	switch {
 	case out.Date.IsZero():
-		return Draft{}, ValidationError{Field: "date", Message: "a voucher needs a date"}
+		return Draft{}, ValidationError{Field: "date", Message: "an advance slip needs a date"}
 	case out.Date.After(today):
 		// Almost always a wrong year on a January slip. Letting it through puts
 		// money in the ledger that has not moved yet, which then turns up on a
 		// report as a balance nobody can account for.
 		return Draft{}, ValidationError{
 			Field:   "date",
-			Message: fmt.Sprintf("a voucher cannot be dated in the future — %s is after %s", out.Date, today),
+			Message: fmt.Sprintf("an advance slip cannot be dated in the future — %s is after %s", out.Date, today),
 		}
 	case len([]rune(out.Notes)) > maxNotesLen:
 		return Draft{}, ValidationError{
@@ -255,11 +260,11 @@ func (s *Service) clean(d Draft) (Draft, error) {
 
 	switch {
 	case len(d.Lines) == 0:
-		return Draft{}, ValidationError{Field: "lines", Message: "a voucher needs at least one line"}
+		return Draft{}, ValidationError{Field: "lines", Message: "an advance slip needs at least one line"}
 	case len(d.Lines) > maxLines:
 		return Draft{}, ValidationError{
 			Field:   "lines",
-			Message: fmt.Sprintf("a voucher takes %d lines at most, and this one has %d", maxLines, len(d.Lines)),
+			Message: fmt.Sprintf("an advance slip takes %d lines at most, and this one has %d", maxLines, len(d.Lines)),
 		}
 	}
 

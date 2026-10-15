@@ -83,29 +83,34 @@ func (s *Service) CurrentAdvances(ctx context.Context, asOf ledger.Date) (Curren
 
 // --- Return of Investment Status -------------------------------------------
 
-// ROIRow is one farmer's part in a period.
+// ROIRow is one settlement in the period: the legacy Return of Investment
+// table, row for row. Principal is what the settlement's payments returned of
+// the money lent, Interest is what they paid of the interest charged, and
+// Amount is the two together.
 type ROIRow struct {
 	Who
-	Advanced        money.Money `json:"advanced"`
-	Repaid          money.Money `json:"repaid"`
-	InterestCharged money.Money `json:"interest_charged"`
-
-	// Balance is what they ended the period owing, which is not derivable from
-	// the three figures beside it: a farmer can enter a period already owing
-	// money and leave it owing more than the period alone explains.
-	Balance money.Money `json:"balance"`
+	SettlementID int64       `json:"settlement_id"`
+	SettlementNo int64       `json:"settlement_no"`
+	Cutoff       ledger.Date `json:"cutoff"`
+	Principal    money.Money `json:"principal"`
+	Interest     money.Money `json:"interest"`
+	Amount       money.Money `json:"amount"`
 }
 
-// ROI is the portfolio over a period, with a row per farmer under it.
+// ROI is the portfolio over a period, with a row per settlement under it.
 type ROI struct {
 	From ledger.Date `json:"from"`
 	To   ledger.Date `json:"to"`
 
-	Deployed          money.Money `json:"deployed"`
+	Deployed        money.Money `json:"deployed"`
+	InterestCharged money.Money `json:"interest_charged"`
+	Outstanding     money.Money `json:"outstanding"`
+
+	// Repaid, InterestCollected and Returned are the totals of the rows: the
+	// legacy report's "Return", "Paid" and "Total".
 	Repaid            money.Money `json:"repaid"`
-	InterestCharged   money.Money `json:"interest_charged"`
 	InterestCollected money.Money `json:"interest_collected"`
-	Outstanding       money.Money `json:"outstanding"`
+	Returned          money.Money `json:"returned"`
 
 	// Farmers and Vouchers say how much work the figures above represent.
 	Farmers  int `json:"farmers"`
@@ -120,79 +125,73 @@ type ROI struct {
 
 // ROI builds the Return of Investment Status report.
 //
-// **This is Q3 answered by assumption** — see 08-reports.md. The totals answer
-// whether the lending is working and the rows answer who, and the two are the
-// same query at two groupings, which is what made building both cheaper than
-// guessing between them.
+// The table is the legacy report's (docs/plans/legacy-findings.md, Q3): every
+// settlement whose cut-off falls in the period, with what its payments returned
+// of principal and paid of interest. The block above it — what was lent, what
+// interest was charged, what is still out — is the portfolio view Step 8 added,
+// read from the ledger.
 //
-// The rows sum to the totals above them exactly, and that is the report's one
-// real invariant. Everything else on the page is a count or a percentage of two
-// figures that are themselves sums.
+// The rows sum to Repaid, InterestCollected and Returned exactly, and that is
+// the report's one real invariant.
 func (s *Service) ROI(ctx context.Context, from, to ledger.Date) (ROI, error) {
 	activity, err := s.ledger.ActivityBetween(ctx, from, to)
 	if err != nil {
 		return ROI{}, err
 	}
-
-	// The balance at the end of the period, which is a different question from
-	// what moved during it.
 	balances, err := s.ledger.BalancesAt(ctx, to)
 	if err != nil {
 		return ROI{}, err
 	}
-	closing := make(map[int64]money.Money, len(balances))
+	settled, err := s.settlementsBetween(ctx, from, to)
+	if err != nil {
+		return ROI{}, err
+	}
+
+	report := ROI{From: from, To: to, Rows: make([]ROIRow, 0, len(settled))}
+	for _, a := range activity {
+		if report.Deployed, err = report.Deployed.Add(a.Advanced); err != nil {
+			return ROI{}, fmt.Errorf("total what was deployed: %w", err)
+		}
+		if report.InterestCharged, err = report.InterestCharged.Add(a.InterestCharged); err != nil {
+			return ROI{}, fmt.Errorf("total the interest charged: %w", err)
+		}
+	}
+
+	farmers := map[int64]bool{}
+	for _, st := range settled {
+		amount, err := st.PaidPrincipal.Add(st.PaidInterest)
+		if err != nil {
+			return ROI{}, fmt.Errorf("total settlement %d: %w", st.No, err)
+		}
+		report.Rows = append(report.Rows, ROIRow{
+			Who: st.Who, SettlementID: st.ID, SettlementNo: st.No, Cutoff: st.Cutoff,
+			Principal: st.PaidPrincipal, Interest: st.PaidInterest, Amount: amount,
+		})
+		farmers[st.CustomerID] = true
+		if report.Repaid, err = report.Repaid.Add(st.PaidPrincipal); err != nil {
+			return ROI{}, fmt.Errorf("total what was repaid: %w", err)
+		}
+		if report.InterestCollected, err = report.InterestCollected.Add(st.PaidInterest); err != nil {
+			return ROI{}, fmt.Errorf("total the interest collected: %w", err)
+		}
+		if report.Returned, err = report.Returned.Add(amount); err != nil {
+			return ROI{}, fmt.Errorf("total what came back: %w", err)
+		}
+	}
+
+	// Outstanding is the whole book at the end of the period, not anything the
+	// rows add up to: a farmer who was not settled this period can still owe.
 	for _, b := range balances {
 		total, err := b.Total()
 		if err != nil {
 			return ROI{}, fmt.Errorf("total what customer %d owes: %w", b.CustomerID, err)
 		}
-		closing[b.CustomerID] = total
-	}
-
-	ids := make([]int64, 0, len(activity))
-	for _, a := range activity {
-		ids = append(ids, a.CustomerID)
-	}
-	who, err := s.names(ctx, ids)
-	if err != nil {
-		return ROI{}, err
-	}
-
-	report := ROI{From: from, To: to, Rows: make([]ROIRow, 0, len(activity))}
-	for _, a := range activity {
-		report.Rows = append(report.Rows, ROIRow{
-			Who:             who[a.CustomerID],
-			Advanced:        a.Advanced,
-			Repaid:          a.Repaid,
-			InterestCharged: a.InterestCharged,
-			Balance:         closing[a.CustomerID],
-		})
-
-		if report.Deployed, err = report.Deployed.Add(a.Advanced); err != nil {
-			return ROI{}, fmt.Errorf("total what was deployed: %w", err)
-		}
-		if report.Repaid, err = report.Repaid.Add(a.Repaid); err != nil {
-			return ROI{}, fmt.Errorf("total what was repaid: %w", err)
-		}
-		if report.InterestCharged, err = report.InterestCharged.Add(a.InterestCharged); err != nil {
-			return ROI{}, fmt.Errorf("total the interest charged: %w", err)
-		}
-		if report.InterestCollected, err = report.InterestCollected.Add(a.InterestCollected); err != nil {
-			return ROI{}, fmt.Errorf("total the interest collected: %w", err)
-		}
-	}
-	byCode(report.Rows, func(r ROIRow) string { return r.Code })
-
-	// Outstanding is the whole book at the end of the period, not the sum of
-	// the rows above: a farmer who did nothing this period can still owe money,
-	// and a report that said otherwise would understate the book.
-	for _, b := range balances {
-		if report.Outstanding, err = report.Outstanding.Add(closing[b.CustomerID]); err != nil {
+		if report.Outstanding, err = report.Outstanding.Add(total); err != nil {
 			return ROI{}, fmt.Errorf("total what is outstanding: %w", err)
 		}
 	}
 
-	report.Farmers = len(activity)
+	report.Farmers = len(farmers)
 	report.RepaidShare = share(report.Repaid, report.Deployed)
 
 	if report.Vouchers, err = s.vouchersBetween(ctx, from, to); err != nil {
@@ -321,111 +320,92 @@ func (s *Service) Aging(ctx context.Context, asOf ledger.Date) (Aging, error) {
 	return report, nil
 }
 
-// --- Liquidated ------------------------------------------------------------
+// --- Settled ---------------------------------------------------------------
 
-// Settlement is one farmer who finished paying, and the day they did it.
-type Settlement struct {
+// Settled is one settlement as the Settled report lists it.
+type Settled struct {
 	Who
-	SettledOn ledger.Date `json:"settled_on"`
+	ID      int64       `json:"settlement_id"`
+	No      int64       `json:"settlement_no"`
+	Cutoff  ledger.Date `json:"cutoff"`
+	RateBps int64       `json:"rate_bps"`
 
-	// Advanced is what they had been lent in total before they settled, which
-	// is what makes the row worth reading: "paid off ₱45,000.00 on 12 March"
-	// says something, "settled" alone does not.
-	Advanced money.Money `json:"advanced"`
+	InterestCharged money.Money `json:"interest_charged"`
+	PaidPrincipal   money.Money `json:"paid_principal"`
+	PaidInterest    money.Money `json:"paid_interest"`
+
+	// BalanceAfter is what the farmer still owed once the settlement was
+	// applied: the legacy "Present Balance". Negative when the payment was
+	// worth more than the debt.
+	BalanceAfter money.Money `json:"balance_after"`
 }
 
-// Liquidated is who finished paying during a period.
-type Liquidated struct {
-	From ledger.Date  `json:"from"`
-	To   ledger.Date  `json:"to"`
-	Rows []Settlement `json:"rows"`
+// SettledReport is every settlement in a period.
+type SettledReport struct {
+	From ledger.Date `json:"from"`
+	To   ledger.Date `json:"to"`
+	Rows []Settled   `json:"rows"`
 }
 
-// Liquidated lists the farmers whose balance reached zero during the period and
-// stayed there.
+// Settled lists the settlements whose cut-off falls in the period, newest
+// first. Each row opens the settlement, which is the legacy "Recall Liquidated
+// Transaction": a settled account read back exactly as it was computed, and
+// reprinted.
 //
-// **This is Q4 answered by assumption**, and the assumption is expressed as the
-// absence of a write path rather than as a decision somebody has to remember.
-//
-// "Reached zero and stayed there" excludes the three hundred farmers who have
-// simply never borrowed: a balance has to have been positive before it can have
-// been settled. The day reported is the day of the entry that took them to
-// zero, which is the one a farmer would recognise.
-func (s *Service) Liquidated(ctx context.Context, from, to ledger.Date) (Liquidated, error) {
-	deltas, err := s.ledger.DeltasUpTo(ctx, to)
+// "Liquidated" in the legacy system meant settled up on a date, not paid off —
+// 561 of its 1,097 settlements carried a balance forward — which is why this
+// report lists settlements rather than farmers whose balance reached zero.
+func (s *Service) Settled(ctx context.Context, from, to ledger.Date) (SettledReport, error) {
+	rows, err := s.settlementsBetween(ctx, from, to)
 	if err != nil {
-		return Liquidated{}, err
+		return SettledReport{}, err
 	}
-
-	grouped := byCustomer(deltas)
-	report := Liquidated{From: from, To: to, Rows: []Settlement{}}
-
-	settled := make(map[int64]Settlement)
-	for id, movements := range grouped {
-		var running, advanced money.Money
-		var owedBefore bool
-		var settledOn ledger.Date
-
-		for _, d := range movements {
-			if d.Principal.IsPositive() {
-				if advanced, err = advanced.Add(d.Principal); err != nil {
-					return Liquidated{}, fmt.Errorf("total what customer %d was lent: %w", id, err)
-				}
-			}
-
-			delta, err := d.Total()
-			if err != nil {
-				return Liquidated{}, fmt.Errorf("total a movement of customer %d: %w", id, err)
-			}
-			if running, err = running.Add(delta); err != nil {
-				return Liquidated{}, fmt.Errorf("run the balance of customer %d: %w", id, err)
-			}
-
-			switch {
-			case running.IsPositive():
-				// Back on the books: whatever settlement came before no longer
-				// stands, and the next one has to be earned again.
-				owedBefore = true
-				settledOn = ledger.Date{}
-			case owedBefore && settledOn.IsZero():
-				// This is the entry that cleared them.
-				settledOn = d.Date
-			}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if !rows[i].Cutoff.Equal(rows[j].Cutoff) {
+			return rows[i].Cutoff.After(rows[j].Cutoff)
 		}
-
-		// Still at or below zero at the end of the period, and the day they got
-		// there falls inside it.
-		if settledOn.IsZero() || running.IsPositive() {
-			continue
-		}
-		if settledOn.Before(from) || settledOn.After(to) {
-			continue
-		}
-		settled[id] = Settlement{SettledOn: settledOn, Advanced: advanced}
-	}
-
-	ids := make([]int64, 0, len(settled))
-	for id := range settled {
-		ids = append(ids, id)
-	}
-	who, err := s.names(ctx, ids)
-	if err != nil {
-		return Liquidated{}, err
-	}
-	for id, s := range settled {
-		s.Who = who[id]
-		report.Rows = append(report.Rows, s)
-	}
-
-	// Most recent settlement first: the question this page is opened with is
-	// "who has finished lately".
-	sort.Slice(report.Rows, func(i, j int) bool {
-		if report.Rows[i].SettledOn != report.Rows[j].SettledOn {
-			return report.Rows[i].SettledOn.After(report.Rows[j].SettledOn)
-		}
-		return report.Rows[i].Code < report.Rows[j].Code
+		return rows[i].No > rows[j].No
 	})
-	return report, nil
+	return SettledReport{From: from, To: to, Rows: rows}, nil
+}
+
+// settlementsBetween reads the settlements whose cut-off falls in the period
+// and which stood at the end of it: posted, or voided after the period ended.
+// That is the ledger's rule restated — a void is dated the day it happened, so
+// a report over an earlier period reads as the books read then.
+func (s *Service) settlementsBetween(ctx context.Context, from, to ledger.Date) ([]Settled, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT st.id, st.settlement_no, st.customer_id, c.code, c.name, st.cutoff_date, st.rate_bps,
+		       st.carried_charge_cents + COALESCE(a.charge, 0),
+		       COALESCE(p.principal, 0), COALESCE(p.interest, 0),
+		       st.carried_principal_cents + st.carried_interest_cents
+		         + COALESCE(a.principal, 0) + st.carried_charge_cents + COALESCE(a.charge, 0)
+		         - COALESCE(p.principal, 0) - COALESCE(p.interest, 0)
+		  FROM settlements st
+		  JOIN customers c ON c.id = st.customer_id
+		  LEFT JOIN (SELECT settlement_id, SUM(principal_cents) AS principal, SUM(charge_cents) AS charge
+		               FROM settlement_advances GROUP BY settlement_id) a ON a.settlement_id = st.id
+		  LEFT JOIN (SELECT settlement_id, SUM(principal_cents) AS principal, SUM(interest_cents) AS interest
+		               FROM settlement_payments GROUP BY settlement_id) p ON p.settlement_id = st.id
+		 WHERE st.cutoff_date >= ? AND st.cutoff_date <= ?
+		   AND (st.status = 'posted'
+		        OR (st.status = 'voided' AND substr(st.voided_at, 1, 10) > ?))
+		 ORDER BY c.code, st.cutoff_date, st.settlement_no`, from, to, to)
+	if err != nil {
+		return nil, fmt.Errorf("read the settlements between %s and %s: %w", from, to, err)
+	}
+	defer rows.Close()
+
+	out := []Settled{}
+	for rows.Next() {
+		var r Settled
+		if err := rows.Scan(&r.ID, &r.No, &r.CustomerID, &r.Code, &r.Name, &r.Cutoff, &r.RateBps,
+			&r.InterestCharged, &r.PaidPrincipal, &r.PaidInterest, &r.BalanceAfter); err != nil {
+			return nil, fmt.Errorf("read the settlements between %s and %s: %w", from, to, err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // byCode sorts a report's rows the way staff read them: by the code they say

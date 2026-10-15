@@ -21,8 +21,13 @@ export interface Payment {
   date: string
   amount: string
   method: PaymentMethod
+  /** The lots of palay, for a palay payment; empty otherwise. */
+  lines: PaymentLine[]
   particular: string
   status: PaymentStatus
+  /** The settlement that applied this payment; 0 while it is still waiting. */
+  settlement_id: number
+  settlement_no: number
   created_at: string
   created_by: { UserID: number; Username: string }
   posted_at: string | null
@@ -30,6 +35,29 @@ export interface Payment {
   voided_at: string | null
   voided_by: { UserID: number; Username: string }
   void_reason: string
+}
+
+/**
+ * One lot of palay on a payment. Kilos travel as a string, as money does —
+ * "500.0" — so the browser never holds a weight as a float either.
+ */
+export interface PaymentLine {
+  id: number
+  class: string
+  sacks: number
+  kilos: string
+  /** Per kilo. */
+  price: string
+  /** kilos × price, rounded half-up, worked out by the server. */
+  cost: string
+}
+
+/** A lot as typed at the counter: the server works out the cost. */
+export interface PaymentLineDraft {
+  class: string
+  sacks: number
+  kilos: string
+  price: string
 }
 
 /** One entry the payment put in the ledger, including the reversal a void wrote. */
@@ -46,7 +74,7 @@ export interface LedgerEntryView {
 }
 
 /**
- * A receipt, what it did to the ledger, and what the customer owes now.
+ * A payment, what it did to the ledger, and what the customer owes now.
  *
  * The entries are where the split between principal and interest is read from.
  * The payment itself does not carry it — the server stores that division on the
@@ -69,6 +97,9 @@ export interface PaymentSummary {
   method: PaymentMethod
   particular: string
   status: PaymentStatus
+  /** Both zero while the payment waits to be settled. */
+  settlement_id: number
+  settlement_no: number
   created_by: string
 }
 
@@ -89,8 +120,11 @@ export interface PaymentDraft {
   customer_id: number
   /** Empty means today, which is what a receipt written at the counter is. */
   date: string
+  /** Ignored for a palay payment: the server adds up the lines instead. */
   amount: string
   method: PaymentMethod
+  /** Palay only, at least one; empty for cash and other. */
+  lines: PaymentLineDraft[]
   particular: string
 }
 
@@ -130,11 +164,15 @@ export function updatePayment(id: number, draft: PaymentDraft): Promise<Payment>
   return putJson<Payment>(`/api/payments/${id}`, draft)
 }
 
-/** Drafts only. A posted payment is voided, never deleted. */
+/** Drafts only. A recorded payment is voided, never deleted. */
 export function deletePayment(id: number): Promise<void> {
   return deleteJson<void>(`/api/payments/${id}`)
 }
 
+/**
+ * Record a payment: it gets its OR No. but moves no balance. A settlement is
+ * what applies it.
+ */
 export function postPayment(id: number): Promise<Payment> {
   return postJson<Payment>(`/api/payments/${id}/post`)
 }
@@ -154,6 +192,26 @@ export const paymentMethods: { label: string; value: PaymentMethod }[] = [
 export function methodLabel(method: PaymentMethod): string {
   return paymentMethods.find((m) => m.value === method)?.label ?? method
 }
+
+/**
+ * A payment's status in the station's words. "posted" is "Recorded" until a
+ * settlement applies it, and "Settled" after.
+ */
+export function paymentStatusLabel(status: PaymentStatus, settlementNo: number): string {
+  switch (status) {
+    case 'draft':
+      return 'Draft'
+    case 'voided':
+      return 'Voided'
+    case 'posted':
+      return settlementNo > 0 ? 'Settled' : 'Recorded'
+    default:
+      return status
+  }
+}
+
+/** The palay classes the station grades into. Free text: anything else goes. */
+export const palayClasses = ['SLG', 'YCS', 'DOLG', 'YCDG', 'SC10']
 
 /**
  * What a ledger entry is called on screen, in the words the station uses.

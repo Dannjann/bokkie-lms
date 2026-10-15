@@ -105,7 +105,9 @@ func (f *paymentFixture) balance(t *testing.T) string {
 	return detail.Balance.Principal
 }
 
-// The everyday path, end to end: a farmer pays at the counter, and owes less.
+// The everyday path at the counter: a payment is typed and recorded. Recording
+// it numbers it and does not move the balance — that waits for the settlement,
+// which is the legacy rule (see settlements_test.go for the rest of the path).
 func TestAnEncoderTakesAndPostsAPayment(t *testing.T) {
 	f := newPaymentFixture(t)
 
@@ -124,26 +126,18 @@ func TestAnEncoderTakesAndPostsAPayment(t *testing.T) {
 	var posted payment.Payment
 	decode(t, resp, &posted)
 
-	if posted.Status != payment.StatusPosted || posted.OrNo != 1 {
-		t.Errorf("the posted payment is %s with OR No. %d, want posted and numbered", posted.Status, posted.OrNo)
+	if posted.Status != payment.StatusPosted || posted.OrNo != 1 || posted.SettlementNo != 0 {
+		t.Errorf("the recorded payment is %s with OR No. %d settled by %d, want recorded, numbered and unsettled",
+			posted.Status, posted.OrNo, posted.SettlementNo)
 	}
-	if got := f.balance(t); got != "3000.00" {
-		t.Errorf("the farmer is at %s after paying ₱2,000.00 of ₱5,000.00", got)
+	if got := f.balance(t); got != "5000.00" {
+		t.Errorf("recording a payment moved the balance to %s; it waits for the settlement", got)
 	}
 
-	// The detail screen reads the split back off the entry, which is the only
-	// place it is stored.
 	var detail paymentDetail
 	decode(t, request(t, f.handler, http.MethodGet, "/api/payments/"+itoa(draft.ID), f.encoder, nil), &detail)
-	if len(detail.Entries) != 1 {
-		t.Fatalf("the posted payment shows %d entries, want one", len(detail.Entries))
-	}
-	if detail.Entries[0].Principal != "-2000.00" || detail.Entries[0].Interest != "0.00" {
-		t.Errorf("the entry moved %s of principal and %s of interest",
-			detail.Entries[0].Principal, detail.Entries[0].Interest)
-	}
-	if detail.Balance.Principal != "3000.00" {
-		t.Errorf("the screen shows a balance of %s beside the receipt", detail.Balance.Principal)
+	if len(detail.Entries) != 0 {
+		t.Errorf("a recorded payment shows %d ledger entries, want none until it is settled", len(detail.Entries))
 	}
 }
 
@@ -159,8 +153,12 @@ func TestPostingTwiceIsAConflictNotASecondCredit(t *testing.T) {
 	if second.Code != http.StatusConflict {
 		t.Errorf("the second post returned %d, want 409", second.Code)
 	}
-	if got := f.balance(t); got != "3000.00" {
-		t.Errorf("the farmer is at %s after a double-clicked Post, want 3000.00", got)
+	var orNos int
+	if err := f.db.QueryRow(`SELECT COUNT(*) FROM payments WHERE or_no IS NOT NULL`).Scan(&orNos); err != nil {
+		t.Fatal(err)
+	}
+	if orNos != 1 {
+		t.Errorf("a double-clicked Post handed out %d OR Nos., want 1", orNos)
 	}
 }
 
@@ -178,7 +176,7 @@ func TestOnlyAManagerCanVoidAPayment(t *testing.T) {
 	if refused.Code != http.StatusForbidden {
 		t.Fatalf("an encoder's void returned %d, want 403", refused.Code)
 	}
-	if got := f.balance(t); got != "3000.00" {
+	if got := f.balance(t); got != "5000.00" {
 		t.Errorf("a refused void moved money: the farmer is at %s", got)
 	}
 
@@ -233,9 +231,22 @@ func TestADraftPaymentIsEditedAndDeleted(t *testing.T) {
 
 	edited := f.draft("2500.00")
 	edited["method"] = "palay"
+	edited["lines"] = []map[string]any{{"class": "YCS", "sacks": 4, "kilos": "200.0", "price": "12.50"}}
 	resp := request(t, f.handler, http.MethodPut, "/api/payments/"+itoa(draft.ID), f.encoder, edited)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("edit: status %d: %s", resp.Code, resp.Body)
+	}
+	var palay payment.Payment
+	decode(t, resp, &palay)
+	if palay.Amount.String() != "2500.00" || len(palay.Lines) != 1 || palay.Lines[0].Cost.String() != "2500.00" {
+		t.Errorf("200 kg at 12.50 came to %s over %+v, want 2500.00 on one line", palay.Amount, palay.Lines)
+	}
+
+	// A cash payment does not carry lines.
+	cash := f.draft("100.00")
+	cash["lines"] = edited["lines"]
+	if resp := request(t, f.handler, http.MethodPut, "/api/payments/"+itoa(draft.ID), f.encoder, cash); resp.Code != http.StatusBadRequest {
+		t.Errorf("a cash payment with palay lines: status %d, want 400", resp.Code)
 	}
 
 	gone := request(t, f.handler, http.MethodDelete, "/api/payments/"+itoa(draft.ID), f.encoder, nil)
@@ -266,6 +277,21 @@ func TestTheStatementShowsBothDocumentsByTheirNumbers(t *testing.T) {
 		t.Fatalf("post: status %d: %s", resp.Code, resp.Body)
 	}
 
+	// A payment reaches the statement when it is settled.
+	var st struct {
+		ID int64 `json:"id"`
+	}
+	created := request(t, f.handler, http.MethodPost, "/api/settlements", f.encoder,
+		map[string]any{"customer_id": f.farmer.ID, "cutoff": today(t)})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("settle: status %d: %s", created.Code, created.Body)
+	}
+	decode(t, created, &st)
+	if resp := request(t, f.handler, http.MethodPost, "/api/settlements/"+itoa(st.ID)+"/post",
+		f.encoder, nil); resp.Code != http.StatusOK {
+		t.Fatalf("post the settlement: status %d: %s", resp.Code, resp.Body)
+	}
+
 	var stmt statementResponse
 	resp := request(t, f.handler, http.MethodGet,
 		"/api/customers/"+itoa(f.farmer.ID)+"/statement", f.encoder, nil)
@@ -277,8 +303,8 @@ func TestTheStatementShowsBothDocumentsByTheirNumbers(t *testing.T) {
 	if len(stmt.Rows) != 2 {
 		t.Fatalf("the statement has %d rows, want the advance and the payment", len(stmt.Rows))
 	}
-	if stmt.Rows[0].Document != "Ref. No. 1" {
-		t.Errorf("the advance is labelled %q, want \"Ref. No. 1\"", stmt.Rows[0].Document)
+	if stmt.Rows[0].Document != "Ref. No. 1426" {
+		t.Errorf("the advance is labelled %q, want \"Ref. No. 1426\"", stmt.Rows[0].Document)
 	}
 	if stmt.Rows[1].Document != "OR No. 1" {
 		t.Errorf("the payment is labelled %q, want \"OR No. 1\"", stmt.Rows[1].Document)

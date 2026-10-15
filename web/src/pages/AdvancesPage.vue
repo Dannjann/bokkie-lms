@@ -88,10 +88,10 @@ onMounted(load)
   <div>
     <PageHeader
       title="Advances"
-      description="Vouchers are numbered when they are posted, and undone by voiding, never by editing."
+      description="Advance slips are numbered when they are posted, and undone by voiding, never by editing."
     >
       <template #actions>
-        <Button label="New voucher" icon="pi pi-plus" @click="router.push({ name: 'advance-new' })" />
+        <Button label="New advance slip" icon="pi pi-plus" @click="router.push({ name: 'advance-new' })" />
       </template>
     </PageHeader>
 
@@ -106,7 +106,7 @@ onMounted(load)
           <InputText
             v-model="search"
             placeholder="Search by Ref. No. or farmer"
-            aria-label="Search vouchers"
+            aria-label="Search advance slips"
             autocapitalize="none"
             autocorrect="off"
             spellcheck="false"
@@ -122,7 +122,7 @@ onMounted(load)
           class="advances__status"
         />
         <span class="advances__count numeric">
-          {{ total }} {{ total === 1 ? 'voucher' : 'vouchers' }}
+          {{ total }} {{ total === 1 ? 'advance slip' : 'advance slips' }}
         </span>
       </div>
 
@@ -143,7 +143,7 @@ onMounted(load)
       >
         <template #empty>
           <p class="advances__empty">
-            {{ search ? `Nothing matches “${search}”.` : 'No vouchers yet.' }}
+            {{ search ? `Nothing matches “${search}”.` : 'No advance slips yet.' }}
           </p>
         </template>
 

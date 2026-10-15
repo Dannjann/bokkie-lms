@@ -88,8 +88,11 @@ A line containing `"status":"ok"` means the server and its database are fine.
 
 - **Encoder** — the everyday counter role.
 - **Manager** — an encoder, plus: managing users, changing settings, running and
-  listing backups, reading the audit log, running interest, reading the four
-  reports, and voiding a posted voucher or receipt.
+  listing backups, reading the audit log, reading the four reports, and voiding
+  a posted advance slip, payment or settlement.
+
+Settling a farmer — charging the interest up to a cut-off date and applying the
+palay or cash they brought in — is counter work, and either role can do it.
 
 Under **Administration** in the sidebar, a manager will find **Users**,
 **Audit log** and **Settings**.

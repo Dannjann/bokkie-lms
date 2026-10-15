@@ -45,8 +45,9 @@ func TestPostingNumbersTheVoucherAndMovesTheMoney(t *testing.T) {
 	if posted.Status != StatusPosted {
 		t.Errorf("the voucher is %s after posting", posted.Status)
 	}
-	if posted.RefNo != 1 {
-		t.Errorf("the first voucher was numbered %d, want 1 — the default start", posted.RefNo)
+	// The default start continues the legacy sequence, whose last Ref. No. was 1425.
+	if posted.RefNo != 1426 {
+		t.Errorf("the first voucher was numbered %d, want 1426 — the default start", posted.RefNo)
 	}
 	if posted.PostedAt == nil || posted.PostedBy.Username != "dan" {
 		t.Errorf("the voucher does not record who posted it and when: %v, %q", posted.PostedAt, posted.PostedBy.Username)
