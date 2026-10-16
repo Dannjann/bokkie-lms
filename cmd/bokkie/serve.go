@@ -42,9 +42,10 @@ func cmdServe(args []string) error {
 		return err
 	}
 
-	// On Windows the window is a native one this process owns, and it is
-	// the switch: see runStationWindow for why a browser window could not be.
-	if runtime.GOOS == "windows" && !*noWindow {
+	// On Windows and macOS the window is a native one this process owns, and
+	// it is the switch: see runStationWindow for why a browser window could
+	// not be.
+	if (runtime.GOOS == "windows" || runtime.GOOS == "darwin") && !*noWindow {
 		return runStationWindow(*dataDir, opts)
 	}
 

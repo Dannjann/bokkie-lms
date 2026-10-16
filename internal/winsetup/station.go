@@ -189,3 +189,23 @@ func firstLine(s string) string {
 	}
 	return s
 }
+
+// StationHooks is how the window reaches the station without knowing what one
+// is. Every hook except Snapshot may block, and is called off the window's
+// thread.
+type StationHooks struct {
+	Title string
+	// Snapshot is asked for what to draw, once a second, on the window's
+	// thread. It must return at once.
+	Snapshot func() StationView
+	// Open opens the station in the person's own browser.
+	Open func()
+	// Check runs the self-check and returns its report.
+	Check func() string
+	// Stop stops the station and returns when it has. It is called once, when
+	// the window is closed or the Stop button pressed.
+	Stop func()
+	// StopWanted closes when something other than this window asked for the
+	// station to stop — the Stop button on its web screen.
+	StopWanted <-chan struct{}
+}
