@@ -44,6 +44,10 @@ if [ ! -f dist/BokkieSetup.exe ]; then
     echo "publish: dist/BokkieSetup.exe is missing — run 'make release' first." >&2
     exit 1
 fi
+if [ ! -f dist/Bokkie.dmg ]; then
+    echo "publish: dist/Bokkie.dmg is missing — run 'make release' first." >&2
+    exit 1
+fi
 
 # Refuse to publish a second time rather than quietly making a duplicate.
 if gh release view "$TAG" >/dev/null 2>&1; then
@@ -63,6 +67,10 @@ by a certificate this project has bought. Choose **More info**, then
 **Run anyway**. The downloads page carries the SHA-256 if you want to check the
 file instead of trusting that sentence.
 
+On a Mac, download **Bokkie.dmg**, open it and drag Bokkie onto Applications.
+The first time, macOS will refuse to open it because it is not notarised: open
+System Settings > Privacy & Security and choose **Open Anyway**.
+
 The installer works offline too. The other files are the Windows program on its
 own (for bokkie update from a USB stick) and the macOS and Linux hosts. See
 docs/runbook.md.
@@ -74,6 +82,7 @@ gh release create "$TAG" \
     --title "Bokkie $TAG" \
     --notes-file "$NOTES" \
     dist/BokkieSetup.exe \
+    dist/Bokkie.dmg \
     dist/bokkie-win-amd64.exe \
     dist/bokkie-mac-arm64 \
     dist/bokkie-mac-amd64 \
