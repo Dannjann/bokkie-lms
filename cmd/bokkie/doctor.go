@@ -101,7 +101,7 @@ func readLANAccess(cfg config.Config) (bool, bool) {
 func startHint() string {
 	switch runtime.GOOS {
 	case "windows":
-		return "sc start bokkie"
+		return "open Bokkie from the Start menu (closing its window is what stops it)"
 	case "darwin":
 		return "sudo launchctl bootstrap system /Library/LaunchDaemons/bokkie.plist"
 	default:

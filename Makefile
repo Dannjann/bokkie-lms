@@ -21,7 +21,7 @@ export CGO_ENABLED := 0
 
 GOOSES := windows darwin linux
 
-.PHONY: all setup dev web-dev web-install web-build install-local test vet-all build-all keygen stage-scripts sign release publish clean ci help
+.PHONY: all setup dev web-dev web-install web-build install-local test vet-all build-all winres installer keygen stage-scripts sign release publish clean ci help
 
 all: build-all
 
@@ -34,6 +34,8 @@ help:
 	@echo "test        go test ./..."
 	@echo "vet-all     go vet once per GOOS, so build-tagged files are type-checked"
 	@echo "build-all   five binaries into dist/, embedding whatever web/dist holds"
+	@echo "winres      re-embed the Windows icon and manifest (after changing either)"
+	@echo "installer   dist/BokkieSetup.exe, the Windows install wizard (needs makensis)"
 	@echo "keygen      create the release signing key (once, ever)"
 	@echo "sign        write and sign dist/latest.json for the current tag"
 	@echo "release     web-build + build-all + sign — the folder that goes on the USB stick"
@@ -144,16 +146,38 @@ stage-scripts: | dist
 dist:
 	@mkdir -p dist
 
+# The Windows icon and manifest, compiled into a resource object the Go linker
+# picks up by its _windows_amd64 suffix. The .syso is committed, so this runs
+# only when installer/windows/bokkie.ico or bokkie.manifest changes. The
+# manifest is not decoration: without it the station window's buttons are
+# drawn the way Windows 95 drew them, and text is blurry on a scaled display.
+winres:
+	go tool rsrc -arch amd64 -manifest installer/windows/bokkie.manifest \
+		-ico installer/windows/bokkie.ico -o cmd/bokkie/rsrc_windows_amd64.syso
+
+# The step-by-step Windows installer, wrapping the Windows binary already in
+# dist/. makensis runs on macOS and Linux (brew install makensis), so the
+# installer is built where the release is signed.
+#
+# VIVERSION is the tag as four numbers, which is the only shape Windows'
+# version resource accepts; anything that is not a plain vX.Y.Z tag is 0.0.0.0.
+INSTALLER_VIVERSION := $(shell echo $(VERSION) | sed -nE 's/^v([0-9]+)\.([0-9]+)\.([0-9]+)$$/\1.\2.\3.0/p')
+installer: | dist
+	@command -v makensis >/dev/null || { echo "installer: makensis not found — brew install makensis"; exit 1; }
+	@test -f dist/bokkie-win-amd64.exe || { echo "installer: dist/bokkie-win-amd64.exe missing — make build-all first"; exit 1; }
+	makensis -V2 -DVERSION=$(VERSION) -DVIVERSION=$(or $(INSTALLER_VIVERSION),0.0.0.0) \
+		-DSOURCE=$(CURDIR)/dist/bokkie-win-amd64.exe -DOUTFILE=$(CURDIR)/dist/BokkieSetup.exe \
+		installer/windows/bokkie.nsi
+
 # A real release, and deliberately stricter than build-all: it refuses to run
 # without an exact version tag and without the signing key, because an unsigned
 # or untagged build is precisely what must never reach the station.
 #
-# BokkieSetup.exe is a copy of the Windows binary, not a different build. The
-# manifest keys artifacts by platform and verifies by hash, so the copy checks
-# out against the same signed entry under either name — which is why the USB
-# folder, the manifest, pick-binary.sh and Install Bokkie.cmd need no change.
-release: web-build build-all stage-scripts sign
-	cp dist/bokkie-win-amd64.exe dist/BokkieSetup.exe
+# BokkieSetup.exe is the install wizard, built after signing from the very
+# binary the manifest describes. It is not itself in the manifest: updates
+# swap bokkie.exe, which is, and the installer is only ever the first install
+# or a person choosing to run a newer one.
+release: web-build build-all stage-scripts sign installer
 	@echo "--- release ---" && ls -1 dist/
 
 # Publishing is local because signing is local: the private release key never

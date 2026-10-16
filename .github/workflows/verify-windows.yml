@@ -56,20 +56,60 @@ jobs:
           Write-Host "$env:TAG exists; checking the assets it holds"
 
       # The release's own assets, not a fresh build: the point is to exercise
-      # the bytes the owner will download, including the copy step that made
-      # BokkieSetup.exe out of bokkie-win-amd64.exe.
+      # the bytes the owner will download. BokkieSetup.exe is the install
+      # wizard; the program it installs is bokkie-win-amd64.exe, which is the
+      # file the signed manifest describes.
       - name: Download the release's own assets
-        run: gh release download "$env:TAG" --repo "${{ github.repository }}" --pattern "BokkieSetup.exe" --pattern "latest.json*"
+        run: gh release download "$env:TAG" --repo "${{ github.repository }}" --pattern "BokkieSetup.exe" --pattern "bokkie-win-amd64.exe" --pattern "latest.json*"
 
       - name: It is the binary the signed manifest describes
         run: |
           $want = (Get-Content latest.json | ConvertFrom-Json).artifacts |
                   Where-Object { $_.platform -eq "windows/amd64" }
-          $got = (Get-FileHash BokkieSetup.exe -Algorithm SHA256).Hash.ToLower()
+          $got = (Get-FileHash bokkie-win-amd64.exe -Algorithm SHA256).Hash.ToLower()
           if ($got -ne $want.sha256) {
-            throw "BokkieSetup.exe hashes $got, the manifest says $($want.sha256)"
+            throw "bokkie-win-amd64.exe hashes $got, the manifest says $($want.sha256)"
           }
-          Write-Host "BokkieSetup.exe matches the manifest entry for $($want.file)"
+          Write-Host "bokkie-win-amd64.exe matches the manifest entry for $($want.file)"
+
+      # The wizard, run silently with its default choice: a station computer.
+      - name: The installer installs the program and nothing that starts it
+        run: |
+          $p = Start-Process -FilePath .\BokkieSetup.exe -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "the installer exited $($p.ExitCode)" }
+
+          $exe = Join-Path $env:ProgramFiles 'Bokkie\bokkie.exe'
+          if (-not (Test-Path $exe)) { throw "bokkie.exe was not installed at $exe" }
+          $want = (Get-Content latest.json | ConvertFrom-Json).artifacts | Where-Object { $_.platform -eq "windows/amd64" }
+          if ((Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() -ne $want.sha256) {
+            throw "the installed bokkie.exe is not the signed binary"
+          }
+          if (-not (Test-Path (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Bokkie.lnk'))) {
+            throw "no Start menu entry"
+          }
+          if (-not (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Bokkie' -ErrorAction SilentlyContinue)) {
+            throw "no Add/Remove Programs entry"
+          }
+          netsh advfirewall firewall show rule name="Bokkie LMS" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "no firewall rule" }
+          if (Get-Service bokkie -ErrorAction SilentlyContinue) { throw "the installer registered a service" }
+          Write-Host "installed: program, Start menu, Add/Remove Programs, firewall rule; no service"
+
+      - name: The uninstaller removes it and keeps the records
+        run: |
+          $dir = Join-Path $env:ProgramFiles 'Bokkie'
+          # _?= keeps the uninstaller from copying itself away and returning
+          # before it has finished.
+          $p = Start-Process -FilePath (Join-Path $dir 'Uninstall.exe') -ArgumentList '/S', "_?=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "the uninstaller exited $($p.ExitCode)" }
+          if (Test-Path (Join-Path $dir 'bokkie.exe')) { throw "bokkie.exe is still there" }
+          if (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Bokkie' -ErrorAction SilentlyContinue) {
+            throw "the Add/Remove Programs entry is still there"
+          }
+          netsh advfirewall firewall show rule name="Bokkie LMS" | Out-Null
+          if ($LASTEXITCODE -eq 0) { throw "the firewall rule is still there" }
+          Write-Host "uninstalled cleanly"
+          exit 0
 
       # The one line in the diff that no test and no type-check can judge.
       # GetConsoleProcessList is declared by hand against kernel32; if the proc
@@ -77,7 +117,7 @@ jobs:
       # window that flashes and vanishes — the exact failure this closes.
       - name: The console can be counted
         run: |
-          $count = .\BokkieSetup.exe setup --probe-console
+          $count = .\bokkie-win-amd64.exe setup --probe-console
           if (-not ($count -match '^\d+$')) { throw "probe-console printed '$count', not a number" }
           if ([int]$count -lt 1) {
             throw "GetConsoleProcessList returned $count with a console attached; a double-click would show usage and vanish"
@@ -89,7 +129,7 @@ jobs:
       # requirement undone by anybody who types it.
       - name: Installing is refused
         run: |
-          $out = .\BokkieSetup.exe install 2>&1 | Out-String
+          $out = .\bokkie-win-amd64.exe install 2>&1 | Out-String
           Write-Host $out
           if ($LASTEXITCODE -eq 0) { throw "bokkie install succeeded on Windows; it must refuse" }
           if ($out -notmatch 'while its window is open') { throw "the refusal does not say what to do instead:`n$out" }
@@ -97,7 +137,7 @@ jobs:
 
       - name: Start the station
         run: |
-          $p = Start-Process -FilePath .\BokkieSetup.exe -ArgumentList 'serve','--no-window' -PassThru
+          $p = Start-Process -FilePath .\bokkie-win-amd64.exe -ArgumentList 'serve','--no-window' -PassThru
           $p.Id | Out-File station.pid
           Write-Host "station pid $($p.Id)"
 
@@ -119,7 +159,7 @@ jobs:
       # is doctor being right.
       - name: The self-check reads the station correctly
         run: |
-          $out = .\BokkieSetup.exe doctor 2>&1 | Out-String
+          $out = .\bokkie-win-amd64.exe doctor 2>&1 | Out-String
           Write-Host $out
           if ($out -notmatch '\[\s*ok\s*\].*running on this computer') {
             throw "doctor did not see the station it has just watched answer"
