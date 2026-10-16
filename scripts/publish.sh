@@ -55,15 +55,17 @@ fi
 NOTES=$(mktemp)
 trap 'rm -f "$NOTES"' EXIT
 cat > "$NOTES" <<NOTE
-Download **BokkieSetup.exe** and double-click it. That is the whole install.
+Download **BokkieSetup.exe** and run it — a step-by-step installer. Choose
+**Station computer** on the host and **Counter PC** on each counter computer.
 
 Windows will show "Windows protected your PC" because this file is not signed
 by a certificate this project has bought. Choose **More info**, then
 **Run anyway**. The downloads page carries the SHA-256 if you want to check the
 file instead of trusting that sentence.
 
-The other files are for an offline install from a USB stick, and for macOS and
-Linux hosts. See docs/runbook.md.
+The installer works offline too. The other files are the Windows program on its
+own (for bokkie update from a USB stick) and the macOS and Linux hosts. See
+docs/runbook.md.
 NOTE
 
 echo "publish: creating draft release $TAG"
