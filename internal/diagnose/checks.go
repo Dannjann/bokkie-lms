@@ -50,6 +50,13 @@ type Options struct {
 	// can do.
 	AutoStart []string
 
+	// Firewall is whether Windows Firewall keeps the other computers out:
+	// FirewallChecked says it was asked at all, FirewallProblem is empty when
+	// nothing is in the way. Filled in by the caller, Windows only.
+	FirewallChecked bool
+	FirewallProblem string
+	FirewallFix     string
+
 	// LookupHost resolves a name. nil means net.LookupHost.
 	LookupHost func(string) ([]string, error)
 	// LocalAddresses are this machine's own IPv4 addresses.
@@ -105,6 +112,7 @@ func Run(opts Options) Report {
 	}
 	checkAutoStart(&r, opts)
 	checkLANAccess(&r, opts)
+	checkFirewall(&r, opts)
 	addresses := checkName(&r, opts)
 	checkNameReachable(&r, opts, addresses)
 	checkBarePort(&r, opts)
@@ -208,6 +216,23 @@ func checkLANAccess(r *Report, opts Options) {
 			State:  Note,
 			Detail: "network access is set to this machine only, so the name is not advertised and the counter PCs are refused",
 		})
+	}
+}
+
+// checkFirewall reports Windows keeping the counter PCs out.
+//
+// It is the fault behind "127.0.0.1 works on the host and nothing works from
+// anywhere else": the app is fine, the port is open, and Windows drops every
+// connection that did not come from this computer.
+func checkFirewall(r *Report, opts Options) {
+	const name = "Windows lets the other computers in"
+	switch {
+	case !opts.FirewallChecked:
+		return
+	case opts.FirewallProblem != "":
+		r.Add(Check{Name: name, State: Problem, Detail: opts.FirewallProblem, Fix: opts.FirewallFix})
+	default:
+		r.Add(Check{Name: name, State: OK, Detail: "the network is Private and the firewall rule is in place"})
 	}
 }
 

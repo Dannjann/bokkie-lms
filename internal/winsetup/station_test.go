@@ -86,3 +86,15 @@ func TestDescribeBackup(t *testing.T) {
 		}
 	}
 }
+
+// The report after v0.0.6: 127.0.0.1 works on the host and nothing works from
+// anywhere else. A green "running" over that is the window lying.
+func TestStationBlockedByTheFirewallIsNotGreen(t *testing.T) {
+	v := DescribeStation(StationFacts{
+		State: StationRunning, Asked: true, Answering: true, Port: 8080,
+		Blocked: &Blocked{Problem: "public network", Fix: "make it Private"},
+	})
+	if v.Tone != ToneBad || !strings.Contains(v.Detail, "make it Private") {
+		t.Fatalf("got %+v", v)
+	}
+}
