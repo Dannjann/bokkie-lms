@@ -143,7 +143,23 @@ func (s *station) watch() {
 	tick := time.NewTicker(3 * time.Second)
 	defer tick.Stop()
 
+	// The firewall is asked less often: it is two child processes, and a
+	// network profile changes when somebody changes it, not every second.
+	var blocked *winsetup.Blocked
+	var lastFirewall time.Time
+
 	for {
+		if time.Since(lastFirewall) > 30*time.Second {
+			lastFirewall = time.Now()
+			if b, isBlocked, ok := winsetup.CheckFirewall(); ok {
+				blocked = nil
+				if isBlocked {
+					blocked = &b
+					s.log.Warn("Windows is keeping the other computers out", "problem", b.Problem, "fix", b.Fix)
+				}
+			}
+		}
+
 		answering := false
 		if resp, err := client.Get(url); err == nil {
 			answering = resp.StatusCode == http.StatusOK
@@ -157,6 +173,7 @@ func (s *station) watch() {
 		s.update(func(f *winsetup.StationFacts) {
 			f.Asked, f.Answering = true, answering
 			f.LastBackup, f.Addresses = at, addresses
+			f.Blocked = blocked
 		})
 
 		select {

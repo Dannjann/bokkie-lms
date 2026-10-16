@@ -323,3 +323,16 @@ func TestAnUnusableDataFolderIsTheOnlyThingReported(t *testing.T) {
 		}
 	}
 }
+
+func TestFirewallBlockIsAProblemWithAFix(t *testing.T) {
+	var r Report
+	checkFirewall(&r, Options{FirewallChecked: true, FirewallProblem: "public network", FirewallFix: "make it Private"})
+	if len(r.Checks) != 1 || r.Checks[0].State != Problem || r.Checks[0].Fix == "" {
+		t.Fatalf("got %+v", r.Checks)
+	}
+	r = Report{}
+	checkFirewall(&r, Options{})
+	if len(r.Checks) != 0 {
+		t.Fatalf("an unasked question must print nothing: %+v", r.Checks)
+	}
+}

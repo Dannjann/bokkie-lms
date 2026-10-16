@@ -369,7 +369,7 @@ const (
 	layoutMargin  = 20
 	layoutLabelW  = 120
 	layoutRowH    = 22
-	layoutRowsTop = 112
+	layoutRowsTop = 132
 	layoutButtonH = 30
 )
 
@@ -388,7 +388,7 @@ func (w *stationWindow) outerSize(style uintptr) (int, int) {
 func (w *stationWindow) build(instance windows.Handle) {
 	m, inner := layoutMargin, layoutWidth-2*layoutMargin
 	w.headline = w.child(instance, "STATIC", "", ssNoPrefix, m, 16, inner, 34, w.fontHl)
-	w.detail = w.child(instance, "STATIC", "", ssNoPrefix, m, 54, inner, 48, w.fontNormal)
+	w.detail = w.child(instance, "STATIC", "", ssNoPrefix, m, 54, inner, 70, w.fontNormal)
 	for i := range w.values {
 		y := layoutRowsTop + i*layoutRowH
 		w.labels[i] = w.child(instance, "STATIC", "", ssNoPrefix, m, y, layoutLabelW, layoutRowH, w.fontNormal)

@@ -57,6 +57,12 @@ func diagnoseHost(dataDir string) diagnose.Report {
 	opts.LocalAddresses = diagnose.LocalIPv4()
 	opts.StartHint = startHint()
 	opts.AutoStart = leftoverAutoStart()
+	if blocked, isBlocked, ok := winsetup.CheckFirewall(); ok {
+		opts.FirewallChecked = true
+		if isBlocked {
+			opts.FirewallProblem, opts.FirewallFix = blocked.Problem, blocked.Fix
+		}
+	}
 	if err == nil {
 		opts.LogDir = cfg.LogDir()
 	}

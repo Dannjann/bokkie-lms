@@ -43,6 +43,10 @@ type StationFacts struct {
 	Addresses []string
 	DataDir   string
 
+	// Blocked, when set, is Windows keeping every other computer out while
+	// this one is served perfectly well.
+	Blocked *Blocked
+
 	LastBackup time.Time
 	Version    string
 	Now        time.Time
@@ -99,6 +103,10 @@ func DescribeStation(f StationFacts) StationView {
 		switch {
 		case !f.Asked:
 			v.Headline = "Bokkie is starting up…"
+		case f.Answering && f.Blocked != nil:
+			v.Headline = "Running, but only on this computer"
+			v.Tone = ToneBad
+			v.Detail = f.Blocked.Problem + "\n" + f.Blocked.Fix
 		case f.Answering:
 			v.Headline = "Bokkie is running"
 			v.Tone = ToneGood
