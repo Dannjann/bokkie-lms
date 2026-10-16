@@ -80,7 +80,7 @@ func TestAnUnwritableFolderIsNoticedAndExplained(t *testing.T) {
 	}
 
 	message := adoptedUnwritable(locked, err).Error()
-	for _, want := range []string{locked, "no records have been lost", "Let Bokkie fix this"} {
+	for _, want := range []string{locked, "no records have been lost", "offers to fix this"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("the message is missing %q:\n%s", want, message)
 		}
@@ -128,7 +128,7 @@ func TestAWritableFolderHoldingAReadOnlyDatabaseIsNotWritable(t *testing.T) {
 
 	// And the message a person reads names the folder and the one command.
 	message := adoptedUnwritable(dir, err).Error()
-	for _, want := range []string{dir, "Let Bokkie fix this", "no records have been lost"} {
+	for _, want := range []string{dir, "offers to fix this", "no records have been lost"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("the message is missing %q:\n%s", want, message)
 		}

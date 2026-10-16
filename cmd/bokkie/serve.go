@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -20,6 +21,9 @@ import (
 // serves and far shorter than a person's patience with a window that will not
 // close.
 const shutdownWait = 10 * time.Second
+
+// errNoStationWindow is runStationWindow asked for somewhere it does not exist.
+var errNoStationWindow = errors.New("the station window exists only on Windows; use serve")
 
 // cmdServe runs the station in this window. Closing the window stops it, and
 // nothing else starts it — see docs/plans/02.7-window-is-the-server.md.
@@ -36,6 +40,12 @@ func cmdServe(args []string) error {
 	opts, err := runOptions(*dev, *viteURL)
 	if err != nil {
 		return err
+	}
+
+	// On Windows the window is a native one this process owns, and it is
+	// the switch: see runStationWindow for why a browser window could not be.
+	if runtime.GOOS == "windows" && !*noWindow {
+		return runStationWindow(*dataDir, opts)
 	}
 
 	cfg, log, closeLog, err := bootstrap(*dataDir, true)

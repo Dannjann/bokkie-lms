@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Dannjann/bokkie-lms/internal/app"
 	"github.com/Dannjann/bokkie-lms/internal/buildinfo"
 	"github.com/Dannjann/bokkie-lms/internal/winsetup"
 )
@@ -29,8 +30,9 @@ commands:
   import-customers
                load the customer master from a CSV file
                (-check to see what it would do without writing anything)
-  serve        run the station in this window; closing it stops the station
-  setup        the guided install window — what double-clicking this file runs
+  serve        open the station window; closing it stops the station
+               (on Windows a native window, which is what double-clicking runs)
+  setup        the console menu: a counter-PC shortcut, a check, an update
   doctor       check why the station cannot be reached, and change nothing
 
 run "bokkie <command> -h" for the flags of a single command.
@@ -38,10 +40,12 @@ run "bokkie <command> -h" for the flags of a single command.
 
 func main() {
 	if len(os.Args) < 2 {
-		// A double-click gets the guided window; everything else keeps the
-		// behaviour scripts and the Makefile rely on.
+		// A double-click opens the station window; everything else keeps the
+		// behaviour scripts and the Makefile rely on. The console menu that
+		// used to open here is still `bokkie setup`.
 		if winsetup.LaunchedFromExplorer(winsetup.ConsoleProcessCount(), len(os.Args)) {
-			if err := runGuidedSetup(nil); err != nil {
+			if err := runStationWindow("", app.Options{}); err != nil {
+				winsetup.Report("Bokkie", err.Error())
 				fmt.Fprintln(os.Stderr, "bokkie:", err)
 				os.Exit(1)
 			}
@@ -75,6 +79,8 @@ func main() {
 		err = runGuidedSetup(args)
 	case "doctor":
 		err = cmdDoctor(args)
+	case "installer-hook":
+		err = cmdInstallerHook(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return

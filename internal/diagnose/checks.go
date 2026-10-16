@@ -249,8 +249,8 @@ func checkName(r *Report, opts Options) []string {
 			"\n"+
 			"If it does not work there either, use this computer's address instead:\n"+
 			"  http://"+firstOr(opts.LocalAddresses, "<this computer's IP>")+":"+strconv.Itoa(opts.Port)+"\n"+
-			"On the counter PCs, run BokkieSetup.exe and choose the shortcut option,\n"+
-			"then give it that address when it asks."
+			"On the counter PCs, run BokkieSetup.exe, choose \"Counter PC\",\n"+
+			"and give it that address when it asks."
 		if opts.LANAccessKnown && !opts.LANAccess {
 			// Withdrawn on purpose. Saying "FAIL" here would be reporting a
 			// setting as a fault.

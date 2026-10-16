@@ -130,8 +130,8 @@ func (e *UnwritableError) Error() string {
 		"\n"+
 		"Nothing has been changed and no records have been lost.\n"+
 		"\n"+
-		"Run Bokkie again and choose \"Let Bokkie fix this\" — it will ask for\n"+
-		"permission once and then open normally.\n"+
+		"Open Bokkie again and answer Yes when it offers to fix this — Windows\n"+
+		"asks for permission once, and Bokkie opens normally after that.\n"+
 		"\n"+
 		"(%v)", ErrDataFolderUnwritable, e.Dir, e.Cause)
 }
