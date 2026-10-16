@@ -39,18 +39,19 @@ run "bokkie <command> -h" for the flags of a single command.
 `
 
 func main() {
-	if len(os.Args) < 2 {
-		// A double-click opens the station window; everything else keeps the
-		// behaviour scripts and the Makefile rely on. The console menu that
-		// used to open here is still `bokkie setup`.
-		if winsetup.LaunchedFromExplorer(winsetup.ConsoleProcessCount(), len(os.Args)) {
-			if err := runStationWindow("", app.Options{}); err != nil {
-				winsetup.Report("Bokkie", err.Error())
-				fmt.Fprintln(os.Stderr, "bokkie:", err)
-				os.Exit(1)
-			}
-			return
+	// Opened as a program — double-clicked on Windows, Bokkie.app on a Mac —
+	// it is the station window; everything else keeps the behaviour scripts
+	// and the Makefile rely on. The console menu that used to open on a
+	// Windows double-click is still `bokkie setup`.
+	if openedAsApp() {
+		if err := runStationWindow("", app.Options{}); err != nil {
+			winsetup.Report("Bokkie", err.Error())
+			fmt.Fprintln(os.Stderr, "bokkie:", err)
+			os.Exit(1)
 		}
+		return
+	}
+	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}

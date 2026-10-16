@@ -22,7 +22,7 @@ copy back.
 
 | What | Windows | macOS | Linux |
 |---|---|---|---|
-| Data folder | `%LOCALAPPDATA%\Bokkie` (or `C:\ProgramData\Bokkie`, kept from an older version) | `/Library/Application Support/Bokkie` | `/var/lib/bokkie` |
+| Data folder | `%LOCALAPPDATA%\Bokkie` (or `C:\ProgramData\Bokkie`, kept from an older version) | `~/Library/Application Support/Bokkie` for Bokkie.app; `/Library/Application Support/Bokkie` for the service | `/var/lib/bokkie` |
 | The database | `<data folder>\bokkie.db` | `<data folder>/bokkie.db` | `<data folder>/bokkie.db` |
 | Backups | `<data folder>\backups` | `<data folder>/backups` | `<data folder>/backups` |
 | Logs | `<data folder>\logs` | `<data folder>/logs` | `<data folder>/logs` |
@@ -269,7 +269,31 @@ window with no address bar and no tabs. Nothing else is installed.
 If `bokkie.local` does not work on that PC, run the installer again and type
 the number address instead, for example `http://192.168.1.50:8080`.
 
-### macOS or Linux host
+### macOS — the app
+
+1. Download **Bokkie.dmg** from
+   **https://dannjann.github.io/bokkie-lms/**, open it, and drag **Bokkie**
+   onto **Applications**.
+2. Open Bokkie from Applications. The first time, macOS refuses because the app
+   is not notarised by Apple. Open **System Settings → Privacy & Security**,
+   scroll down, and click **Open Anyway**. It does not ask again.
+3. The Bokkie window works exactly as on Windows: it shows whether Bokkie is
+   running and the addresses for the other computers, and **closing it stops
+   Bokkie**. Cmd-Q does the same, and waits for the closing backup.
+
+The app keeps its records in `~/Library/Application Support/Bokkie` — the
+records of whoever opens it. To update, close Bokkie, download the new DMG, and
+drag it onto Applications again, replacing the old one. The records are not
+inside the app and are not touched.
+
+The first time it opens, macOS may ask whether Bokkie may accept incoming
+network connections. Click **Allow**, or the other computers cannot reach it.
+
+### macOS or Linux host, as a background service
+
+This is the other way to run Bokkie on a Mac: it starts with the computer and
+runs with nobody logged in, instead of while a window is open. Do not use both
+on one Mac — they would compete for the same port.
 
 Download the release folder from
 [the releases page](https://github.com/Dannjann/bokkie-lms/releases/latest),

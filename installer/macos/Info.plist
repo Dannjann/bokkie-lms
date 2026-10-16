@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Bokkie.app. VERSION and SHORTVERSION are filled in by `make dmg`. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Bokkie</string>
+	<key>CFBundleDisplayName</key>
+	<string>Bokkie</string>
+	<key>CFBundleIdentifier</key>
+	<string>ph.tlspalaycorn.bokkie</string>
+	<key>CFBundleExecutable</key>
+	<string>bokkie</string>
+	<key>CFBundleIconFile</key>
+	<string>bokkie</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>SHORTVERSION</string>
+	<key>CFBundleVersion</key>
+	<string>VERSION</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticGraphicsAppSwitching</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>TLS Palay and Corn</string>
+</dict>
+</plist>

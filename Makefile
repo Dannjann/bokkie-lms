@@ -21,7 +21,7 @@ export CGO_ENABLED := 0
 
 GOOSES := windows darwin linux
 
-.PHONY: all setup dev web-dev web-install web-build install-local test vet-all build-all winres installer keygen stage-scripts sign release publish clean ci help
+.PHONY: all setup dev web-dev web-install web-build install-local test vet-all build-all winres installer mac-app dmg keygen stage-scripts sign release publish clean ci help
 
 all: build-all
 
@@ -36,6 +36,7 @@ help:
 	@echo "build-all   five binaries into dist/, embedding whatever web/dist holds"
 	@echo "winres      re-embed the Windows icon and manifest (after changing either)"
 	@echo "installer   dist/BokkieSetup.exe, the Windows install wizard (needs makensis)"
+	@echo "dmg         dist/Bokkie.dmg, Bokkie.app for macOS (on a Mac: lipo, codesign, hdiutil)"
 	@echo "keygen      create the release signing key (once, ever)"
 	@echo "sign        write and sign dist/latest.json for the current tag"
 	@echo "release     web-build + build-all + sign — the folder that goes on the USB stick"
@@ -169,6 +170,37 @@ installer: | dist
 		-DSOURCE=$(CURDIR)/dist/bokkie-win-amd64.exe -DOUTFILE=$(CURDIR)/dist/BokkieSetup.exe \
 		installer/windows/bokkie.nsi
 
+# Bokkie.app: one universal binary — the two Mac builds already in dist/,
+# joined — with the icon and an Info.plist. It is the same program as the
+# command-line bokkie; opened as an app it shows the station window.
+#
+# Signed ad hoc, not with a Developer ID: this project has no Apple developer
+# account, so the app is not notarised and macOS asks the first time it is
+# opened (System Settings > Privacy & Security > Open Anyway). Ad hoc is still
+# required — Apple silicon will not run an unsigned binary at all, and joining
+# two signed binaries with lipo is not itself signed.
+MAC_SHORTVERSION := $(or $(shell echo $(VERSION) | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)$$/\1/p'),0.0.0)
+mac-app: | dist
+	@test -f dist/bokkie-mac-arm64 -a -f dist/bokkie-mac-amd64 || { echo "mac-app: the Mac binaries are missing — make build-all first"; exit 1; }
+	rm -rf dist/Bokkie.app
+	mkdir -p dist/Bokkie.app/Contents/MacOS dist/Bokkie.app/Contents/Resources
+	lipo -create dist/bokkie-mac-arm64 dist/bokkie-mac-amd64 -output dist/Bokkie.app/Contents/MacOS/bokkie
+	cp installer/macos/bokkie.icns dist/Bokkie.app/Contents/Resources/bokkie.icns
+	sed -e 's/SHORTVERSION/$(MAC_SHORTVERSION)/' -e 's/>VERSION</>$(VERSION)</' \
+		installer/macos/Info.plist > dist/Bokkie.app/Contents/Info.plist
+	codesign --force --deep --sign - dist/Bokkie.app
+
+# The disk image: Bokkie.app beside a link to Applications, which is the
+# whole of a Mac install — drag one onto the other.
+dmg: mac-app
+	rm -rf dist/dmg dist/Bokkie.dmg
+	mkdir -p dist/dmg
+	cp -R dist/Bokkie.app dist/dmg/
+	ln -s /Applications dist/dmg/Applications
+	hdiutil create -quiet -volname "Bokkie $(VERSION)" -srcfolder dist/dmg -fs HFS+ -format UDZO -ov dist/Bokkie.dmg
+	rm -rf dist/dmg
+	@echo "dist/Bokkie.dmg"
+
 # A real release, and deliberately stricter than build-all: it refuses to run
 # without an exact version tag and without the signing key, because an unsigned
 # or untagged build is precisely what must never reach the station.
@@ -177,7 +209,7 @@ installer: | dist
 # binary the manifest describes. It is not itself in the manifest: updates
 # swap bokkie.exe, which is, and the installer is only ever the first install
 # or a person choosing to run a newer one.
-release: web-build build-all stage-scripts sign installer
+release: web-build build-all stage-scripts sign installer dmg
 	@echo "--- release ---" && ls -1 dist/
 
 # Publishing is local because signing is local: the private release key never

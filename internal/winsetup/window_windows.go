@@ -49,11 +49,11 @@ var (
 	procReleaseDC        = user32.NewProc("ReleaseDC")
 	procInvalidateRect   = user32.NewProc("InvalidateRect")
 
-	procCreateFontW      = gdi32.NewProc("CreateFontW")
-	procGetDeviceCaps    = gdi32.NewProc("GetDeviceCaps")
-	procSetTextColor     = gdi32.NewProc("SetTextColor")
-	procSetBkMode        = gdi32.NewProc("SetBkMode")
-	procGetStockObject   = gdi32.NewProc("GetStockObject")
+	procCreateFontW    = gdi32.NewProc("CreateFontW")
+	procGetDeviceCaps  = gdi32.NewProc("GetDeviceCaps")
+	procSetTextColor   = gdi32.NewProc("SetTextColor")
+	procSetBkMode      = gdi32.NewProc("SetBkMode")
+	procGetStockObject = gdi32.NewProc("GetStockObject")
 
 	procGetModuleHandleW = kernel32.NewProc("GetModuleHandleW")
 	procFreeConsole      = kernel32.NewProc("FreeConsole")
@@ -155,26 +155,6 @@ type winMsg struct {
 }
 
 type rect struct{ Left, Top, Right, Bottom int32 }
-
-// StationHooks is how the window reaches the station without knowing what one
-// is. Every hook except Snapshot may block, and is called off the window's
-// thread.
-type StationHooks struct {
-	Title string
-	// Snapshot is asked for what to draw, once a second, on the window's
-	// thread. It must return at once.
-	Snapshot func() StationView
-	// Open opens the station in the person's own browser.
-	Open func()
-	// Check runs the self-check and returns its report.
-	Check func() string
-	// Stop stops the station and returns when it has. It is called once, when
-	// the window is closed or the Stop button pressed.
-	Stop func()
-	// StopWanted closes when something other than this window asked for the
-	// station to stop — the Stop button on its web screen.
-	StopWanted <-chan struct{}
-}
 
 // stationWindow is the one window of this process. A package variable rather
 // than a lookup from the handle because there is exactly one, and the window
