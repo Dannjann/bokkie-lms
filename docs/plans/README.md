@@ -19,6 +19,7 @@ Station**, Pintor Gamu, Isabela.
 | [02.6-implementation-plan.md](02.6-implementation-plan.md) | Step 2.6 — the work order it was built from | ✅ Executed |
 | [02.7-window-is-the-server.md](02.7-window-is-the-server.md) | Step 2.7 — the window is the server; nothing auto-starts | 🟨 Built, gate pending |
 | [02.7-implementation-plan.md](02.7-implementation-plan.md) | Step 2.7 — the work order it was built from | ✅ Executed |
+| [02.8-installer-and-station-window.md](02.8-installer-and-station-window.md) | Step 2.8 — the install wizard, and a native window as the switch | 🟨 Built, not run on Windows |
 | [../runbook.md](../runbook.md) | Operating and restoring, for the owner | ✅ Written |
 | [03-ledger-core.md](03-ledger-core.md) | Step 3 — money type and the ledger spine | ✅ Built, gate passed |
 | [04-customers.md](04-customers.md) | Step 4 — customer master, `BA-####` codes, search, CSV import | ✅ Built, gate passed |

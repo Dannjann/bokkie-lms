@@ -21,11 +21,11 @@
      editing when a release is cut. -->
 <a class="download" id="download" href="https://github.com/Dannjann/bokkie-lms/releases/latest/download/BokkieSetup.exe">
     Download Bokkie for Windows
-    <small>One file. Windows 10 or later, 64-bit.</small>
+    <small>A step-by-step installer. Windows 10 or later, 64-bit.</small>
 </a>
 <p class="meta" id="meta">
     Version <span id="version">— see latest.json</span> ·
-    SHA-256 <span id="sha256">— see latest.json</span>
+    Program SHA-256 <span id="sha256">— see latest.json</span>
 </p>
 
 <!-- Shown only when GitHub says, definitively, that no release has been
@@ -57,28 +57,32 @@
         <li>Click <strong>Run anyway</strong>.</li>
     </ol>
     <p>
-        If you would rather check the file than take that on trust, the SHA-256
-        above is published inside the signed
-        <a href="https://github.com/Dannjann/bokkie-lms/releases/latest/download/latest.json">latest.json</a>.
-        In PowerShell: <code>Get-FileHash BokkieSetup.exe</code>
+        If you would rather check the program than take that on trust, the
+        SHA-256 above is published inside the signed
+        <a href="https://github.com/Dannjann/bokkie-lms/releases/latest/download/latest.json">latest.json</a>
+        and is the hash of the program the installer puts in place. After
+        installing, in PowerShell:
+        <code>Get-FileHash "C:\Program Files\Bokkie\bokkie.exe"</code>
     </p>
 </div>
 
 <h2>What happens when you run it</h2>
 <ol>
-    <li>A black window opens and asks what you want to do. Choose
-        <strong>Start Bokkie here</strong> by typing its number and pressing
-        Enter.</li>
-    <li>A second window opens showing that Bokkie is running, the address the
-        counter computers use, and when it last backed up.</li>
-    <li>Windows may ask whether to allow Bokkie on the network. Say yes.</li>
-    <li>Open <code>http://bokkie.local:8080</code> on a counter computer, or
-        press <strong>Open Bokkie</strong> on the window.</li>
+    <li>Approve the administrator prompt. The Bokkie Setup wizard opens.</li>
+    <li>Click <strong>Next</strong>. On <strong>Choose components</strong>
+        leave it on <strong>Station computer</strong>.</li>
+    <li>Click <strong>Next</strong> and <strong>Install</strong>, then
+        <strong>Finish</strong> with <strong>Open Bokkie now</strong> ticked.</li>
+    <li>The Bokkie window opens. When it says <strong>Bokkie is running</strong>
+        in green, the counter computers can use it at the address it shows.</li>
 </ol>
 <p>
-    That second window is the station&rsquo;s switch. It also shows when Bokkie
-    last backed up, and has a <strong>Stop Bokkie</strong> button and a check
-    that explains what is wrong when something is.
+    That window is the station&rsquo;s switch. It shows the address for the
+    counter computers and when Bokkie last backed up, and has an
+    <strong>Open Bokkie in browser</strong> button, a <strong>Run a
+    check</strong> button that explains what is wrong when something is, and a
+    <strong>Stop Bokkie</strong> button. Afterwards, open it from the Start
+    menu or the desktop icon.
 </p>
 <div class="warning">
     <h2>Bokkie runs only while that window is open</h2>
@@ -96,28 +100,22 @@
 </div>
 <h2>Upgrading a computer that had an older Bokkie</h2>
 <p>
-    The first time you run this on a station that had an older version, it may
-    say it found your records but cannot write to them. That is expected: the
-    older version ran as a Windows service, and the folder holding your records
-    belongs to that service rather than to you.
+    Close the Bokkie window if it is open, then run the new installer exactly as
+    for a first install. Your records stay where they are.
 </p>
 <p>
-    Choose <strong>Let Bokkie fix this</strong> and allow the permission prompt
-    once. Nothing inside the folder is changed &mdash; every advance, payment
-    and backup stays exactly where it is &mdash; and Bokkie will not ask again.
-</p>
-<p>
-    It will also offer to <strong>remove the old Bokkie service</strong>. Say
-    yes. That service is what used to start the station on its own, which this
-    version deliberately does not do.
+    If the older version had been installed as a Windows service, the installer
+    removes that service &mdash; it is what used to start the station on its
+    own, which this version deliberately does not do &mdash; and gives the
+    people who use this computer access to the records it left behind.
 </p>
 
 <h2>On the counter computers</h2>
 <p>
-    Run the same file on each counter PC and choose
-    <strong>Put a Bokkie shortcut on this computer&rsquo;s desktop</strong>.
-    That needs no administrator password and installs nothing &mdash; it only
-    puts an icon on the desktop that opens Bokkie.
+    Run the same file on each counter PC and, on <strong>Choose
+    components</strong>, pick <strong>Counter PC</strong>. Type the address the
+    Bokkie window on the station shows. That puts an icon on the desktop that
+    opens Bokkie, and installs nothing else.
 </p>
 
 <h2>If the station has no internet</h2>
@@ -129,8 +127,8 @@
 <div class="card">
     <h3>BokkieSetup.exe</h3>
     <p>
-        The same one file. Copy it to the host computer and double-click it &mdash;
-        there is nothing else to run and nothing to install.
+        The same one file. Copy it to the host computer and run it &mdash; the
+        program is inside it, and it needs no connection.
     </p>
 </div>
 <p>

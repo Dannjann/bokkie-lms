@@ -22,7 +22,7 @@ copy back.
 
 | What | Windows | macOS | Linux |
 |---|---|---|---|
-| Data folder | `C:\ProgramData\Bokkie` | `/Library/Application Support/Bokkie` | `/var/lib/bokkie` |
+| Data folder | `%LOCALAPPDATA%\Bokkie` (or `C:\ProgramData\Bokkie`, kept from an older version) | `/Library/Application Support/Bokkie` | `/var/lib/bokkie` |
 | The database | `<data folder>\bokkie.db` | `<data folder>/bokkie.db` | `<data folder>/bokkie.db` |
 | Backups | `<data folder>\backups` | `<data folder>/backups` | `<data folder>/backups` |
 | Logs | `<data folder>\logs` | `<data folder>/logs` | `<data folder>/logs` |
@@ -41,14 +41,28 @@ actually using, rather than trusting the table above.
 Bokkie runs in a window on the host computer, and only while that window is
 open.
 
-- **To open it:** double-click `BokkieSetup.exe` and choose **Start Bokkie
-  here**. A window appears showing that it is running and the address to use.
+- **To open it:** click **Bokkie** in the Start menu, or the Bokkie icon on
+  the desktop. A small Bokkie window appears. It says **Bokkie is running** in
+  green once the counter computers can use it.
 - **To close it:** close that window, or press **Stop Bokkie** on it. Either
-  way a backup is taken on the way out, so closing it is itself a save.
+  way a backup is taken on the way out, so closing it is itself a save. The
+  window says *Stopping Bokkie…* while it does that and closes by itself.
 
-The window has three things on it: whether Bokkie is running, an **Open
-Bokkie** button that opens the address the counter computers use, and when the
-last backup was taken. Underneath there is a link to the check described below.
+The window shows whether Bokkie is running, the address for this computer and
+the address the counter computers use, when the last backup was taken, and
+where the records are. It has three buttons:
+
+- **Open Bokkie in browser** — opens the system on this computer.
+- **Run a check** — the self-check described under *When nobody can reach
+  Bokkie*, in a window you can copy from.
+- **Stop Bokkie** — stops it for every computer at the station and closes.
+
+If the window says **Bokkie is not answering** in red, it is open but its own
+address refuses to connect. Press **Run a check** and send the developer what
+it says. If it says **Bokkie could not start**, the line under it says why.
+
+Opening Bokkie a second time does not start a second copy; it brings the open
+window to the front.
 
 **Nothing opens it for you.** Not a restart, not a Windows update, not logging
 in. That is deliberate — Bokkie is open when a person has opened it and at no
@@ -222,7 +236,7 @@ It prints the row counts, or explains what is wrong with the file.
 
 ## Installing on a new computer
 
-### Windows — one file
+### Windows — the installer
 
 1. On the computer that will be the host, open
    **https://dannjann.github.io/bokkie-lms/** and click
@@ -230,26 +244,30 @@ It prints the row counts, or explains what is wrong with the file.
 2. Double-click it. Windows will say *"Windows protected your PC"* — **this is
    expected**, because the program is not signed by a certificate we pay a
    yearly fee for. Click **More info**, then **Run anyway**.
-3. A black window opens and asks what you want to do. Choose **Install Bokkie
-   on this computer** by typing its number and pressing Enter.
-4. Approve the administrator prompt.
-5. **The first window closes and a new one opens.** This is normal and is not a
-   crash — the second window is the one with permission to do the work.
-6. When it finishes it prints the address to open. If it does not finish,
-   nothing has been removed — send the developer everything on the screen.
+3. Approve the administrator prompt.
+4. The Bokkie Setup wizard opens. Click **Next** through its steps:
+   - **Choose components:** leave it on **Station computer**.
+   - **Install location:** leave it as `C:\Program Files\Bokkie`.
+   - **Install**, then **Finish**. Leave **Open Bokkie now** ticked.
 
-You do not need to copy a folder anywhere. The file installs itself to
-`C:\Program Files\Bokkie` and starts with the computer from then on.
+The installer puts Bokkie in the Start menu and on the desktop, lets the
+counter computers through Windows Firewall, and appears in Add/Remove Programs.
+If an older Bokkie had been installed as a service, the installer removes that
+service — Bokkie no longer starts by itself — and keeps its records.
+
+It does **not** make Bokkie start with the computer. Somebody opens it each
+morning.
 
 ### The counter computers
 
-Run **the same file** on each counter PC and choose **Put a Bokkie shortcut on
-this computer's desktop**. It asks for no administrator password and installs
-nothing — it only puts a **Bokkie** icon on the desktop, which opens the system
-in its own window with no address bar and no tabs.
+Run **the same file** on each counter PC. On the **Choose components** step,
+pick **Counter PC** from the list. It then asks for the station's address —
+type the one the Bokkie window on the station shows under *Other computers*.
+It puts a **Bokkie** icon on the desktop, which opens the system in its own
+window with no address bar and no tabs. Nothing else is installed.
 
-If `bokkie.local` does not work on that PC, it will offer to use an address you
-type instead, for example `http://192.168.1.50:8080`.
+If `bokkie.local` does not work on that PC, run the installer again and type
+the number address instead, for example `http://192.168.1.50:8080`.
 
 ### macOS or Linux host
 
@@ -260,17 +278,18 @@ Bokkie.command**. Type the computer's password when asked.
 
 ### If the station has no internet
 
-Everything above needs a connection once, to download one file. If the station
-has none, do the download on a computer that does, copy the whole release folder
-onto a USB stick, copy that folder onto the host computer — do not run it from
-the stick — and double-click **Install Bokkie.cmd** inside it. The rest is the
-same, warning and all.
+Download `BokkieSetup.exe` on a computer that has a connection, copy it onto a
+USB stick, and run it on the host from there. It needs nothing else; the
+program is inside it. (For macOS and Linux, copy the whole release folder
+instead and use the `.command` files in it.)
 
 ### Removing it
 
-Bokkie appears in **Add/Remove Programs** like any other program. Removing it
-there stops the service and takes it off the computer, and **leaves the data
-folder and every backup in it exactly where they are**. Nothing is deleted.
+Bokkie appears in **Add/Remove Programs** like any other program. Close the
+Bokkie window first. Removing it takes the program, the Start menu entry, the
+desktop icon and the firewall rule off the computer, and **leaves the data
+folder and every backup in it exactly where they are**. Nothing is deleted;
+installing again opens the same records.
 
 ---
 
@@ -279,8 +298,7 @@ folder and every backup in it exactly where they are**. Nothing is deleted.
 **Run the check before anything else.** It changes nothing, needs no password,
 and prints the whole picture at once:
 
-- **The quick way:** double-click `BokkieSetup.exe` and choose **Check why
-  Bokkie cannot be reached**.
+- **The quick way:** press **Run a check** in the Bokkie window.
 - **At a command prompt:** `bokkie doctor`
 
 It tells you, in order: whether Bokkie is running on this computer, whether the
@@ -365,18 +383,21 @@ nothing is on apart from a port that something else answers.
 
 ### Stopping and starting it
 
-Double-click `BokkieSetup.exe` and choose **Stop Bokkie** or **Start Bokkie**.
-Stopping does not remove anything and does not touch the database; it starts
-again by itself when the computer restarts.
+Close the Bokkie window to stop it; open Bokkie from the Start menu to start it
+again. Stopping does not remove anything and does not touch the database.
 
 ---
 
 ## Updating to a new version
 
-Download the new `BokkieSetup.exe` from
-**https://dannjann.github.io/bokkie-lms/** and double-click it on the host
-computer. It sees that Bokkie is already installed and offers to update it.
-Updating is one double-click, and the program does the careful part itself.
+**Windows, the simple way:** close the Bokkie window (that takes a backup),
+download the new `BokkieSetup.exe` from
+**https://dannjann.github.io/bokkie-lms/**, and run it on the host computer
+exactly as for a first install. It replaces the program and keeps the records.
+
+**The careful way, on any host,** is `bokkie update` from a release folder, as
+described below — it checks the signature itself and puts the old version back
+if the new one will not start.
 
 **What it does, in this order:** checks the folder really is a genuine bokkie
 release and has not been altered; takes a full backup of the database and
@@ -396,8 +417,11 @@ an older version than the one installed, stop and call the developer.
 **From a USB stick instead,** when the station has no internet:
 
 1. Copy the new folder onto the host computer.
-2. **Windows:** double-click **Update Bokkie.cmd**. **macOS:** double-click
-   **Update Bokkie.command**.
+2. **Windows:** close the Bokkie window, then open a Command Prompt **as
+   administrator** and run
+   `"C:\Program Files\Bokkie\bokkie.exe" update "D:\bokkie-v0.3.0"`, naming
+   the folder you copied. (Or simply run the `BokkieSetup.exe` inside it.)
+   **macOS:** double-click **Update Bokkie.command**.
 3. It shows you which version is in the folder and asks you to confirm. Type
    `y` and press Enter.
 4. When it finishes, open `http://bokkie.local:8080` and check the version on
