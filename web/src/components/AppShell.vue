@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
 import AppTopbar from '@/components/AppTopbar.vue'
 import { useHealthStore } from '@/stores/health'
+import { pageParent } from '@/pageTitle'
 
 /**
  * The frame every signed-in screen sits inside: a fixed rail on the left, a
@@ -13,6 +15,14 @@ import { useHealthStore } from '@/stores/health'
  * instead of sitting beside it.
  */
 const menuOpen = ref(false)
+
+/**
+ * A screen with a Back link at the top-left reads down from it, so its content
+ * starts on the same x as the link and runs the full width — centring it in a
+ * capped well leaves the link hanging off to one side of everything below it.
+ */
+const route = useRoute()
+const isChild = computed(() => Boolean(pageParent.value ?? route.meta.parent))
 
 const health = useHealthStore()
 
@@ -31,7 +41,7 @@ onBeforeUnmount(() => clearInterval(timer))
 </script>
 
 <template>
-  <div class="shell" :class="{ 'shell--menu-open': menuOpen }">
+  <div class="shell" :class="{ 'shell--menu-open': menuOpen, 'shell--child': isChild }">
     <!--
       Inert on desktop, where the rail is always in the layout; only the phone
       breakpoint turns it into a dismissible overlay.
@@ -87,6 +97,11 @@ onBeforeUnmount(() => clearInterval(timer))
 .shell__well {
   max-width: 76rem;
   margin: 0 auto;
+}
+
+.shell--child .shell__well {
+  max-width: none;
+  margin: 0;
 }
 
 .shell__scrim {
