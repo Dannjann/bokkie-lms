@@ -12,8 +12,8 @@ const route = useRoute()
 const { health, error, loading } = storeToRefs(useHealthStore())
 
 /**
- * Back sits at the leading edge, named after where it goes — "‹ Customers",
- * not "Back". That is where every platform puts it, and where a hand reaching
+ * Back sits at the leading edge, named after where it goes — "‹ Back to
+ * Customers List", not a bare "Back". That is where every platform puts it, and where a hand reaching
  * for it already goes. It used to be a text button at the far right of each
  * screen's header, after the actions, which on a phone wrapped it onto a line
  * of its own beneath them.
@@ -63,7 +63,7 @@ const connection = computed(() => {
       :aria-label="`Back to ${parent.label}`"
     >
       <i class="pi pi-chevron-left" aria-hidden="true" />
-      <span class="topbar__back-label">{{ parent.label }}</span>
+      <span class="topbar__back-label">Back to {{ parent.label }}</span>
     </RouterLink>
 
     <span
@@ -112,7 +112,10 @@ const connection = computed(() => {
 .topbar__back {
   gap: 0.25rem;
   min-width: 0;
-  padding: 0 0.625rem 0 0.375rem;
+  /* Leading padding puts the chevron on the same x as the content below it:
+     0.75rem + 0.5rem is the well's 1.25rem gutter, and 0.5rem + 0.5rem its
+     1rem on a phone. */
+  padding: 0 0.625rem 0 0.5rem;
   font-size: 0.9375rem;
   font-weight: 500;
   text-decoration: none;

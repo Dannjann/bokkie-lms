@@ -29,7 +29,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <div class="form-column">
+  <div>
     <PageHeader
       title="New customer"
       description="The code is assigned when you save, continuing from the highest one on the books."

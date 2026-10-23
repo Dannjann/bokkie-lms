@@ -65,7 +65,7 @@ export const router = createRouter({
       path: '/customers/new',
       name: 'customer-new',
       component: () => import('@/pages/CustomerNewPage.vue'),
-      meta: { title: 'New customer', parent: { label: 'Customers', to: '/customers' } },
+      meta: { title: 'New customer', parent: { label: 'Customers List', to: '/customers' } },
     },
     {
       // Manager-only in the UI, and manager-only at the server too — this
@@ -75,7 +75,7 @@ export const router = createRouter({
       component: () => import('@/pages/CustomerImportPage.vue'),
       meta: {
         title: 'Import customers',
-        parent: { label: 'Customers', to: '/customers' },
+        parent: { label: 'Customers List', to: '/customers' },
         manager: true,
       },
     },
@@ -83,7 +83,7 @@ export const router = createRouter({
       path: '/customers/:id(\\d+)',
       name: 'customer',
       component: () => import('@/pages/CustomerPage.vue'),
-      meta: { title: 'Customer', parent: { label: 'Customers', to: '/customers' } },
+      meta: { title: 'Customer', parent: { label: 'Customers List', to: '/customers' } },
     },
     {
       path: '/advances',
@@ -206,7 +206,7 @@ export const router = createRouter({
       path: '/customers/:id(\\d+)/statement',
       name: 'statement',
       component: () => import('@/pages/StatementPage.vue'),
-      meta: { title: 'Statement', parent: { label: 'Customers', to: '/customers' } },
+      meta: { title: 'Statement', parent: { label: 'Customers List', to: '/customers' } },
     },
     {
       // Manager-only in the UI and at the server. The roster is a management

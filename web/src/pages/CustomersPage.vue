@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import DataTable, { type DataTablePageEvent } from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -16,6 +16,7 @@ import { formatPhone } from '@/format'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
+const route = useRoute()
 const { isManager } = storeToRefs(useSessionStore())
 
 const customers = ref<Customer[]>([])
@@ -23,8 +24,13 @@ const total = ref(0)
 const loading = ref(false)
 const error = ref('')
 
-const search = ref('')
-const status = ref<CustomerStatus>('active')
+// The dashboard links here with ?status= from its tiles and ?q= from its
+// search box, so the list opens already filtered to what was asked for.
+const statuses: CustomerStatus[] = ['active', 'inactive', 'all']
+const initialStatus = statuses.find((s) => s === route.query.status) ?? 'active'
+
+const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
+const status = ref<CustomerStatus>(initialStatus)
 const first = ref(0)
 const perPage = ref(25)
 

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import ToggleSwitch from 'primevue/toggleswitch'
 import PageHeader from '@/components/PageHeader.vue'
@@ -175,6 +176,14 @@ async function setLanAccess(value: boolean): Promise<void> {
   }
 }
 
+/** Hands the search to the customer list, which does the actual finding. */
+const query = ref('')
+
+function findCustomer(): void {
+  const q = query.value.trim()
+  router.push({ name: 'customers', query: q ? { q } : {} })
+}
+
 const greeting = computed(() => {
   const hour = new Date().getHours()
   const part = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
@@ -219,16 +228,34 @@ onMounted(() => {
         <p class="label">Active customers</p>
         <p class="tile__value numeric">{{ active ?? '—' }}</p>
         <p class="tile__note">Can be given an advance.</p>
+        <Button
+          label="View active"
+          icon="pi pi-arrow-right"
+          icon-pos="right"
+          text
+          size="small"
+          class="tile__link"
+          @click="router.push({ name: 'customers', query: { status: 'active' } })"
+        />
       </article>
 
       <article class="card card--padded tile">
         <p class="label">Deactivated</p>
         <p class="tile__value numeric">{{ inactive ?? '—' }}</p>
         <p class="tile__note">Kept, never deleted — their codes stay theirs.</p>
+        <Button
+          label="View deactivated"
+          icon="pi pi-arrow-right"
+          icon-pos="right"
+          text
+          size="small"
+          class="tile__link"
+          @click="router.push({ name: 'customers', query: { status: 'inactive' } })"
+        />
       </article>
 
       <article v-if="isManager" class="card card--padded tile">
-        <p class="label">Outstanding</p>
+        <p class="label">Outstanding Balance</p>
         <p v-if="outstanding !== null" class="tile__value numeric">
           {{ formatPesos(outstanding) }}
         </p>
@@ -241,25 +268,23 @@ onMounted(() => {
       <section class="card card--padded">
         <h2 class="dashboard__heading">Start here</h2>
         <div class="dashboard__actions">
-          <Button
-            label="Find a customer"
-            icon="pi pi-search"
-            severity="secondary"
-            outlined
-            @click="router.push({ name: 'customers' })"
-          />
+          <form class="dashboard__search" role="search" @submit.prevent="findCustomer">
+            <i class="pi pi-search dashboard__search-icon" aria-hidden="true" />
+            <InputText
+              v-model="query"
+              placeholder="Find a customer by code, name or phone"
+              aria-label="Find a customer"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              fluid
+            />
+          </form>
           <Button
             label="New customer"
             icon="pi pi-plus"
+            class="dashboard__new"
             @click="router.push({ name: 'customer-new' })"
-          />
-          <Button
-            v-if="isManager"
-            label="Import CSV"
-            icon="pi pi-upload"
-            severity="secondary"
-            outlined
-            @click="router.push({ name: 'customers-import' })"
           />
         </div>
 
@@ -414,8 +439,38 @@ onMounted(() => {
 
 .dashboard__actions {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.dashboard__search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.dashboard__search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.65rem;
+  transform: translateY(-50%);
+  font-size: 0.8125rem;
+  color: var(--p-surface-400);
+  pointer-events: none;
+}
+
+.dashboard__search :deep(input) {
+  padding-left: 2rem;
+}
+
+.dashboard__new {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tile__link {
+  margin: 0.5rem 0 0 -0.5rem;
 }
 
 .upcoming {
