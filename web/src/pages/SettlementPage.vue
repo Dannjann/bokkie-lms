@@ -20,6 +20,7 @@ import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
+import AdvanceLineEdit from '@/components/AdvanceLineEdit.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
 import { methodLabel } from '@/api/payments'
@@ -135,7 +136,7 @@ const rateInvalid = ref(false)
  * Recompute the draft with the cut-off and rate on the form — which is also
  * the answer to a stale preview, since the form starts with the draft's own.
  */
-function recompute(): void {
+function recompute(done = 'Recomputed.'): void {
   const current = settlement.value
   if (!current) return
 
@@ -147,7 +148,7 @@ function recompute(): void {
     return
   }
 
-  void act('Recomputed.', () =>
+  void act(done, () =>
     recomputeSettlement(id.value, {
       customer_id: current.customer_id,
       cutoff: toISODate(cutoff.value),
@@ -155,6 +156,19 @@ function recompute(): void {
       notes: notes.value.trim(),
     }),
   )
+}
+
+/**
+ * The open advance being edited in place. Only a draft offers it: a posted
+ * liquidation has charged its advances, and they are fixed until it is voided.
+ */
+const editingLine = ref<number | null>(null)
+
+// The edit moved figures this draft was computed from, so it is recomputed at
+// once on the cut-off and rate already on screen.
+function lineSaved(): void {
+  editingLine.value = null
+  recompute('Advance edited, and the liquidation recomputed.')
 }
 
 function settle(): void {
@@ -255,7 +269,7 @@ onMounted(load)
               icon="pi pi-refresh"
               size="small"
               :disabled="busy"
-              @click="recompute"
+              @click="recompute()"
             />
           </div>
         </Message>
@@ -341,10 +355,27 @@ onMounted(load)
               <th class="report__amount">Principal</th>
               <th class="report__amount">Days</th>
               <th class="report__amount">Interest</th>
+              <th v-if="isDraft" class="settlement__edit settlement__screen">
+                <span class="sr-only">Edit</span>
+              </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="line in settlement.advances" :key="line.advance_line_id">
+            <template v-for="line in settlement.advances" :key="line.advance_line_id">
+            <tr v-if="editingLine === line.advance_line_id" class="settlement__screen">
+              <td colspan="7">
+                <AdvanceLineEdit
+                  :voucher-id="line.voucher_id"
+                  :line-id="line.advance_line_id"
+                  :date="line.date"
+                  :particular="line.particular"
+                  :amount="line.principal"
+                  @saved="lineSaved"
+                  @cancel="editingLine = null"
+                />
+              </td>
+            </tr>
+            <tr v-else>
               <td class="report__code numeric">
                 <RouterLink :to="{ name: 'advance', params: { id: line.voucher_id } }">
                   {{ line.ref_no }}
@@ -355,7 +386,19 @@ onMounted(load)
               <td class="report__amount numeric">{{ formatPesos(line.principal) }}</td>
               <td class="report__amount numeric">{{ line.days }}</td>
               <td class="report__amount numeric">{{ formatPesos(line.charge) }}</td>
+              <td v-if="isDraft" class="settlement__edit settlement__screen">
+                <Button
+                  icon="pi pi-pencil"
+                  size="small"
+                  severity="secondary"
+                  text
+                  :aria-label="`Edit Ref. No. ${line.ref_no}`"
+                  :disabled="busy || editingLine !== null"
+                  @click="editingLine = line.advance_line_id"
+                />
+              </td>
             </tr>
+            </template>
           </tbody>
           <tfoot>
             <tr class="report__totals">
@@ -368,6 +411,7 @@ onMounted(load)
               <td class="report__amount numeric">
                 {{ formatPesos(settlement.totals.advance_interest) }}
               </td>
+              <td v-if="isDraft" class="settlement__screen" />
             </tr>
           </tfoot>
         </table>
@@ -522,7 +566,7 @@ onMounted(load)
               severity="secondary"
               outlined
               :disabled="busy"
-              @click="recompute"
+              @click="recompute()"
             />
             <Button
               label="Liquidate"
@@ -598,6 +642,22 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* position: relative contains the visually-hidden heading inside the card. */
+.settlement__edit {
+  position: relative;
+  width: 2.5rem;
+  text-align: right;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .settlement__screen {

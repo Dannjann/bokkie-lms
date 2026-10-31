@@ -6,6 +6,7 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import ProgressSpinner from 'primevue/progressspinner'
+import AdvanceLineEdit from '@/components/AdvanceLineEdit.vue'
 import CustomerFields from '@/components/CustomerFields.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
@@ -53,8 +54,27 @@ const recentLimit = 10
 // The server returns a statement in the order it happened, oldest first, which
 // is how a statement is read. A record card is not: the question asked at the
 // counter is what moved last.
-const recent = computed(() => entries.value.slice(-recentLimit).reverse())
-const olderCount = computed(() => Math.max(0, entries.value.length - recentLimit))
+//
+// An edited slip's history — the original entry and its reversal — is folded
+// away here, so an edit reads as an edit. The full statement still shows it.
+const current = computed(() => entries.value.filter((row) => !row.advance?.superseded))
+const recent = computed(() => current.value.slice(-recentLimit).reverse())
+const olderCount = computed(() => Math.max(0, current.value.length - recentLimit))
+
+/** The ledger entry whose advance line is being edited in place, if any. */
+const editingEntry = ref<number | null>(null)
+
+// Only the balance and the transactions move; reloading the whole record would
+// put the page behind a spinner for a one-line change.
+async function lineSaved(): Promise<void> {
+  editingEntry.value = null
+  await loadEntries()
+  try {
+    balance.value = (await getCustomer(id.value)).balance
+  } catch {
+    // The transactions above are already fresh; the balance catches up on reload.
+  }
+}
 
 function adopt(loaded: Customer): void {
   customer.value = loaded
@@ -291,10 +311,25 @@ onMounted(() => {
                   <th class="ledger__amount">Principal</th>
                   <th class="ledger__amount">Interest</th>
                   <th class="ledger__amount">Balance</th>
+                  <th class="ledger__edit"><span class="sr-only">Edit</span></th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in recent" :key="row.entry.id">
+                <template v-for="row in recent" :key="row.entry.id">
+                <tr v-if="editingEntry === row.entry.id && row.advance">
+                  <td colspan="8">
+                    <AdvanceLineEdit
+                      :voucher-id="row.advance.voucher_id"
+                      :line-id="row.advance.line_id"
+                      :date="row.entry.date"
+                      :particular="row.particular ?? ''"
+                      :amount="row.entry.principal"
+                      @saved="lineSaved"
+                      @cancel="editingEntry = null"
+                    />
+                  </td>
+                </tr>
+                <tr v-else>
                   <td class="ledger__date numeric">{{ row.entry.date }}</td>
                   <td>
                     {{ entryLabel(row.entry.type) }}
@@ -302,12 +337,33 @@ onMounted(() => {
                       — {{ row.entry.reason }}
                     </span>
                   </td>
-                  <td class="ledger__document">{{ row.document ?? '—' }}</td>
+                  <td class="ledger__document">
+                    {{ row.document ?? '—' }}
+                    <Tag
+                      v-if="row.advance && row.advance.revision > 1 && row.entry.type === 'advance'"
+                      severity="secondary"
+                      value="Edited"
+                      :title="row.advance.edited_by ? `Edited by ${row.advance.edited_by}` : undefined"
+                    />
+                  </td>
                   <td>{{ row.particular ?? '' }}</td>
                   <td class="ledger__amount numeric">{{ formatPesos(row.entry.principal) }}</td>
                   <td class="ledger__amount numeric">{{ formatPesos(row.entry.interest) }}</td>
                   <td class="ledger__amount numeric">{{ formatPesos(row.running.total) }}</td>
+                  <td class="ledger__edit">
+                    <Button
+                      v-if="row.advance?.editable && row.entry.type === 'advance'"
+                      icon="pi pi-pencil"
+                      size="small"
+                      severity="secondary"
+                      text
+                      :aria-label="`Edit ${row.document ?? 'this advance'}`"
+                      :disabled="editingEntry !== null"
+                      @click="editingEntry = row.entry.id"
+                    />
+                  </td>
                 </tr>
+                </template>
               </tbody>
             </table>
           </div>
@@ -319,7 +375,7 @@ onMounted(() => {
           -->
           <p v-if="olderCount > 0" class="ledger__more">
             The {{ recentLimit }} most recent of
-            <span class="numeric">{{ entries.length }}</span> entries.
+            <span class="numeric">{{ current.length }}</span> entries.
             <RouterLink :to="{ name: 'statement', params: { id: customer.id } }">
               See them all on the statement
             </RouterLink>
@@ -515,6 +571,22 @@ onMounted(() => {
 
 .ledger__table th.ledger__amount {
   text-align: right;
+}
+
+/* position: relative contains the visually-hidden heading inside the card. */
+.ledger__edit {
+  position: relative;
+  width: 2.5rem;
+  text-align: right;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .ledger__more {

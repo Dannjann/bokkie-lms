@@ -178,8 +178,10 @@ func (s *Service) attachCustomers(ctx context.Context, vouchers []Summary, ids [
 // condition builds the WHERE shared by the count and the page, so the two
 // cannot disagree about what is being counted.
 func (q Query) condition() (string, []any) {
+	// A slip that was edited is listed once, as it now reads; the revisions it
+	// replaced are reached from the slip itself.
 	var (
-		clauses []string
+		clauses = []string{"v.superseded_by IS NULL"}
 		args    []any
 	)
 
@@ -236,6 +238,19 @@ func escapeLike(s string) string { return likeEscaper.Replace(s) }
 type LineDocument struct {
 	RefNo      int64
 	Particular string
+
+	// What a screen needs to offer an edit of this line in place.
+	VoucherID int64
+	LineID    int64
+	Revision  int
+	// Superseded is set on every line of a revision an edit replaced: its
+	// entry and the reversal of it are history, not the slip as it reads.
+	Superseded bool
+	// Editable is a line on the current, posted revision that no posted
+	// liquidation has charged — the same test the edit itself applies.
+	Editable bool
+	// EditedBy is who made the latest edit, when Revision is above 1.
+	EditedBy string
 }
 
 // DocumentsForLines maps line ids to the Ref. No. of the voucher they belong
@@ -262,7 +277,13 @@ func (s *Service) DocumentsForLines(ctx context.Context, lineIDs []int64) (map[i
 	marks := strings.TrimSuffix(strings.Repeat("?, ", len(lineIDs)), ", ")
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT l.id, v.ref_no, l.particular
+		`SELECT l.id, v.ref_no, l.particular, v.id, v.revision, v.superseded_by IS NOT NULL,
+		        v.status = 'posted' AND NOT EXISTS (
+		          SELECT 1 FROM settlement_advances sa
+		            JOIN settlements st ON st.id = sa.settlement_id
+		            JOIN advance_lines ol ON ol.id = sa.advance_line_id
+		           WHERE ol.voucher_id = v.id AND st.status = 'posted'),
+		        CASE WHEN v.revision > 1 THEN v.created_by_username ELSE '' END
 		   FROM advance_lines l
 		   JOIN advance_vouchers v ON v.id = l.voucher_id
 		  WHERE l.id IN (`+marks+`) AND v.ref_no IS NOT NULL`, args...)
@@ -275,9 +296,11 @@ func (s *Service) DocumentsForLines(ctx context.Context, lineIDs []int64) (map[i
 	for rows.Next() {
 		var lineID int64
 		var doc LineDocument
-		if err := rows.Scan(&lineID, &doc.RefNo, &doc.Particular); err != nil {
+		if err := rows.Scan(&lineID, &doc.RefNo, &doc.Particular, &doc.VoucherID, &doc.Revision,
+			&doc.Superseded, &doc.Editable, &doc.EditedBy); err != nil {
 			return nil, fmt.Errorf("read the Ref. Nos. behind a page of entries: %w", err)
 		}
+		doc.LineID = lineID
 		docs[lineID] = doc
 	}
 	if err := rows.Err(); err != nil {

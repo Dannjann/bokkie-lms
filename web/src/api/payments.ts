@@ -255,6 +255,16 @@ export interface StatementRow {
   document?: string
   /** What the advance line or payment was for, as typed; absent when none was. */
   particular?: string
+  /** For an advance line: enough to edit it in place, and to fold away an edit's history. */
+  advance?: {
+    voucher_id: number
+    line_id: number
+    revision: number
+    /** An entry of a revision an edit replaced — the original or its reversal. */
+    superseded: boolean
+    editable: boolean
+    edited_by?: string
+  }
 }
 
 export interface Statement {

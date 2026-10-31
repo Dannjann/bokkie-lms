@@ -121,6 +121,7 @@ const actionNames: Record<string, string> = {
   'advance.draft.updated': 'Advance slip draft edited',
   'advance.draft.deleted': 'Advance slip draft discarded',
   'advance.posted': 'Advance slip posted',
+  'advance.edited': 'Advance slip edited',
   'advance.voided': 'Advance slip voided',
 
   // Payments

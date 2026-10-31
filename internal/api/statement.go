@@ -51,6 +51,22 @@ type statementRow struct {
 	// was typed: "fertilizer", "palay delivery". Empty for a liquidation's
 	// entries, whose Entry column already says interest or payment.
 	Particular string `json:"particular,omitempty"`
+
+	// Advance carries what a screen needs to edit the line behind this entry
+	// in place, and to tell an edited slip's history from the slip as it now
+	// reads. Absent for anything that is not an advance line.
+	Advance *advanceRef `json:"advance,omitempty"`
+}
+
+type advanceRef struct {
+	VoucherID int64 `json:"voucher_id"`
+	LineID    int64 `json:"line_id"`
+	Revision  int   `json:"revision"`
+	// Superseded marks the entries of a revision that an edit replaced — the
+	// original advance and its reversal — so a screen can fold them away.
+	Superseded bool   `json:"superseded"`
+	Editable   bool   `json:"editable"`
+	EditedBy   string `json:"edited_by,omitempty"`
 }
 
 // movementSummary is what the period did, in total. It exists because the
@@ -159,6 +175,7 @@ func handleGetStatement(d Deps) http.HandlerFunc {
 				Running:    viewOf(row.Running),
 				Document:   doc.Label,
 				Particular: doc.Particular,
+				Advance:    doc.Advance,
 			})
 		}
 		writeJSON(w, http.StatusOK, response)
@@ -180,6 +197,7 @@ type documentKey struct {
 type document struct {
 	Label      string
 	Particular string
+	Advance    *advanceRef
 }
 
 // documentsOf turns the provenance on a page of entries into the numbers staff
@@ -212,7 +230,11 @@ func documentsOf(ctx context.Context, d Deps, rows []ledger.StatementRow) (map[d
 		}
 		for lineID, line := range lines {
 			labels[documentKey{advance.SourceTable, lineID}] = document{
-				Label: label("Ref. No.", line.RefNo), Particular: line.Particular}
+				Label: label("Ref. No.", line.RefNo), Particular: line.Particular,
+				Advance: &advanceRef{
+					VoucherID: line.VoucherID, LineID: line.LineID, Revision: line.Revision,
+					Superseded: line.Superseded, Editable: line.Editable, EditedBy: line.EditedBy,
+				}}
 		}
 	}
 

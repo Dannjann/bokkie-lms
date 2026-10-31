@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import Button from 'primevue/button'
@@ -13,6 +13,7 @@ import VoucherLines from '@/components/VoucherLines.vue'
 import { ApiError } from '@/api/client'
 import {
   deleteAdvance,
+  editAdvance,
   getAdvance,
   postAdvance,
   updateAdvance,
@@ -41,6 +42,9 @@ const voiding = ref(false)
 const voidReason = ref('')
 
 const isDraft = computed(() => voucher.value?.status === 'draft')
+
+/** A posted slip opened for editing in place, in the same grid a draft uses. */
+const editing = ref(false)
 
 function adopt(loaded: Voucher): void {
   voucher.value = loaded
@@ -81,6 +85,24 @@ function save(draft: VoucherDraft): void {
   void run('Saved.', () => updateAdvance(id.value, draft))
 }
 
+// An edit is answered with a different voucher — the slip's new revision under
+// the same Ref. No. — so the page moves to it rather than reloading this one.
+async function saveEdit(draft: VoucherDraft): Promise<void> {
+  error.value = ''
+  saved.value = ''
+  busy.value = true
+  try {
+    const edited = await editAdvance(id.value, draft)
+    editing.value = false
+    await router.replace({ name: 'advance', params: { id: edited.id } })
+    saved.value = 'Saved. The slip keeps its Ref. No.'
+  } catch (err) {
+    error.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
+  } finally {
+    busy.value = false
+  }
+}
+
 function post(): void {
   void run('Posted.', () => postAdvance(id.value))
 }
@@ -103,6 +125,13 @@ async function discard(): Promise<void> {
 }
 
 onMounted(load)
+
+// The same page component serves the next revision after an edit, so a change
+// of id is a fresh load rather than a fresh mount.
+watch(id, () => {
+  editing.value = false
+  void load()
+})
 </script>
 
 <template>
@@ -128,16 +157,34 @@ onMounted(load)
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <Message v-else-if="saved" severity="success" :closable="false">{{ saved }}</Message>
 
-      <Message v-if="voucher.status === 'voided'" severity="warn" :closable="false">
+      <!-- An earlier version of an edited slip: say so, and point at the current one. -->
+      <Message v-if="voucher.superseded_by" severity="info" :closable="false">
+        This is how the slip read before {{ voucher.voided_by.Username }} edited it.
+        <RouterLink :to="{ name: 'advance', params: { id: voucher.superseded_by } }">
+          See it as it reads now
+        </RouterLink>
+      </Message>
+      <Message v-else-if="voucher.status === 'voided'" severity="warn" :closable="false">
         Voided by {{ voucher.voided_by.Username }} — {{ voucher.void_reason }}
       </Message>
 
       <!--
-        A draft is the form. Everything else is a record of what happened, and
-        the only thing that can be done to it is a void, which is a manager's.
+        A draft is the form. A posted slip is a record, opened in the same grid
+        when somebody edits it; voiding it outright is a manager's.
       -->
       <VoucherLines
-        v-if="isDraft"
+        v-if="editing"
+        :date="voucher.date"
+        :notes="voucher.notes"
+        :lines="voucher.lines"
+        :busy="busy"
+        submit-label="Save changes"
+        @submit="saveEdit"
+        @cancel="editing = false"
+      />
+
+      <VoucherLines
+        v-else-if="isDraft"
         :date="voucher.date"
         :notes="voucher.notes"
         :lines="voucher.lines"
@@ -200,12 +247,24 @@ onMounted(load)
           Who posted it, said in a line. The ledger entries behind it are on the
           customer's statement; repeating them here was a second table nobody read.
         -->
-        <p v-if="voucher.posted_at" class="advance__by">
+        <p v-if="voucher.posted_at && voucher.revision > 1" class="advance__by">
+          Edited by {{ voucher.created_by.Username }} on {{ formatDateTime(voucher.created_at) }}
+        </p>
+        <p v-else-if="voucher.posted_at" class="advance__by">
           Posted by {{ voucher.posted_by.Username }} on {{ formatDateTime(voucher.posted_at) }}
         </p>
 
-        <div v-if="isManager && voucher.status === 'posted'" class="advance__actions">
+        <div v-if="voucher.status === 'posted'" class="advance__actions">
           <Button
+            label="Edit"
+            icon="pi pi-pencil"
+            severity="secondary"
+            outlined
+            :disabled="busy"
+            @click="editing = true"
+          />
+          <Button
+            v-if="isManager"
             label="Void this slip"
             icon="pi pi-ban"
             severity="danger"

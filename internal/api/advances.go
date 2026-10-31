@@ -265,6 +265,37 @@ func handlePostAdvance(d Deps) TxHandler {
 	}
 }
 
+// handleEditAdvance edits a posted slip by correcting it: the original is
+// voided and a replacement posted under the same Ref. No., in one transaction.
+// See advance.CorrectTx.
+//
+// Open to everyone who can post, by the client's decision: an edit is in the
+// audit log with its before and after, and on the slip as "Edited by".
+func handleEditAdvance(d Deps) TxHandler {
+	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
+		id, err := advanceID(r)
+		if err != nil {
+			return Change{}, badRequest("%s", err.Error())
+		}
+		var draft advance.Draft
+		if err := decodeJSON(r, &draft); err != nil {
+			return Change{}, err
+		}
+
+		// Read on the pool, before the transaction writes: CorrectTx needs its
+		// INSERT to be the first statement this transaction runs.
+		before, err := d.Advances.ByID(ctx, id)
+		if err != nil {
+			return Change{}, advanceError(err)
+		}
+		after, err := d.Advances.CorrectTx(ctx, tx, id, draft, actorOf(r))
+		if err != nil {
+			return Change{}, advanceError(err)
+		}
+		return Change{EntityID: voucherEntityID(after), Before: before, After: after, Body: after}, nil
+	}
+}
+
 type voidRequest struct {
 	Reason string `json:"reason"`
 }
@@ -353,7 +384,8 @@ func asAdvanceError(err error) (statusError, bool) {
 		// 409 rather than 400: nothing about the request is malformed, the
 		// voucher simply moved on — which is what a second click looks like.
 		return conflict("%s", err.Error()), true
-	case errors.Is(err, advance.ErrNotPosted), errors.Is(err, advance.ErrSettled):
+	case errors.Is(err, advance.ErrNotPosted), errors.Is(err, advance.ErrSettled),
+		errors.Is(err, advance.ErrNotEditable):
 		return conflict("%s", err.Error()), true
 	default:
 		return statusError{}, false

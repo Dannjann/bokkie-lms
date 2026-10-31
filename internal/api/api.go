@@ -306,6 +306,11 @@ func registerRoutes(rt *router, d Deps) {
 	rt.mutate(Authenticated, http.MethodPost, "/api/advances/posted",
 		"advance.posted", "advance", handleCreateAndPostAdvance(d))
 
+	// Editing a posted slip is open to everyone who posts one: the client's
+	// decision, made because every edit is logged and shown on the slip.
+	rt.mutate(Authenticated, http.MethodPost, "/api/advances/{id}/edit",
+		"advance.edited", "advance", handleEditAdvance(d))
+
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/advances/{id}/void",
 		"advance.voided", "advance", handleVoidAdvance(d))
 

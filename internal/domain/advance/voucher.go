@@ -217,7 +217,8 @@ const selectVoucher = `
 	SELECT id, COALESCE(ref_no, 0), voucher_date, notes, status,
 	       created_at, COALESCE(created_by, 0), created_by_username,
 	       COALESCE(posted_at, ''), COALESCE(posted_by, 0), posted_by_username,
-	       COALESCE(voided_at, ''), COALESCE(voided_by, 0), voided_by_username, void_reason
+	       COALESCE(voided_at, ''), COALESCE(voided_by, 0), voided_by_username, void_reason,
+	       revision, COALESCE(superseded_by, 0)
 	  FROM advance_vouchers`
 
 func byID(ctx context.Context, q queryExecer, id int64) (Voucher, error) {
@@ -288,7 +289,8 @@ func scanVoucher(row scanner) (Voucher, error) {
 	err := row.Scan(&v.ID, &v.RefNo, &v.Date, &v.Notes, &status,
 		&createdAt, &v.CreatedBy.UserID, &v.CreatedBy.Username,
 		&postedAt, &v.PostedBy.UserID, &v.PostedBy.Username,
-		&voidedAt, &v.VoidedBy.UserID, &v.VoidedBy.Username, &v.VoidReason)
+		&voidedAt, &v.VoidedBy.UserID, &v.VoidedBy.Username, &v.VoidReason,
+		&v.Revision, &v.SupersededBy)
 	if err != nil {
 		return Voucher{}, err
 	}

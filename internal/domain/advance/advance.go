@@ -95,6 +95,16 @@ type Voucher struct {
 	VoidedAt   *time.Time `json:"voided_at"`
 	VoidedBy   Actor      `json:"voided_by"`
 	VoidReason string     `json:"void_reason"`
+
+	// Revision counts the edits behind this Ref. No.: 1 as first posted, 2
+	// after one edit, and so on. Above 1, CreatedBy and CreatedAt are who made
+	// the edit and when — the replacement is the edit.
+	Revision int `json:"revision"`
+
+	// SupersededBy is the voucher that replaced this one when it was edited,
+	// or zero. A superseded voucher is voided, and the slip as it now reads is
+	// the one this points at.
+	SupersededBy int64 `json:"superseded_by"`
 }
 
 // Line is one row of the grid: this farmer, this amount, this particular.
@@ -167,6 +177,11 @@ var (
 	// ErrSettled means a posted settlement has charged interest on a line of
 	// this slip. Voiding the slip alone would leave that interest standing on
 	// an advance that never happened, so the settlement is voided first.
+	// ErrNotEditable means an edit was asked of a slip that is not the current,
+	// posted version of itself: a draft is edited as a draft, and a voided or
+	// already-edited slip has nothing left to correct.
+	ErrNotEditable = errors.New("only a posted advance slip can be edited")
+
 	ErrSettled = errors.New("a liquidation has charged interest on this advance slip: void the liquidation first")
 )
 
