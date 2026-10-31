@@ -86,6 +86,12 @@ export const router = createRouter({
       meta: { title: 'Customer', parent: { label: 'Customers List', to: '/customers' } },
     },
     {
+      path: '/customers/:id(\\d+)/card',
+      name: 'customer-card',
+      component: () => import('@/pages/CustomerCardPage.vue'),
+      meta: { title: 'ID card', parent: { label: 'Customers List', to: '/customers' } },
+    },
+    {
       path: '/advances',
       name: 'advances',
       component: () => import('@/pages/AdvancesPage.vue'),

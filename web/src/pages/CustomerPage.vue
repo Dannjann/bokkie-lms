@@ -179,6 +179,13 @@ onMounted(() => {
             where the balance they are asking about is.
           -->
           <Button
+            label="ID card"
+            icon="pi pi-id-card"
+            severity="secondary"
+            outlined
+            @click="router.push({ name: 'customer-card', params: { id: customer.id } })"
+          />
+          <Button
             label="Record payment"
             icon="pi pi-money-bill"
             @click="router.push({ name: 'payment-new', query: { customer: customer.id } })"
