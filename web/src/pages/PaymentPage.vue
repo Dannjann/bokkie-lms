@@ -114,8 +114,8 @@ async function load(): Promise<void> {
 }
 
 // Every one of these reloads rather than trusting the response alone: posting
-// and voiding both change what the ledger says, and the entries underneath are
-// the point of looking at a posted receipt.
+// and voiding both change what the ledger says, and the sentence about how the
+// payment split is read from it.
 async function run(what: string, action: () => Promise<Payment>): Promise<void> {
   error.value = ''
   saved.value = ''
@@ -315,38 +315,7 @@ onMounted(load)
           >.
         </Message>
 
-        <!--
-          Where the split is read from. The payment does not store how the money
-          divided; the ledger entry does, and this is that entry.
-        -->
-        <section v-if="entries.length > 0" class="card payment__grid">
-          <h2 class="payment__section">In the ledger</h2>
-          <table class="payment__table">
-            <thead>
-              <tr>
-                <th class="payment__date">Date</th>
-                <th>Entry</th>
-                <th>By</th>
-                <th class="payment__amount">Principal</th>
-                <th class="payment__amount">Interest</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="entry in entries" :key="entry.id">
-                <td class="payment__date numeric">{{ entry.date }}</td>
-                <td>
-                  {{ entry.type === 'reversal' ? 'Reversal' : 'Payment' }}
-                  <span v-if="entry.reason" class="payment__reason">— {{ entry.reason }}</span>
-                </td>
-                <td>{{ entry.by }}</td>
-                <td class="payment__amount numeric">{{ formatPesos(entry.principal) }}</td>
-                <td class="payment__amount numeric">{{ formatPesos(entry.interest) }}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <p v-if="cleared && !reversal" class="payment__note">{{ cleared }}</p>
-        </section>
+        <p v-if="cleared && !reversal" class="payment__note">{{ cleared }}</p>
 
         <section v-if="balance" class="card card--padded payment__record">
           <div class="payment__row payment__row--total">
@@ -489,10 +458,6 @@ onMounted(load)
    this the heading sat left while its figures sat right. */
 .payment__table th.payment__amount {
   text-align: right;
-}
-
-.payment__reason {
-  color: var(--shell-muted);
 }
 
 .payment__note {

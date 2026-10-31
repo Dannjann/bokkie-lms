@@ -158,3 +158,8 @@ export function palayCostCentavos(kilos: string, price: string): number | null {
   if (!Number.isSafeInteger(tenTimes)) return null
   return Math.floor((tenTimes + 5) / 10)
 }
+
+/** A server timestamp as staff read it: "1 Nov 2026, 9:14 AM". */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })
+}

@@ -17,11 +17,10 @@ import {
   postAdvance,
   updateAdvance,
   voidAdvance,
-  type LedgerEntryView,
   type Voucher,
   type VoucherDraft,
 } from '@/api/advances'
-import { formatPesos } from '@/format'
+import { formatDateTime, formatPesos } from '@/format'
 import { useSessionStore } from '@/stores/session'
 import { setPageTitle } from '@/pageTitle'
 
@@ -32,7 +31,6 @@ const { isManager } = storeToRefs(useSessionStore())
 const id = computed(() => Number(route.params.id))
 
 const voucher = ref<Voucher | null>(null)
-const entries = ref<LedgerEntryView[]>([])
 
 const loading = ref(true)
 const busy = ref(false)
@@ -55,7 +53,6 @@ async function load(): Promise<void> {
   try {
     const detail = await getAdvance(id.value)
     adopt(detail.voucher)
-    entries.value = detail.entries
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
   } finally {
@@ -64,8 +61,7 @@ async function load(): Promise<void> {
 }
 
 // Every one of these reloads rather than trusting the response alone: posting
-// and voiding both change what the ledger says about the voucher, and the
-// entries panel underneath is the point of looking at a posted one.
+// and voiding both change the voucher's status and who it names.
 async function run(what: string, action: () => Promise<Voucher>): Promise<void> {
   error.value = ''
   saved.value = ''
@@ -201,34 +197,12 @@ onMounted(load)
         </div>
 
         <!--
-          Not a restatement of the lines: what the ledger actually holds because
-          of this voucher. After a void the reversals appear here, which is the
-          whole of the evidence that the money went back.
+          Who posted it, said in a line. The ledger entries behind it are on the
+          customer's statement; repeating them here was a second table nobody read.
         -->
-        <section class="card advance__grid">
-          <h2 class="advance__section">In the ledger</h2>
-          <table class="advance__table">
-            <thead>
-              <tr>
-                <th class="advance__date">Date</th>
-                <th>Entry</th>
-                <th>By</th>
-                <th class="advance__amount">Principal</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="entry in entries" :key="entry.id">
-                <td class="advance__date numeric">{{ entry.date }}</td>
-                <td>
-                  {{ entry.type === 'reversal' ? 'Reversal' : 'Advance' }}
-                  <span v-if="entry.reason" class="advance__reason">— {{ entry.reason }}</span>
-                </td>
-                <td>{{ entry.by }}</td>
-                <td class="advance__amount numeric">{{ formatPesos(entry.principal) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
+        <p v-if="voucher.posted_at" class="advance__by">
+          Posted by {{ voucher.posted_by.Username }} on {{ formatDateTime(voucher.posted_at) }}
+        </p>
 
         <div v-if="isManager && voucher.status === 'posted'" class="advance__actions">
           <Button
@@ -300,12 +274,6 @@ onMounted(load)
   padding: 0.25rem 0.75rem 0.75rem;
 }
 
-.advance__section {
-  margin: 0.75rem 0.25rem 0.5rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
 .advance__table {
   width: 100%;
   min-width: 34rem;
@@ -346,7 +314,9 @@ onMounted(load)
   text-align: right;
 }
 
-.advance__reason {
+.advance__by {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
   color: var(--shell-muted);
 }
 

@@ -22,7 +22,7 @@ import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
-import { entryLabel, methodLabel, type LedgerEntryView } from '@/api/payments'
+import { methodLabel } from '@/api/payments'
 import {
   balanceLabel,
   deleteSettlement,
@@ -45,7 +45,6 @@ const { user, isManager } = storeToRefs(useSessionStore())
 const id = computed(() => Number(route.params.id))
 
 const settlement = ref<Settlement | null>(null)
-const entries = ref<LedgerEntryView[]>([])
 
 const loading = ref(true)
 const busy = ref(false)
@@ -100,7 +99,6 @@ async function load(): Promise<void> {
   try {
     const detail = await getSettlement(id.value)
     adopt(detail.settlement)
-    entries.value = detail.entries
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
   } finally {
@@ -109,8 +107,7 @@ async function load(): Promise<void> {
 }
 
 // Every one of these reloads rather than trusting the response alone: posting
-// and voiding both change what the ledger says, and the entries underneath are
-// the point of looking at a settled farmer.
+// and voiding both change the liquidation's status and who it names.
 async function act(what: string, action: () => Promise<Settlement>): Promise<void> {
   error.value = ''
   stale.value = false
@@ -294,7 +291,7 @@ onMounted(load)
           <span>{{ settlement.created_by.Username }}</span>
         </div>
         <div v-if="settlement.status !== 'draft'" class="settlement__row">
-          <span class="settlement__label">Settled by</span>
+          <span class="settlement__label">Liquidated by</span>
           <span>{{ settlement.posted_by.Username }}</span>
         </div>
       </section>
@@ -539,33 +536,6 @@ onMounted(load)
       </template>
 
       <template v-else>
-        <section v-if="entries.length > 0" class="card settlement__grid settlement__screen">
-          <h2 class="settlement__section">In the ledger</h2>
-          <table class="report__table settlement__table">
-            <thead>
-              <tr>
-                <th class="report__code">Date</th>
-                <th>Entry</th>
-                <th>By</th>
-                <th class="report__amount">Principal</th>
-                <th class="report__amount">Interest</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="entry in entries" :key="entry.id">
-                <td class="report__code numeric">{{ entry.date }}</td>
-                <td>
-                  {{ entryLabel(entry.type) }}
-                  <span v-if="entry.reason" class="settlement__muted">— {{ entry.reason }}</span>
-                </td>
-                <td>{{ entry.by }}</td>
-                <td class="report__amount numeric">{{ formatPesos(entry.principal) }}</td>
-                <td class="report__amount numeric">{{ formatPesos(entry.interest) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-
         <div v-if="isManager && isPosted" class="settlement__actions settlement__screen">
           <Button
             label="Void this liquidation"
