@@ -231,7 +231,15 @@ var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 func escapeLike(s string) string { return likeEscaper.Replace(s) }
 
-// RefNosForLines maps line ids to the Ref. No. of the voucher they belong to.
+// LineDocument is what a statement shows of the line behind an entry: the
+// Ref. No. of its voucher, and what the line was for.
+type LineDocument struct {
+	RefNo      int64
+	Particular string
+}
+
+// DocumentsForLines maps line ids to the Ref. No. of the voucher they belong
+// to, and each line's particular.
 //
 // It exists for the customer statement, which holds ledger entries carrying the
 // id of the line that produced them and needs to print the number staff say out
@@ -242,7 +250,7 @@ func escapeLike(s string) string { return likeEscaper.Replace(s) }
 // A line whose voucher is still a draft has no number and is simply absent from
 // the result: a draft has produced no ledger entry either, so nothing can ask
 // about it.
-func (s *Service) RefNosForLines(ctx context.Context, lineIDs []int64) (map[int64]int64, error) {
+func (s *Service) DocumentsForLines(ctx context.Context, lineIDs []int64) (map[int64]LineDocument, error) {
 	if len(lineIDs) == 0 {
 		return nil, nil
 	}
@@ -254,7 +262,7 @@ func (s *Service) RefNosForLines(ctx context.Context, lineIDs []int64) (map[int6
 	marks := strings.TrimSuffix(strings.Repeat("?, ", len(lineIDs)), ", ")
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT l.id, v.ref_no
+		`SELECT l.id, v.ref_no, l.particular
 		   FROM advance_lines l
 		   JOIN advance_vouchers v ON v.id = l.voucher_id
 		  WHERE l.id IN (`+marks+`) AND v.ref_no IS NOT NULL`, args...)
@@ -263,16 +271,17 @@ func (s *Service) RefNosForLines(ctx context.Context, lineIDs []int64) (map[int6
 	}
 	defer rows.Close()
 
-	refNos := make(map[int64]int64, len(lineIDs))
+	docs := make(map[int64]LineDocument, len(lineIDs))
 	for rows.Next() {
-		var lineID, refNo int64
-		if err := rows.Scan(&lineID, &refNo); err != nil {
+		var lineID int64
+		var doc LineDocument
+		if err := rows.Scan(&lineID, &doc.RefNo, &doc.Particular); err != nil {
 			return nil, fmt.Errorf("read the Ref. Nos. behind a page of entries: %w", err)
 		}
-		refNos[lineID] = refNo
+		docs[lineID] = doc
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read the Ref. Nos. behind a page of entries: %w", err)
 	}
-	return refNos, nil
+	return docs, nil
 }

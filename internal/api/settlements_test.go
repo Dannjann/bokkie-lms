@@ -307,8 +307,12 @@ func TestASecondSettlementChargesTheCarriedPrincipal(t *testing.T) {
 
 	// The statement names the settlement on its interest entry.
 	stmt := request(t, f.handler, http.MethodGet, "/api/customers/"+itoa(f.farmer.ID)+"/statement", f.encoder, nil)
-	if !strings.Contains(stmt.Body.String(), "Settlement No. 2") {
-		t.Errorf("the statement does not name the settlement: %s", stmt.Body)
+	if !strings.Contains(stmt.Body.String(), "Liquidation No. 2") {
+		t.Errorf("the statement does not name the liquidation: %s", stmt.Body)
+	}
+	// And says what each advance was for, beside its Ref. No.
+	if !strings.Contains(stmt.Body.String(), `"particular":"2 BAGS UREA"`) {
+		t.Errorf("the statement does not carry the advance's particular: %s", stmt.Body)
 	}
 }
 

@@ -46,6 +46,11 @@ type statementRow struct {
 	// with no document behind it, which today means an opening balance or an
 	// adjustment.
 	Document string `json:"document,omitempty"`
+
+	// Particular is what the line or payment behind this entry was for, as it
+	// was typed: "fertilizer", "palay delivery". Empty for a liquidation's
+	// entries, whose Entry column already says interest or payment.
+	Particular string `json:"particular,omitempty"`
 }
 
 // movementSummary is what the period did, in total. It exists because the
@@ -125,7 +130,7 @@ func handleGetStatement(d Deps) http.HandlerFunc {
 			return
 		}
 
-		labels, err := documentLabels(ctx, d, stmt.Rows)
+		docs, err := documentsOf(ctx, d, stmt.Rows)
 		if err != nil {
 			d.Logger.Error("label the documents on a statement", "id", RequestID(ctx), "error", err)
 			writeJSON(w, http.StatusInternalServerError, errorBody{
@@ -148,10 +153,12 @@ func handleGetStatement(d Deps) http.HandlerFunc {
 			response.From = stmt.From.String()
 		}
 		for _, row := range stmt.Rows {
+			doc := docs[documentKey{row.Entry.SourceTable, row.Entry.SourceID}]
 			response.Rows = append(response.Rows, statementRow{
-				Entry:    entryViewsOf([]ledger.Entry{row.Entry})[0],
-				Running:  viewOf(row.Running),
-				Document: labels[documentKey{row.Entry.SourceTable, row.Entry.SourceID}],
+				Entry:      entryViewsOf([]ledger.Entry{row.Entry})[0],
+				Running:    viewOf(row.Running),
+				Document:   doc.Label,
+				Particular: doc.Particular,
 			})
 		}
 		writeJSON(w, http.StatusOK, response)
@@ -169,15 +176,22 @@ type documentKey struct {
 	ID    int64
 }
 
-// documentLabels turns the provenance on a page of entries into the numbers
-// staff recognise, in one query per source table rather than one per row.
+// document is what a statement row says about where its entry came from.
+type document struct {
+	Label      string
+	Particular string
+}
+
+// documentsOf turns the provenance on a page of entries into the numbers staff
+// recognise and what each was for, in one query per source table rather than
+// one per row.
 //
 // This is deliberately a lookup rather than a join. The ledger's query cannot
 // join to advance_vouchers or payments without the ledger knowing those tables
 // exist, which is the boundary the whole design rests on — so the entries come
 // back carrying a table name and an id, and the labelling happens here, where
 // both document packages are already imported.
-func documentLabels(ctx context.Context, d Deps, rows []ledger.StatementRow) (map[documentKey]string, error) {
+func documentsOf(ctx context.Context, d Deps, rows []ledger.StatementRow) (map[documentKey]document, error) {
 	byTable := make(map[string][]int64)
 	for _, row := range rows {
 		if row.Entry.SourceTable == "" || row.Entry.SourceID == 0 {
@@ -189,15 +203,16 @@ func documentLabels(ctx context.Context, d Deps, rows []ledger.StatementRow) (ma
 		return nil, nil
 	}
 
-	labels := make(map[documentKey]string, len(rows))
+	labels := make(map[documentKey]document, len(rows))
 
 	if ids := byTable[advance.SourceTable]; len(ids) > 0 {
-		refNos, err := d.Advances.RefNosForLines(ctx, ids)
+		lines, err := d.Advances.DocumentsForLines(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
-		for lineID, refNo := range refNos {
-			labels[documentKey{advance.SourceTable, lineID}] = label("Ref. No.", refNo)
+		for lineID, line := range lines {
+			labels[documentKey{advance.SourceTable, lineID}] = document{
+				Label: label("Ref. No.", line.RefNo), Particular: line.Particular}
 		}
 	}
 
@@ -207,17 +222,18 @@ func documentLabels(ctx context.Context, d Deps, rows []ledger.StatementRow) (ma
 			return nil, err
 		}
 		for id, no := range nos {
-			labels[documentKey{settlement.SourceTable, id}] = label("Settlement No.", no)
+			labels[documentKey{settlement.SourceTable, id}] = document{Label: label("Liquidation No.", no)}
 		}
 	}
 
 	if ids := byTable[payment.SourceTable]; len(ids) > 0 {
-		orNos, err := d.Payments.OrNosFor(ctx, ids)
+		payments, err := d.Payments.DocumentsFor(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
-		for paymentID, orNo := range orNos {
-			labels[documentKey{payment.SourceTable, paymentID}] = label("OR No.", orNo)
+		for paymentID, p := range payments {
+			labels[documentKey{payment.SourceTable, paymentID}] = document{
+				Label: label("OR No.", p.OrNo), Particular: p.Particular}
 		}
 	}
 

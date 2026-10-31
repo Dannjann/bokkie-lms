@@ -284,6 +284,7 @@ onMounted(() => {
                   <th class="ledger__date">Date</th>
                   <th>Entry</th>
                   <th>Document</th>
+                  <th>Particular</th>
                   <th class="ledger__amount">Principal</th>
                   <th class="ledger__amount">Interest</th>
                   <th class="ledger__amount">Balance</th>
@@ -299,6 +300,7 @@ onMounted(() => {
                     </span>
                   </td>
                   <td class="ledger__document">{{ row.document ?? '—' }}</td>
+                  <td>{{ row.particular ?? '' }}</td>
                   <td class="ledger__amount numeric">{{ formatPesos(row.entry.principal) }}</td>
                   <td class="ledger__amount numeric">{{ formatPesos(row.entry.interest) }}</td>
                   <td class="ledger__amount numeric">{{ formatPesos(row.running.total) }}</td>

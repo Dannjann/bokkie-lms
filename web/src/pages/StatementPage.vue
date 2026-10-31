@@ -143,6 +143,7 @@ onMounted(load)
                 <th class="statement__date">Date</th>
                 <th>Entry</th>
                 <th>Document</th>
+                <th>Particular</th>
                 <th class="statement__amount">Principal</th>
                 <th class="statement__amount">Interest</th>
                 <th class="statement__amount">Balance</th>
@@ -157,7 +158,7 @@ onMounted(load)
               -->
               <tr class="statement__carry">
                 <td class="statement__date numeric">{{ statement.from ?? '' }}</td>
-                <td colspan="4">Balance brought forward</td>
+                <td colspan="5">Balance brought forward</td>
                 <td class="statement__amount numeric">{{ formatPesos(statement.opening.total) }}</td>
               </tr>
 
@@ -170,24 +171,25 @@ onMounted(load)
                   </span>
                 </td>
                 <td class="statement__document">{{ row.document ?? '—' }}</td>
+                <td>{{ row.particular ?? '' }}</td>
                 <td class="statement__amount numeric">{{ formatPesos(row.entry.principal) }}</td>
                 <td class="statement__amount numeric">{{ formatPesos(row.entry.interest) }}</td>
                 <td class="statement__amount numeric">{{ formatPesos(row.running.total) }}</td>
               </tr>
 
               <tr v-if="statement.rows.length === 0" class="statement__empty-row">
-                <td colspan="6">Nothing happened in this period.</td>
+                <td colspan="7">Nothing happened in this period.</td>
               </tr>
             </tbody>
             <tfoot>
               <tr>
-                <td colspan="3">Movement over the period</td>
+                <td colspan="4">Movement over the period</td>
                 <td class="statement__amount numeric">{{ formatPesos(statement.moved.principal) }}</td>
                 <td class="statement__amount numeric">{{ formatPesos(statement.moved.interest) }}</td>
                 <td class="statement__amount numeric" />
               </tr>
               <tr class="statement__closing">
-                <td colspan="3">Owed as at {{ statement.to }}</td>
+                <td colspan="4">Owed as at {{ statement.to }}</td>
                 <td class="statement__amount numeric">{{ formatPesos(statement.closing.principal) }}</td>
                 <td class="statement__amount numeric">{{ formatPesos(statement.closing.interest) }}</td>
                 <td class="statement__amount numeric">{{ formatPesos(statement.closing.total) }}</td>

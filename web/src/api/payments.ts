@@ -253,6 +253,8 @@ export interface StatementRow {
   running: Balance
   /** "Ref. No. 1425", "OR No. 7", or absent for an entry with no document. */
   document?: string
+  /** What the advance line or payment was for, as typed; absent when none was. */
+  particular?: string
 }
 
 export interface Statement {
