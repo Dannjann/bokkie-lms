@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/Dannjann/bokkie-lms/internal/auth"
@@ -222,6 +223,27 @@ func TestAPaymentCannotBeGivenItsOwnNumberOrStatus(t *testing.T) {
 		if resp.Code != http.StatusBadRequest {
 			t.Errorf("a payment supplying %s returned %d, want 400: %s", field, resp.Code, resp.Body)
 		}
+	}
+}
+
+// The browser sends an empty amount for palay, because the server adds up the
+// lines. That body has to be read, not refused before the lines are looked at.
+func TestAPalayPaymentNeedsNoAmountTyped(t *testing.T) {
+	f := newPaymentFixture(t)
+
+	body := f.draft("")
+	body["method"] = "palay"
+	body["lines"] = []map[string]any{{"class": "YCS", "sacks": 4, "kilos": "200.0", "price": "12.50"}}
+	palay := f.create(t, body)
+	if palay.Amount.String() != "2500.00" {
+		t.Errorf("200 kg at 12.50 came to %s, want 2500.00", palay.Amount)
+	}
+
+	// A cash payment with nothing typed is still refused, as a field to fix
+	// rather than as a request that could not be read.
+	if resp := request(t, f.handler, http.MethodPost, "/api/payments", f.encoder, f.draft("")); resp.Code != http.StatusBadRequest ||
+		strings.Contains(resp.Body.String(), "could not read") {
+		t.Errorf("a cash payment with no amount: status %d: %s, want a 400 about the amount", resp.Code, resp.Body)
 	}
 }
 
