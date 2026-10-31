@@ -209,7 +209,7 @@ export function paymentStatusLabel(status: PaymentStatus, settlementNo: number):
     case 'voided':
       return 'Voided'
     case 'posted':
-      return settlementNo > 0 ? 'Settled' : 'Recorded'
+      return settlementNo > 0 ? 'Liquidated' : 'Recorded'
     default:
       return status
   }

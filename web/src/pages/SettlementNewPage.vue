@@ -77,7 +77,7 @@ async function compute(): Promise<void> {
   error.value = ''
   rateInvalid.value = false
   if (!customer.value) {
-    error.value = 'Pick the farmer to settle.'
+    error.value = 'Pick the farmer to liquidate.'
     return
   }
 
@@ -116,8 +116,8 @@ onMounted(() => {
 <template>
   <div>
     <PageHeader
-      title="Settle a farmer"
-      description="Computed and saved as a draft. Nothing is applied until it is settled."
+      title="Liquidate a farmer"
+      description="Computed and saved as a draft. Nothing is applied until it is liquidated."
     />
 
     <Message v-if="error" severity="error" :closable="false" class="settle-new__error">
@@ -180,7 +180,7 @@ onMounted(() => {
 
       <p class="settle-new__hint">
         Interest is principal × rate × days ÷ 30 on each open advance, and on any principal carried
-        from the farmer's last settlement. Their recorded payments are then applied, interest first.
+        from the farmer's last liquidation. Their recorded payments are then applied, interest first.
       </p>
 
       <div class="settle-new__actions">

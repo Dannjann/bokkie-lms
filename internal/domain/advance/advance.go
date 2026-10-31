@@ -167,7 +167,7 @@ var (
 	// ErrSettled means a posted settlement has charged interest on a line of
 	// this slip. Voiding the slip alone would leave that interest standing on
 	// an advance that never happened, so the settlement is voided first.
-	ErrSettled = errors.New("a settlement has charged interest on this advance slip: void the settlement first")
+	ErrSettled = errors.New("a liquidation has charged interest on this advance slip: void the liquidation first")
 )
 
 // Limits, generous enough that nobody meets them at a counter by accident and

@@ -231,7 +231,7 @@ var (
 	// ErrSettled means a settlement has applied this payment to the balance.
 	// Voiding it would leave that settlement describing money that never came
 	// in, so the settlement is voided first — which reopens the payment.
-	ErrSettled = errors.New("that payment has been settled: void the settlement first")
+	ErrSettled = errors.New("that payment has been liquidated: void the liquidation first")
 )
 
 const maxParticularLen = 200

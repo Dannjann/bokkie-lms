@@ -89,8 +89,8 @@ function adopt(loaded: Settlement): void {
   notes.value = loaded.notes
   setPageTitle(
     loaded.settlement_no
-      ? `Settlement No. ${loaded.settlement_no}`
-      : `Draft settlement — ${loaded.customer_name}`,
+      ? `Liquidation No. ${loaded.settlement_no}`
+      : `Draft liquidation — ${loaded.customer_name}`,
   )
 }
 
@@ -161,7 +161,7 @@ function recompute(): void {
 }
 
 function settle(): void {
-  void act('Settled.', () => postSettlement(id.value))
+  void act('Liquidated.', () => postSettlement(id.value))
 }
 
 function confirmVoid(): void {
@@ -201,7 +201,7 @@ onMounted(load)
           <p class="settlement__no numeric label">
             {{
               settlement.settlement_no
-                ? `Settlement No. ${settlement.settlement_no}`
+                ? `Liquidation No. ${settlement.settlement_no}`
                 : 'Unnumbered draft'
             }}
           </p>
@@ -237,8 +237,8 @@ onMounted(load)
         <div class="report__title">
           {{
             settlement.settlement_no
-              ? `Settlement No. ${settlement.settlement_no}`
-              : 'Settlement (draft)'
+              ? `Liquidation No. ${settlement.settlement_no}`
+              : 'Liquidation (draft)'
           }}
           — {{ settlement.customer_code }} {{ settlement.customer_name }}
         </div>
@@ -325,7 +325,7 @@ onMounted(load)
           </div>
         </template>
         <p v-else class="settlement__muted settlement__flush">
-          Nothing carried — this farmer has not been settled before.
+          Nothing carried — this farmer has not been liquidated before.
         </p>
       </section>
 
@@ -472,7 +472,7 @@ onMounted(load)
       <template v-if="isDraft">
         <Message v-if="!hasPayments" severity="info" :closable="false" class="settlement__screen">
           This is a statement of what {{ settlement.customer_name }} owes up to the cut-off. It
-          cannot be settled until a payment is recorded for him.
+          cannot be liquidated until a payment is recorded for him.
         </Message>
 
         <section class="card card--padded settlement__screen settlement__edit">
@@ -528,7 +528,7 @@ onMounted(load)
               @click="recompute"
             />
             <Button
-              label="Settle"
+              label="Liquidate"
               icon="pi pi-check"
               severity="success"
               :disabled="busy || !hasPayments"
@@ -568,7 +568,7 @@ onMounted(load)
 
         <div v-if="isManager && isPosted" class="settlement__actions settlement__screen">
           <Button
-            label="Void this settlement"
+            label="Void this liquidation"
             icon="pi pi-ban"
             severity="danger"
             outlined
@@ -579,12 +579,12 @@ onMounted(load)
       </template>
     </template>
 
-    <Message v-else severity="error" :closable="false">{{ error || 'No such settlement.' }}</Message>
+    <Message v-else severity="error" :closable="false">{{ error || 'No such liquidation.' }}</Message>
 
-    <Dialog v-model:visible="voiding" modal header="Void this settlement" :style="{ width: '28rem' }">
+    <Dialog v-model:visible="voiding" modal header="Void this liquidation" :style="{ width: '28rem' }">
       <p class="settlement__dialog-text">
         The interest it charged and the payments it applied are reversed in the ledger. Its
-        advances and payments open again, waiting for a new settlement. The settlement and its
+        advances and payments open again, waiting for a new liquidation. The liquidation and its
         reversals stay on the record, and this reason is written onto each one.
       </p>
       <Textarea v-model="voidReason" rows="3" fluid aria-label="Reason for voiding" />

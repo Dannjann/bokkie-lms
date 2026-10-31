@@ -181,7 +181,7 @@ func TestAFarmerDeliversAndIsSettled(t *testing.T) {
 	// A settled payment cannot be voided on its own.
 	resp := request(t, f.handler, http.MethodPost, "/api/payments/"+itoa(p.ID)+"/void", f.manager,
 		map[string]string{"reason": "wrong farmer"})
-	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "void the settlement first") {
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "void the liquidation first") {
 		t.Errorf("voiding a settled payment: status %d: %s, want 409 naming the settlement", resp.Code, resp.Body)
 	}
 
@@ -294,7 +294,7 @@ func TestASecondSettlementChargesTheCarriedPrincipal(t *testing.T) {
 
 	resp := request(t, f.handler, http.MethodPost, "/api/settlements/"+itoa(one.ID)+"/void", f.manager,
 		map[string]string{"reason": "wrong rate"})
-	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "later settlement") {
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "later liquidation") {
 		t.Errorf("voiding an earlier settlement: status %d: %s, want 409", resp.Code, resp.Body)
 	}
 

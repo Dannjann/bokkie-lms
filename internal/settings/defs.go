@@ -200,7 +200,7 @@ var (
 		Key:     "interest.rate_bps",
 		Kind:    KindInt,
 		Default: "500",
-		Doc:     "The usual monthly interest rate in basis points — 500 is 5% a month. Each settlement starts with it and can change it.",
+		Doc:     "The usual monthly interest rate in basis points — 500 is 5% a month. Each liquidation starts with it and can change it.",
 	}
 
 	// RefNoStart is the number the advance-slip sequence continues from at

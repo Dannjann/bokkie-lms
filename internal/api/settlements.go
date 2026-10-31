@@ -242,7 +242,7 @@ func settlementEntityID(st settlement.Settlement) string { return strconv.Format
 func settlementID(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
-		return 0, errors.New("that is not a settlement id")
+		return 0, errors.New("that is not a liquidation id")
 	}
 	return id, nil
 }
@@ -263,7 +263,7 @@ func asSettlementError(err error) (statusError, bool) {
 	case errors.As(err, &ve):
 		return badRequest("%s", ve.Message), true
 	case errors.Is(err, settlement.ErrNotFound):
-		return statusError{http.StatusNotFound, "no such settlement"}, true
+		return statusError{http.StatusNotFound, "no such liquidation"}, true
 	case errors.Is(err, settlement.ErrNotDraft), errors.Is(err, settlement.ErrNotPosted):
 		// 409 rather than 400: nothing about the request is malformed, the settlement
 		// simply moved on — which is what a second click looks like.

@@ -136,7 +136,7 @@ function save(draft: PaymentDraft): void {
 }
 
 function post(): void {
-  void run('Recorded. It will be applied when the farmer is settled.', () => postPayment(id.value))
+  void run('Recorded. It will be applied when the farmer is liquidated.', () => postPayment(id.value))
 }
 
 function confirmVoid(): void {
@@ -210,7 +210,7 @@ onMounted(load)
         >
           <template #actions>
             <span class="payment__hint">
-              Recording numbers it; it is applied to the balance when the farmer is settled.
+              Recording numbers it; it is applied to the balance when the farmer is liquidated.
             </span>
             <Button
               label="Delete draft"
@@ -293,10 +293,10 @@ onMounted(load)
           <div class="payment__settle">
             <span>
               Recorded and waiting. It is applied to what {{ payment.customer_name }} owes —
-              interest first — when the farmer is settled.
+              interest first — when the farmer is liquidated.
             </span>
             <Button
-              label="Settle this farmer"
+              label="Liquidate this farmer"
               icon="pi pi-calculator"
               size="small"
               @click="
@@ -309,9 +309,9 @@ onMounted(load)
           </div>
         </Message>
         <Message v-else-if="settled" severity="success" :closable="false">
-          Settled in
+          Liquidated in
           <RouterLink :to="{ name: 'settlement', params: { id: payment.settlement_id } }">
-            Settlement No. {{ payment.settlement_no }}</RouterLink
+            Liquidation No. {{ payment.settlement_no }}</RouterLink
           >.
         </Message>
 
@@ -358,7 +358,7 @@ onMounted(load)
         </section>
 
         <p v-if="isManager && settled" class="payment__note payment__note--right">
-          To void this payment, void Settlement No. {{ payment.settlement_no }} first.
+          To void this payment, void Liquidation No. {{ payment.settlement_no }} first.
         </p>
         <div v-if="isManager && waiting" class="payment__actions">
           <Button
@@ -377,7 +377,7 @@ onMounted(load)
 
     <Dialog v-model:visible="voiding" modal header="Void this payment" :style="{ width: '28rem' }">
       <p class="payment__dialog-text">
-        The payment is cancelled and no settlement will apply it. It stays on the record, with
+        The payment is cancelled and no liquidation will apply it. It stays on the record, with
         this reason, under its OR No.
       </p>
       <Textarea v-model="voidReason" rows="3" fluid aria-label="Reason for voiding" />

@@ -38,7 +38,7 @@ export const navigation: NavSection[] = [
       { label: 'Advances', icon: 'pi pi-wallet', to: '/advances' },
       { label: 'Payments', icon: 'pi pi-money-bill', to: '/payments' },
       // Open to encoders: settling a farmer is counter work.
-      { label: 'Settlements', icon: 'pi pi-calculator', to: '/settlements' },
+      { label: 'Liquidations', icon: 'pi pi-calculator', to: '/settlements' },
     ],
   },
   {
@@ -50,7 +50,7 @@ export const navigation: NavSection[] = [
       { label: 'Current Advances', icon: 'pi pi-chart-bar', to: '/reports/current-advances', manager: true },
       { label: 'Return of Investment', icon: 'pi pi-percentage', to: '/reports/roi', manager: true },
       { label: 'Aging', icon: 'pi pi-hourglass', to: '/reports/aging', manager: true },
-      { label: 'Settled', icon: 'pi pi-check-circle', to: '/reports/settled', manager: true },
+      { label: 'Liquidated', icon: 'pi pi-check-circle', to: '/reports/settled', manager: true },
       // An index over the per-customer statements, which are also still
       // reachable from the customer. Not a batch print: a statement is one
       // farmer's history and is printed from their own page. This entry carries

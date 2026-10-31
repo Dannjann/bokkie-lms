@@ -34,7 +34,7 @@ onMounted(run)
 <template>
   <ReportShell
     title="Return of Investment Status"
-    description="What the station put out over a period, what came back at each settlement, and what is still out."
+    description="What the station put out over a period, what came back at each liquidation, and what is still out."
     mode="period"
     v-model:from="from"
     v-model:to="to"
@@ -43,7 +43,7 @@ onMounted(run)
     :rows="report?.rows.length ?? 0"
     @refresh="run"
   >
-    <template #empty>Nobody was settled over this period.</template>
+    <template #empty>Nobody was liquidated over this period.</template>
 
     <template v-if="report">
       <!--
@@ -96,7 +96,7 @@ onMounted(run)
             <td>
               <RouterLink
                 :to="{ name: 'settlement', params: { id: row.settlement_id } }"
-                :title="`Settlement No. ${row.settlement_no}`"
+                :title="`Liquidation No. ${row.settlement_no}`"
               >
                 {{ row.name }}
               </RouterLink>
@@ -109,7 +109,7 @@ onMounted(run)
         <tfoot>
           <tr class="report__totals">
             <td colspan="3">
-              {{ report.farmers }} {{ report.farmers === 1 ? 'farmer' : 'farmers' }} settled ·
+              {{ report.farmers }} {{ report.farmers === 1 ? 'farmer' : 'farmers' }} liquidated ·
               Principal returned / Interest paid / Total
             </td>
             <td class="report__amount numeric">{{ formatPesos(report.repaid) }}</td>

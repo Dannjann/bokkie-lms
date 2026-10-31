@@ -310,7 +310,7 @@ function post(): void {
       <aside class="payment-form__balance">
         <h2 class="payment-form__balance-heading">Owes now</h2>
         <p class="payment-form__hint payment-form__hint--small">
-          Before any recorded payment is applied — that happens when the farmer is settled.
+          Before any recorded payment is applied — that happens when the farmer is liquidated.
         </p>
 
         <template v-if="balance">

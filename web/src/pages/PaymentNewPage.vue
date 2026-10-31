@@ -65,7 +65,7 @@ void prefill()
   <div>
     <PageHeader
       title="New payment"
-      description="Record it now, or save a draft to finish later. Recording gives it an OR No.; it is applied to the balance when the farmer is settled."
+      description="Record it now, or save a draft to finish later. Recording gives it an OR No.; it is applied to the balance when the farmer is liquidated."
     />
 
     <Message v-if="error" severity="error" :closable="false" class="payment-new__error">

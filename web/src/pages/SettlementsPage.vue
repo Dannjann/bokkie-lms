@@ -40,7 +40,7 @@ const perPage = ref(25)
 const statusOptions = [
   { label: 'All', value: 'all' },
   { label: 'Drafts', value: 'draft' },
-  { label: 'Settled', value: 'posted' },
+  { label: 'Liquidated', value: 'posted' },
   { label: 'Voided', value: 'voided' },
 ]
 
@@ -89,12 +89,12 @@ onMounted(load)
 <template>
   <div>
     <PageHeader
-      title="Settlements"
-      description="A farmer is settled when they deliver: interest up to a cut-off date, then their recorded payments applied, interest first."
+      title="Liquidations"
+      description="A farmer is liquidated when they deliver: interest up to a cut-off date, then their recorded payments applied, interest first."
     >
       <template #actions>
         <Button
-          label="Settle a farmer"
+          label="Liquidate a farmer"
           icon="pi pi-calculator"
           @click="router.push({ name: 'settlement-new' })"
         />
@@ -112,7 +112,7 @@ onMounted(load)
           <InputText
             v-model="search"
             placeholder="Search by number or farmer"
-            aria-label="Search settlements"
+            aria-label="Search liquidations"
             autocapitalize="none"
             autocorrect="off"
             spellcheck="false"
@@ -148,7 +148,7 @@ onMounted(load)
         @row-select="open($event.data)"
       >
         <template #empty>
-          <p class="settlements__empty">Nobody has been settled yet.</p>
+          <p class="settlements__empty">Nobody has been liquidated yet.</p>
         </template>
 
         <Column header="No." class="settlements__no">

@@ -161,7 +161,7 @@ onMounted(() => {
             @click="router.push({ name: 'payment-new', query: { customer: customer.id } })"
           />
           <Button
-            label="Settle"
+            label="Liquidate"
             icon="pi pi-calculator"
             severity="secondary"
             outlined

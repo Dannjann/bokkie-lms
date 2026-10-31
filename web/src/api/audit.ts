@@ -129,11 +129,11 @@ const actionNames: Record<string, string> = {
   'payment.voided': 'Payment voided',
 
   // Settlements
-  'settlement.draft.created': 'Settlement computed',
-  'settlement.draft.updated': 'Settlement recomputed',
-  'settlement.draft.deleted': 'Settlement draft discarded',
-  'settlement.posted': 'Farmer settled',
-  'settlement.voided': 'Settlement voided',
+  'settlement.draft.created': 'Liquidation computed',
+  'settlement.draft.updated': 'Liquidation recomputed',
+  'settlement.draft.deleted': 'Liquidation draft discarded',
+  'settlement.posted': 'Farmer liquidated',
+  'settlement.voided': 'Liquidation voided',
 
   // The system itself
   'setting.changed': 'Setting changed',

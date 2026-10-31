@@ -131,7 +131,7 @@ func (s *Service) VoidTx(ctx context.Context, tx *sql.Tx, id int64, by Actor, re
 		  WHERE l.voucher_id = ? AND st.status = 'posted'
 		  LIMIT 1`, id).Scan(&settledBy); {
 	case err == nil:
-		return Voucher{}, fmt.Errorf("%w (settlement %d)", ErrSettled, settledBy)
+		return Voucher{}, fmt.Errorf("%w (liquidation %d)", ErrSettled, settledBy)
 	case !errors.Is(err, sql.ErrNoRows):
 		return Voucher{}, fmt.Errorf("check whether advance slip %d is settled: %w", id, err)
 	}

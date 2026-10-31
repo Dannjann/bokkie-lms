@@ -128,19 +128,19 @@ export const router = createRouter({
       path: '/settlements',
       name: 'settlements',
       component: () => import('@/pages/SettlementsPage.vue'),
-      meta: { title: 'Settlements' },
+      meta: { title: 'Liquidations' },
     },
     {
       path: '/settlements/new',
       name: 'settlement-new',
       component: () => import('@/pages/SettlementNewPage.vue'),
-      meta: { title: 'Settle a farmer', parent: { label: 'Settlements', to: '/settlements' } },
+      meta: { title: 'Liquidate a farmer', parent: { label: 'Liquidations', to: '/settlements' } },
     },
     {
       path: '/settlements/:id(\\d+)',
       name: 'settlement',
       component: () => import('@/pages/SettlementPage.vue'),
-      meta: { title: 'Settlement', parent: { label: 'Settlements', to: '/settlements' } },
+      meta: { title: 'Liquidation', parent: { label: 'Liquidations', to: '/settlements' } },
     },
     {
       // The four reports. Manager-only in the UI and at the server, reads
@@ -183,7 +183,7 @@ export const router = createRouter({
       component: () => import('@/pages/SettledPage.vue'),
       meta: {
         // Matches the sidebar's label, so the window title and the menu agree.
-        title: 'Settled',
+        title: 'Liquidated',
         manager: true,
       },
     },
