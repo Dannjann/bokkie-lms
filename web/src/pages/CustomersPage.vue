@@ -156,6 +156,7 @@ onMounted(load)
 
         <Column field="code" header="Code" class="customers__code" />
         <Column field="name" header="Name" />
+        <Column field="barangay_name" header="Barangay" />
         <Column header="Phone" class="customers__phone">
           <template #body="{ data }">{{ formatPhone(data.cell_no) }}</template>
         </Column>

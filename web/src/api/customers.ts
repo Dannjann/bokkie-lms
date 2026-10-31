@@ -7,6 +7,9 @@ export interface Customer {
   address: string
   cell_no: string
   notes: string
+  /** 0 for a customer with no barangay set — one from before barangays. */
+  barangay_id: number
+  barangay_name: string
   active: boolean
   created_at: string
   updated_at: string
@@ -24,6 +27,8 @@ export interface CustomerDraft {
   address: string
   cell_no: string
   notes: string
+  /** Decides a new customer's code. Changing it later does not change the code. */
+  barangay_id: number
 }
 
 /**

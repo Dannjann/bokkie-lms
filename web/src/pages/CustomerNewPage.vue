@@ -10,7 +10,7 @@ import { createCustomer, type CustomerDraft } from '@/api/customers'
 
 const router = useRouter()
 
-const draft = ref<CustomerDraft>({ name: '', address: '', cell_no: '', notes: '' })
+const draft = ref<CustomerDraft>({ name: '', address: '', cell_no: '', notes: '', barangay_id: 0 })
 const error = ref('')
 const busy = ref(false)
 
@@ -32,7 +32,7 @@ async function submit(): Promise<void> {
   <div>
     <PageHeader
       title="New customer"
-      description="The code is assigned when you save, continuing from the highest one on the books."
+      description="The code is assigned when you save, from the barangay: the next one in its sequence."
     />
 
     <Message v-if="error" severity="error" :closable="false" class="new-customer__error">
@@ -40,7 +40,7 @@ async function submit(): Promise<void> {
     </Message>
 
     <form class="card card--padded new-customer" @submit.prevent="submit">
-      <CustomerFields v-model="draft" autofocus />
+      <CustomerFields v-model="draft" autofocus is-new />
 
       <div class="new-customer__actions">
         <Button

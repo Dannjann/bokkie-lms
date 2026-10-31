@@ -111,6 +111,8 @@ const actionNames: Record<string, string> = {
   // Customers
   'customer.created': 'Customer added',
   'customer.updated': 'Customer edited',
+  'barangay.created': 'Barangay added',
+  'barangay.updated': 'Barangay changed',
   'customer.active.changed': 'Customer activated or deactivated',
   'customer.imported': 'Customers imported from a file',
 

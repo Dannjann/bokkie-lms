@@ -30,7 +30,7 @@ const id = computed(() => Number(route.params.id))
 
 const customer = ref<Customer | null>(null)
 const balance = ref<Balance | null>(null)
-const draft = ref<CustomerDraft>({ name: '', address: '', cell_no: '', notes: '' })
+const draft = ref<CustomerDraft>({ name: '', address: '', cell_no: '', notes: '', barangay_id: 0 })
 
 const loading = ref(true)
 const busy = ref(false)
@@ -64,6 +64,7 @@ function adopt(loaded: Customer): void {
     address: loaded.address,
     cell_no: loaded.cell_no,
     notes: loaded.notes,
+    barangay_id: loaded.barangay_id,
   }
 }
 
@@ -142,7 +143,9 @@ onMounted(() => {
     <template v-else-if="customer">
       <PageHeader>
         <template #title>
-          <p class="customer__code numeric label">{{ customer.code }}</p>
+          <p class="customer__code numeric label">
+            {{ customer.code }}<template v-if="customer.barangay_name"> · {{ customer.barangay_name }}</template>
+          </p>
           <h1 class="customer__name">
             {{ customer.name }}
             <Tag v-if="!customer.active" severity="secondary" value="Deactivated" />

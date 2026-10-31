@@ -270,6 +270,14 @@ func registerRoutes(rt *router, d Deps) {
 	rt.mutateSelfAudited(ManagerOnly, http.MethodPost, "/api/customers/import",
 		auditImportRoute, handleImportCustomers(d))
 
+	// Barangays shape customer codes. Everyone who adds a customer picks from
+	// the list; only a manager changes it.
+	rt.read(Authenticated, "/api/barangays", handleListBarangays(d))
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/barangays",
+		"barangay.created", "barangay", handleCreateBarangay(d))
+	rt.mutate(ManagerOnly, http.MethodPut, "/api/barangays/{id}",
+		"barangay.updated", "barangay", handleUpdateBarangay(d))
+
 	// --- Advances -----------------------------------------------------------
 	//
 	// Entering an advance is counter work, the same as adding a farmer: a
