@@ -123,6 +123,11 @@ export function createAdvance(draft: VoucherDraft): Promise<Voucher> {
   return postJson<Voucher>('/api/advances', draft)
 }
 
+/** Enters a slip and posts it in one call, so a failed post leaves no draft. */
+export function createAndPostAdvance(draft: VoucherDraft): Promise<Voucher> {
+  return postJson<Voucher>('/api/advances/posted', draft)
+}
+
 export function updateAdvance(id: number, draft: VoucherDraft): Promise<Voucher> {
   return putJson<Voucher>(`/api/advances/${id}`, draft)
 }

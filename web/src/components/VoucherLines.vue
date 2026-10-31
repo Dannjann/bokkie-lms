@@ -25,9 +25,15 @@ const props = defineProps<{
   lines: AdvanceLine[]
   busy?: boolean
   submitLabel?: string
+  /**
+   * Offers a second button that posts the slip straight away, beside the one
+   * that saves a draft. Only a new slip has it: a draft already saved is posted
+   * from its own page.
+   */
+  postLabel?: string
 }>()
 
-const emit = defineEmits<{ submit: [draft: VoucherDraft]; cancel: [] }>()
+const emit = defineEmits<{ submit: [draft: VoucherDraft]; post: [draft: VoucherDraft]; cancel: [] }>()
 
 /** One row as it is being typed, before the server is told about any of it. */
 interface Row {
@@ -120,8 +126,8 @@ const complete = computed(() =>
   rows.value.every((row) => row.customer !== null && parseCentavos(row.amount) !== null),
 )
 
-function submit(): void {
-  emit('submit', {
+function draft(): VoucherDraft {
+  return {
     date: toISODate(voucherDate.value),
     notes: notes.value,
     lines: rows.value.map((row) => ({
@@ -130,7 +136,17 @@ function submit(): void {
       particular: row.particular,
       amount: row.amount,
     })),
-  })
+  }
+}
+
+// Enter in a field saves a draft rather than posting: a draft moves no money,
+// so it is the safe thing for a stray keypress to do.
+function submit(): void {
+  emit('submit', draft())
+}
+
+function post(): void {
+  if (complete.value) emit('post', draft())
 }
 </script>
 
@@ -244,7 +260,23 @@ function submit(): void {
     <div class="voucher__actions">
       <slot name="actions" />
       <Button type="button" label="Cancel" severity="secondary" text :disabled="busy" @click="emit('cancel')" />
-      <Button type="submit" :label="submitLabel ?? 'Save draft'" :loading="busy" :disabled="!complete" />
+      <Button
+        type="submit"
+        :label="submitLabel ?? 'Save draft'"
+        :severity="postLabel ? 'secondary' : undefined"
+        :outlined="!!postLabel"
+        :loading="busy && !postLabel"
+        :disabled="!complete || busy"
+      />
+      <Button
+        v-if="postLabel"
+        type="button"
+        :label="postLabel"
+        icon="pi pi-check"
+        :loading="busy"
+        :disabled="!complete"
+        @click="post"
+      />
     </div>
   </form>
 </template>

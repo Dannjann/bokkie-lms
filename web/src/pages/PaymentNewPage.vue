@@ -5,7 +5,7 @@ import Message from 'primevue/message'
 import PageHeader from '@/components/PageHeader.vue'
 import PaymentFields from '@/components/PaymentFields.vue'
 import { ApiError } from '@/api/client'
-import { createPayment, type Payment, type PaymentDraft } from '@/api/payments'
+import { createAndPostPayment, createPayment, type Payment, type PaymentDraft } from '@/api/payments'
 import { getCustomer } from '@/api/customers'
 import { toISODate } from '@/format'
 
@@ -45,11 +45,11 @@ async function prefill(): Promise<void> {
   }
 }
 
-async function save(draft: PaymentDraft): Promise<void> {
+async function save(draft: PaymentDraft, andPost = false): Promise<void> {
   error.value = ''
   busy.value = true
   try {
-    const created = await createPayment(draft)
+    const created = await (andPost ? createAndPostPayment(draft) : createPayment(draft))
     await router.replace({ name: 'payment', params: { id: created.id } })
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
@@ -65,7 +65,7 @@ void prefill()
   <div>
     <PageHeader
       title="New payment"
-      description="Saved as a draft. Recording it gives it an OR No.; it is applied to the balance when the farmer is settled."
+      description="Record it now, or save a draft to finish later. Recording gives it an OR No.; it is applied to the balance when the farmer is settled."
     />
 
     <Message v-if="error" severity="error" :closable="false" class="payment-new__error">
@@ -77,7 +77,9 @@ void prefill()
         :payment="prefilled"
         :busy="busy"
         submit-label="Save draft"
+        post-label="Record payment"
         @submit="save"
+        @post="save($event, true)"
         @cancel="router.back()"
       />
     </div>

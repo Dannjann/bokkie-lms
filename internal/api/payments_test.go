@@ -142,6 +142,20 @@ func TestAnEncoderTakesAndPostsAPayment(t *testing.T) {
 	}
 }
 
+func TestAPaymentCanBeRecordedWithoutStoppingAtADraft(t *testing.T) {
+	f := newPaymentFixture(t)
+
+	resp := request(t, f.handler, http.MethodPost, "/api/payments/posted", f.encoder, f.draft("2000.00"))
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("record at once: status %d: %s", resp.Code, resp.Body)
+	}
+	var p payment.Payment
+	decode(t, resp, &p)
+	if p.Status != payment.StatusPosted || p.OrNo != 1 {
+		t.Errorf("the payment is %s with OR No. %d, want recorded as 1", p.Status, p.OrNo)
+	}
+}
+
 func TestPostingTwiceIsAConflictNotASecondCredit(t *testing.T) {
 	f := newPaymentFixture(t)
 	draft := f.create(t, f.draft("2000.00"))

@@ -160,6 +160,11 @@ export function createPayment(draft: PaymentDraft): Promise<Payment> {
   return postJson<Payment>('/api/payments', draft)
 }
 
+/** Takes a payment and records it in one call, so a failed one leaves no draft. */
+export function createAndPostPayment(draft: PaymentDraft): Promise<Payment> {
+  return postJson<Payment>('/api/payments/posted', draft)
+}
+
 export function updatePayment(id: number, draft: PaymentDraft): Promise<Payment> {
   return putJson<Payment>(`/api/payments/${id}`, draft)
 }

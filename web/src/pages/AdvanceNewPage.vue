@@ -5,7 +5,7 @@ import Message from 'primevue/message'
 import PageHeader from '@/components/PageHeader.vue'
 import VoucherLines from '@/components/VoucherLines.vue'
 import { ApiError } from '@/api/client'
-import { createAdvance, type VoucherDraft } from '@/api/advances'
+import { createAdvance, createAndPostAdvance, type VoucherDraft } from '@/api/advances'
 import { toISODate } from '@/format'
 
 const router = useRouter()
@@ -14,11 +14,11 @@ const error = ref('')
 const busy = ref(false)
 const today = toISODate(new Date())
 
-async function save(draft: VoucherDraft): Promise<void> {
+async function save(draft: VoucherDraft, andPost = false): Promise<void> {
   error.value = ''
   busy.value = true
   try {
-    const created = await createAdvance(draft)
+    const created = await (andPost ? createAndPostAdvance(draft) : createAdvance(draft))
     await router.replace({ name: 'advance', params: { id: created.id } })
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
@@ -32,7 +32,7 @@ async function save(draft: VoucherDraft): Promise<void> {
   <div>
     <PageHeader
       title="New advance slip"
-      description="Saved as a draft. It moves no money and gets no Ref. No. until it is posted."
+      description="Post it now, or save a draft to finish later. A draft moves no money and gets no Ref. No. until it is posted."
     />
 
     <Message v-if="error" severity="error" :closable="false" class="advance-new__error">
@@ -44,7 +44,9 @@ async function save(draft: VoucherDraft): Promise<void> {
       notes=""
       :lines="[]"
       :busy="busy"
+      post-label="Post"
       @submit="save"
+      @post="save($event, true)"
       @cancel="router.back()"
     />
   </div>

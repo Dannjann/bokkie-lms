@@ -40,9 +40,11 @@ const props = defineProps<{
   payment: Payment | null
   busy?: boolean
   submitLabel?: string
+  /** Offers a second button that records the payment straight away. */
+  postLabel?: string
 }>()
 
-const emit = defineEmits<{ submit: [draft: PaymentDraft]; cancel: [] }>()
+const emit = defineEmits<{ submit: [draft: PaymentDraft]; post: [draft: PaymentDraft]; cancel: [] }>()
 
 const customer = ref<Customer | null>(null)
 const date = ref<Date>(new Date())
@@ -189,9 +191,9 @@ const complete = computed(() => {
   return typedCentavos.value !== null
 })
 
-function submit(): void {
-  if (!complete.value || !customer.value) return
-  emit('submit', {
+function draft(): PaymentDraft | null {
+  if (!complete.value || !customer.value) return null
+  return {
     customer_id: customer.value.id,
     date: toISODate(date.value),
     // The server ignores the amount of a palay payment and adds up the lines.
@@ -206,7 +208,18 @@ function submit(): void {
         }))
       : [],
     particular: particular.value.trim(),
-  })
+  }
+}
+
+// Enter in a field saves a draft rather than recording: see VoucherLines.
+function submit(): void {
+  const d = draft()
+  if (d) emit('submit', d)
+}
+
+function post(): void {
+  const d = draft()
+  if (d) emit('post', d)
 }
 </script>
 
@@ -429,8 +442,19 @@ function submit(): void {
       <Button
         type="submit"
         :label="submitLabel ?? 'Save'"
+        :severity="postLabel ? 'secondary' : undefined"
+        :outlined="!!postLabel"
+        :disabled="!complete || busy"
+        :loading="busy && !postLabel"
+      />
+      <Button
+        v-if="postLabel"
+        type="button"
+        :label="postLabel"
+        icon="pi pi-check"
         :disabled="!complete || busy"
         :loading="busy"
+        @click="post"
       />
     </div>
   </form>

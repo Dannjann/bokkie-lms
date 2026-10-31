@@ -143,6 +143,37 @@ func TestAnEncoderEntersAndPostsAVoucher(t *testing.T) {
 	}
 }
 
+// The draft is optional: Post on a new slip enters and posts it in one call.
+func TestAVoucherCanBePostedWithoutStoppingAtADraft(t *testing.T) {
+	f := newAdvanceFixture(t)
+
+	resp := request(t, f.handler, http.MethodPost, "/api/advances/posted", f.encoder, f.draft(t, "1500.00"))
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("post at once: status %d: %s", resp.Code, resp.Body)
+	}
+	var v advance.Voucher
+	decode(t, resp, &v)
+	if v.Status != advance.StatusPosted || v.RefNo == 0 {
+		t.Errorf("the slip is %s with Ref. No. %d, want posted and numbered", v.Status, v.RefNo)
+	}
+	if got := f.balance(t, f.farmers[0]); got != "1500.00" {
+		t.Errorf("the farmer is at %s, want 1500.00", got)
+	}
+
+	// A slip that does not hold up leaves nothing behind, draft or otherwise.
+	bad := request(t, f.handler, http.MethodPost, "/api/advances/posted", f.encoder, f.draft(t))
+	if bad.Code != http.StatusBadRequest {
+		t.Errorf("a slip with no lines: status %d, want 400", bad.Code)
+	}
+	var vouchers int
+	if err := f.db.QueryRow(`SELECT COUNT(*) FROM advance_vouchers`).Scan(&vouchers); err != nil {
+		t.Fatal(err)
+	}
+	if vouchers != 1 {
+		t.Errorf("%d vouchers on the books, want only the one that posted", vouchers)
+	}
+}
+
 func TestPostingTwiceIsAConflictNotASecondVoucher(t *testing.T) {
 	f := newAdvanceFixture(t)
 	draft := f.create(t, f.draft(t, "500.00"))
@@ -278,6 +309,7 @@ func TestAdvanceRoutesAreRegisteredWithTheRightAccess(t *testing.T) {
 		"PUT /api/advances/{id}":       Authenticated,
 		"DELETE /api/advances/{id}":    Authenticated,
 		"POST /api/advances/{id}/post": Authenticated,
+		"POST /api/advances/posted":    Authenticated,
 		"POST /api/advances/{id}/void": ManagerOnly,
 	}
 

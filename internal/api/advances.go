@@ -155,6 +155,36 @@ func handleCreateAdvance(d Deps) TxHandler {
 	}
 }
 
+// handleCreateAndPostAdvance enters a slip and posts it in one go, for the
+// encoder who has no reason to stop at a draft.
+//
+// One transaction, so a slip that fails to post — a line that does not hold up
+// — leaves no draft behind for somebody to find later. The INSERT is this
+// transaction's first statement, which is what PostTx needs of it.
+func handleCreateAndPostAdvance(d Deps) TxHandler {
+	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
+		var draft advance.Draft
+		if err := decodeJSON(r, &draft); err != nil {
+			return Change{}, err
+		}
+
+		created, err := d.Advances.CreateTx(ctx, tx, draft, actorOf(r))
+		if err != nil {
+			return Change{}, advanceError(err)
+		}
+		posted, err := d.Advances.PostTx(ctx, tx, created.ID, actorOf(r))
+		if err != nil {
+			return Change{}, advanceError(err)
+		}
+		return Change{
+			EntityID: voucherEntityID(posted),
+			After:    posted,
+			Status:   http.StatusCreated,
+			Body:     posted,
+		}, nil
+	}
+}
+
 func handleUpdateAdvance(d Deps) TxHandler {
 	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
 		id, err := advanceID(r)
