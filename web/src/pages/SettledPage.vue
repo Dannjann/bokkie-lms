@@ -32,8 +32,8 @@ onMounted(run)
 
 <template>
   <ReportShell
-    title="Settled"
-    description="Every settlement in the period — open one to read it back or reprint it."
+    title="Liquidated"
+    description="Every liquidation in the period — open one to read it back or reprint it."
     mode="period"
     v-model:from="from"
     v-model:to="to"
@@ -42,7 +42,7 @@ onMounted(run)
     :rows="report?.rows.length ?? 0"
     @refresh="run"
   >
-    <template #empty>Nobody was settled over this period.</template>
+    <template #empty>Nobody was liquidated over this period.</template>
 
     <table v-if="report" class="report__table">
       <thead>

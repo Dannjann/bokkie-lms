@@ -205,14 +205,20 @@ var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 func escapeLike(s string) string { return likeEscaper.Replace(s) }
 
-// OrNosFor maps payment ids to their OR Nos., for the statement — the same
-// question RefNosForLines answers for vouchers, and asked here for the same
+// Document is what a statement shows of the payment behind an entry.
+type Document struct {
+	OrNo       int64
+	Particular string
+}
+
+// DocumentsFor maps payment ids to their OR Nos. and particulars, for the
+// statement — the same question DocumentsForLines answers for vouchers, and asked here for the same
 // reason: the ledger holds the provenance and is not allowed to know what a
 // receipt is.
 //
 // A draft has no number and is absent from the result, which is consistent with
 // it having produced no entry to ask about.
-func (s *Service) OrNosFor(ctx context.Context, ids []int64) (map[int64]int64, error) {
+func (s *Service) DocumentsFor(ctx context.Context, ids []int64) (map[int64]Document, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -224,22 +230,23 @@ func (s *Service) OrNosFor(ctx context.Context, ids []int64) (map[int64]int64, e
 	marks := strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, or_no FROM payments WHERE id IN (`+marks+`) AND or_no IS NOT NULL`, args...)
+		`SELECT id, or_no, particular FROM payments WHERE id IN (`+marks+`) AND or_no IS NOT NULL`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read the OR Nos. behind a page of entries: %w", err)
 	}
 	defer rows.Close()
 
-	orNos := make(map[int64]int64, len(ids))
+	docs := make(map[int64]Document, len(ids))
 	for rows.Next() {
-		var id, orNo int64
-		if err := rows.Scan(&id, &orNo); err != nil {
+		var id int64
+		var doc Document
+		if err := rows.Scan(&id, &doc.OrNo, &doc.Particular); err != nil {
 			return nil, fmt.Errorf("read the OR Nos. behind a page of entries: %w", err)
 		}
-		orNos[id] = orNo
+		docs[id] = doc
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read the OR Nos. behind a page of entries: %w", err)
 	}
-	return orNos, nil
+	return docs, nil
 }

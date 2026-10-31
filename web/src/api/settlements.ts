@@ -187,7 +187,7 @@ export function settlementStatusLabel(status: SettlementStatus): string {
     case 'draft':
       return 'Draft'
     case 'posted':
-      return 'Settled'
+      return 'Liquidated'
     case 'voided':
       return 'Voided'
     default:

@@ -160,6 +160,11 @@ export function createPayment(draft: PaymentDraft): Promise<Payment> {
   return postJson<Payment>('/api/payments', draft)
 }
 
+/** Takes a payment and records it in one call, so a failed one leaves no draft. */
+export function createAndPostPayment(draft: PaymentDraft): Promise<Payment> {
+  return postJson<Payment>('/api/payments/posted', draft)
+}
+
 export function updatePayment(id: number, draft: PaymentDraft): Promise<Payment> {
   return putJson<Payment>(`/api/payments/${id}`, draft)
 }
@@ -204,7 +209,7 @@ export function paymentStatusLabel(status: PaymentStatus, settlementNo: number):
     case 'voided':
       return 'Voided'
     case 'posted':
-      return settlementNo > 0 ? 'Settled' : 'Recorded'
+      return settlementNo > 0 ? 'Liquidated' : 'Recorded'
     default:
       return status
   }
@@ -248,6 +253,18 @@ export interface StatementRow {
   running: Balance
   /** "Ref. No. 1425", "OR No. 7", or absent for an entry with no document. */
   document?: string
+  /** What the advance line or payment was for, as typed; absent when none was. */
+  particular?: string
+  /** For an advance line: enough to edit it in place, and to fold away an edit's history. */
+  advance?: {
+    voucher_id: number
+    line_id: number
+    revision: number
+    /** An entry of a revision an edit replaced — the original or its reversal. */
+    superseded: boolean
+    editable: boolean
+    edited_by?: string
+  }
 }
 
 export interface Statement {

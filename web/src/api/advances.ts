@@ -35,6 +35,13 @@ export interface Voucher {
   voided_at: string | null
   voided_by: { UserID: number; Username: string }
   void_reason: string
+  /**
+   * 1 as first posted; each edit adds one under the same Ref. No. Above 1,
+   * created_by and created_at are who made the latest edit and when.
+   */
+  revision: number
+  /** The slip that replaced this one when it was edited, or 0. */
+  superseded_by: number
 }
 
 /** One entry the voucher put in the ledger, including the reversals a void wrote. */
@@ -121,6 +128,46 @@ export function getAdvance(id: number): Promise<VoucherDetail> {
 
 export function createAdvance(draft: VoucherDraft): Promise<Voucher> {
   return postJson<Voucher>('/api/advances', draft)
+}
+
+/** Enters a slip and posts it in one call, so a failed post leaves no draft. */
+export function createAndPostAdvance(draft: VoucherDraft): Promise<Voucher> {
+  return postJson<Voucher>('/api/advances/posted', draft)
+}
+
+/**
+ * Edits a posted slip. The server voids it and posts the edited lines under
+ * the same Ref. No., so the answer is a different voucher — the new revision.
+ */
+export function editAdvance(id: number, draft: VoucherDraft): Promise<Voucher> {
+  return postJson<Voucher>(`/api/advances/${id}/edit`, draft)
+}
+
+/** What can be changed about one line in place. */
+export interface LineChange {
+  date: string
+  particular: string
+  amount: string
+}
+
+/**
+ * Edits one line of a posted slip, leaving the rest as it is: the slip is read
+ * fresh, that line replaced, and the whole of it sent as the edit.
+ */
+export async function editAdvanceLine(voucherId: number, lineId: number, change: LineChange): Promise<Voucher> {
+  const { voucher } = await getAdvance(voucherId)
+  if (!voucher.lines.some((l) => l.id === lineId)) {
+    throw new Error('That line has changed since this page was opened. Reload and try again.')
+  }
+  return editAdvance(voucherId, {
+    date: voucher.date,
+    notes: voucher.notes,
+    lines: voucher.lines.map((l) =>
+      l.id === lineId
+        ? { customer_id: l.customer_id, ...change }
+        : { customer_id: l.customer_id, date: l.date, particular: l.particular, amount: l.amount },
+    ),
+  })
 }
 
 export function updateAdvance(id: number, draft: VoucherDraft): Promise<Voucher> {

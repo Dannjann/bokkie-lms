@@ -140,6 +140,32 @@ func handleCreatePayment(d Deps) TxHandler {
 	}
 }
 
+// handleCreateAndPostPayment takes a payment and records it in one go. The
+// same shape as handleCreateAndPostAdvance, and for the same reasons.
+func handleCreateAndPostPayment(d Deps) TxHandler {
+	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
+		var draft payment.Draft
+		if err := decodeJSON(r, &draft); err != nil {
+			return Change{}, err
+		}
+
+		created, err := d.Payments.CreateTx(ctx, tx, draft, paymentActorOf(r))
+		if err != nil {
+			return Change{}, paymentError(err)
+		}
+		posted, err := d.Payments.PostTx(ctx, tx, created.ID, paymentActorOf(r))
+		if err != nil {
+			return Change{}, paymentError(err)
+		}
+		return Change{
+			EntityID: paymentEntityID(posted),
+			After:    posted,
+			Status:   http.StatusCreated,
+			Body:     posted,
+		}, nil
+	}
+}
+
 func handleUpdatePayment(d Deps) TxHandler {
 	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
 		id, err := paymentID(r)

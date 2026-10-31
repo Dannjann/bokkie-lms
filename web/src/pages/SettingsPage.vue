@@ -7,6 +7,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
+import BarangaySettings from '@/components/BarangaySettings.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
 import {
@@ -302,6 +303,8 @@ onMounted(() => {
         </div>
       </div>
     </section>
+
+    <BarangaySettings />
 
     <section class="card card--padded settings__group">
       <h2 class="settings__group-title">Backups</h2>

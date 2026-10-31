@@ -228,25 +228,25 @@ func (e ValidationError) Error() string { return e.Message }
 
 var (
 	// ErrNotFound means there is no settlement with that id.
-	ErrNotFound = errors.New("no such settlement")
+	ErrNotFound = errors.New("no such liquidation")
 
 	// ErrNotDraft means it has been posted already.
-	ErrNotDraft = errors.New("that settlement has been posted already")
+	ErrNotDraft = errors.New("that liquidation has been posted already")
 
 	// ErrNotPosted means only a posted settlement can be voided.
-	ErrNotPosted = errors.New("only a posted settlement can be voided")
+	ErrNotPosted = errors.New("only a posted liquidation can be voided")
 
 	// ErrNotLatest means a later settlement for the same farmer is posted.
 	// That one carried forward the balance this one left; void it first.
-	ErrNotLatest = errors.New("a later settlement for this farmer is posted: void that one first")
+	ErrNotLatest = errors.New("a later liquidation for this farmer is posted: void that one first")
 
 	// ErrPreviewStale means the record moved between the preview and the post.
-	ErrPreviewStale = errors.New("the record has moved since this settlement was computed")
+	ErrPreviewStale = errors.New("the record has moved since this liquidation was computed")
 
 	// ErrNoPayment means there is nothing to apply. The legacy Liquidate
 	// button stayed disabled until a payment was on the screen, and so does
 	// this: a settlement is what happens when a farmer pays.
-	ErrNoPayment = errors.New("there is no recorded payment to settle")
+	ErrNoPayment = errors.New("there is no recorded payment to liquidate")
 )
 
 const maxNotesLen = 1000
@@ -314,7 +314,7 @@ func (s *Service) clean(d Draft) (cleanDraft, error) {
 
 	switch {
 	case out.CustomerID <= 0:
-		return cleanDraft{}, ValidationError{Field: "customer_id", Message: "a settlement needs a farmer"}
+		return cleanDraft{}, ValidationError{Field: "customer_id", Message: "a liquidation needs a farmer"}
 	case out.Cutoff.After(today):
 		return cleanDraft{}, ValidationError{
 			Field:   "cutoff",
@@ -353,11 +353,11 @@ func (s *Service) refused(ctx context.Context, q queryExecer, id int64, res sql.
 
 	if want == StatusPosted {
 		if Status(status) == StatusPosted {
-			return fmt.Errorf("%w: settlement %d", ErrNotLatest, id)
+			return fmt.Errorf("%w: liquidation %d", ErrNotLatest, id)
 		}
-		return fmt.Errorf("%w: settlement %d is %s", ErrNotPosted, id, status)
+		return fmt.Errorf("%w: liquidation %d is %s", ErrNotPosted, id, status)
 	}
-	return fmt.Errorf("%w: settlement %d is %s", ErrNotDraft, id, status)
+	return fmt.Errorf("%w: liquidation %d is %s", ErrNotDraft, id, status)
 }
 
 func nullableID(id int64) any {

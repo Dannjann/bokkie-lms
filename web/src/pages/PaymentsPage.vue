@@ -36,7 +36,7 @@ const perPage = ref(25)
 const statusOptions = [
   { label: 'All', value: 'all' },
   { label: 'Drafts', value: 'draft' },
-  { label: 'Recorded or settled', value: 'posted' },
+  { label: 'Recorded or liquidated', value: 'posted' },
   { label: 'Voided', value: 'voided' },
 ]
 
@@ -86,7 +86,7 @@ onMounted(load)
   <div>
     <PageHeader
       title="Payments"
-      description="A payment is numbered when it is recorded and applied when the farmer is settled. It is undone by voiding, never by editing."
+      description="A payment is numbered when it is recorded and applied when the farmer is liquidated. It is undone by voiding, never by editing."
     >
       <template #actions>
         <Button label="New payment" icon="pi pi-plus" @click="router.push({ name: 'payment-new' })" />
@@ -170,7 +170,7 @@ onMounted(load)
               :to="{ name: 'settlement', params: { id: data.settlement_id } }"
               @click.stop
             >
-              <Tag severity="success" :value="`Settled (No. ${data.settlement_no})`" />
+              <Tag severity="success" :value="`Liquidated (No. ${data.settlement_no})`" />
             </RouterLink>
             <Tag v-else severity="info" :value="paymentStatusLabel(data.status, 0)" />
           </template>

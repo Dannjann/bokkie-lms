@@ -111,6 +111,8 @@ const actionNames: Record<string, string> = {
   // Customers
   'customer.created': 'Customer added',
   'customer.updated': 'Customer edited',
+  'barangay.created': 'Barangay added',
+  'barangay.updated': 'Barangay changed',
   'customer.active.changed': 'Customer activated or deactivated',
   'customer.imported': 'Customers imported from a file',
 
@@ -119,6 +121,7 @@ const actionNames: Record<string, string> = {
   'advance.draft.updated': 'Advance slip draft edited',
   'advance.draft.deleted': 'Advance slip draft discarded',
   'advance.posted': 'Advance slip posted',
+  'advance.edited': 'Advance slip edited',
   'advance.voided': 'Advance slip voided',
 
   // Payments
@@ -129,11 +132,11 @@ const actionNames: Record<string, string> = {
   'payment.voided': 'Payment voided',
 
   // Settlements
-  'settlement.draft.created': 'Settlement computed',
-  'settlement.draft.updated': 'Settlement recomputed',
-  'settlement.draft.deleted': 'Settlement draft discarded',
-  'settlement.posted': 'Farmer settled',
-  'settlement.voided': 'Settlement voided',
+  'settlement.draft.created': 'Liquidation computed',
+  'settlement.draft.updated': 'Liquidation recomputed',
+  'settlement.draft.deleted': 'Liquidation draft discarded',
+  'settlement.posted': 'Farmer liquidated',
+  'settlement.voided': 'Liquidation voided',
 
   // The system itself
   'setting.changed': 'Setting changed',

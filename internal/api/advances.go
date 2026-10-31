@@ -155,6 +155,36 @@ func handleCreateAdvance(d Deps) TxHandler {
 	}
 }
 
+// handleCreateAndPostAdvance enters a slip and posts it in one go, for the
+// encoder who has no reason to stop at a draft.
+//
+// One transaction, so a slip that fails to post — a line that does not hold up
+// — leaves no draft behind for somebody to find later. The INSERT is this
+// transaction's first statement, which is what PostTx needs of it.
+func handleCreateAndPostAdvance(d Deps) TxHandler {
+	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
+		var draft advance.Draft
+		if err := decodeJSON(r, &draft); err != nil {
+			return Change{}, err
+		}
+
+		created, err := d.Advances.CreateTx(ctx, tx, draft, actorOf(r))
+		if err != nil {
+			return Change{}, advanceError(err)
+		}
+		posted, err := d.Advances.PostTx(ctx, tx, created.ID, actorOf(r))
+		if err != nil {
+			return Change{}, advanceError(err)
+		}
+		return Change{
+			EntityID: voucherEntityID(posted),
+			After:    posted,
+			Status:   http.StatusCreated,
+			Body:     posted,
+		}, nil
+	}
+}
+
 func handleUpdateAdvance(d Deps) TxHandler {
 	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
 		id, err := advanceID(r)
@@ -228,6 +258,37 @@ func handlePostAdvance(d Deps) TxHandler {
 		}
 
 		after, err := d.Advances.PostTx(ctx, tx, id, actorOf(r))
+		if err != nil {
+			return Change{}, advanceError(err)
+		}
+		return Change{EntityID: voucherEntityID(after), Before: before, After: after, Body: after}, nil
+	}
+}
+
+// handleEditAdvance edits a posted slip by correcting it: the original is
+// voided and a replacement posted under the same Ref. No., in one transaction.
+// See advance.CorrectTx.
+//
+// Open to everyone who can post, by the client's decision: an edit is in the
+// audit log with its before and after, and on the slip as "Edited by".
+func handleEditAdvance(d Deps) TxHandler {
+	return func(ctx context.Context, tx *sql.Tx, r *http.Request) (Change, error) {
+		id, err := advanceID(r)
+		if err != nil {
+			return Change{}, badRequest("%s", err.Error())
+		}
+		var draft advance.Draft
+		if err := decodeJSON(r, &draft); err != nil {
+			return Change{}, err
+		}
+
+		// Read on the pool, before the transaction writes: CorrectTx needs its
+		// INSERT to be the first statement this transaction runs.
+		before, err := d.Advances.ByID(ctx, id)
+		if err != nil {
+			return Change{}, advanceError(err)
+		}
+		after, err := d.Advances.CorrectTx(ctx, tx, id, draft, actorOf(r))
 		if err != nil {
 			return Change{}, advanceError(err)
 		}
@@ -323,7 +384,8 @@ func asAdvanceError(err error) (statusError, bool) {
 		// 409 rather than 400: nothing about the request is malformed, the
 		// voucher simply moved on — which is what a second click looks like.
 		return conflict("%s", err.Error()), true
-	case errors.Is(err, advance.ErrNotPosted), errors.Is(err, advance.ErrSettled):
+	case errors.Is(err, advance.ErrNotPosted), errors.Is(err, advance.ErrSettled),
+		errors.Is(err, advance.ErrNotEditable):
 		return conflict("%s", err.Error()), true
 	default:
 		return statusError{}, false

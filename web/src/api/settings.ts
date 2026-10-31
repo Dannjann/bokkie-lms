@@ -32,7 +32,7 @@ export const settingGroups: { label: string; blurb?: string; keys: string[] }[] 
   {
     label: 'Interest',
     blurb:
-      'Interest is charged when a farmer is settled: principal × rate × days ÷ 30, simple. Each settlement starts with this rate and can change it.',
+      'Interest is charged when a farmer is liquidated: principal × rate × days ÷ 30, simple. Each liquidation starts with this rate and can change it.',
     keys: ['interest.rate_bps'],
   },
   { label: 'Payments', keys: ['payment.applies'] },

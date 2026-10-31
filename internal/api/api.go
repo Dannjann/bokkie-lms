@@ -270,6 +270,14 @@ func registerRoutes(rt *router, d Deps) {
 	rt.mutateSelfAudited(ManagerOnly, http.MethodPost, "/api/customers/import",
 		auditImportRoute, handleImportCustomers(d))
 
+	// Barangays shape customer codes. Everyone who adds a customer picks from
+	// the list; only a manager changes it.
+	rt.read(Authenticated, "/api/barangays", handleListBarangays(d))
+	rt.mutate(ManagerOnly, http.MethodPost, "/api/barangays",
+		"barangay.created", "barangay", handleCreateBarangay(d))
+	rt.mutate(ManagerOnly, http.MethodPut, "/api/barangays/{id}",
+		"barangay.updated", "barangay", handleUpdateBarangay(d))
+
 	// --- Advances -----------------------------------------------------------
 	//
 	// Entering an advance is counter work, the same as adding a farmer: a
@@ -293,6 +301,15 @@ func registerRoutes(rt *router, d Deps) {
 
 	rt.mutate(Authenticated, http.MethodPost, "/api/advances/{id}/post",
 		"advance.posted", "advance", handlePostAdvance(d))
+	// The draft is optional: a slip can be entered and posted at once, and the
+	// log reads the same as posting a draft, because that is what happened.
+	rt.mutate(Authenticated, http.MethodPost, "/api/advances/posted",
+		"advance.posted", "advance", handleCreateAndPostAdvance(d))
+
+	// Editing a posted slip is open to everyone who posts one: the client's
+	// decision, made because every edit is logged and shown on the slip.
+	rt.mutate(Authenticated, http.MethodPost, "/api/advances/{id}/edit",
+		"advance.edited", "advance", handleEditAdvance(d))
 
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/advances/{id}/void",
 		"advance.voided", "advance", handleVoidAdvance(d))
@@ -316,6 +333,8 @@ func registerRoutes(rt *router, d Deps) {
 
 	rt.mutate(Authenticated, http.MethodPost, "/api/payments/{id}/post",
 		"payment.posted", "payment", handlePostPayment(d))
+	rt.mutate(Authenticated, http.MethodPost, "/api/payments/posted",
+		"payment.posted", "payment", handleCreateAndPostPayment(d))
 
 	rt.mutate(ManagerOnly, http.MethodPost, "/api/payments/{id}/void",
 		"payment.voided", "payment", handleVoidPayment(d))

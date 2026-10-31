@@ -181,7 +181,7 @@ func TestAFarmerDeliversAndIsSettled(t *testing.T) {
 	// A settled payment cannot be voided on its own.
 	resp := request(t, f.handler, http.MethodPost, "/api/payments/"+itoa(p.ID)+"/void", f.manager,
 		map[string]string{"reason": "wrong farmer"})
-	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "void the settlement first") {
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "void the liquidation first") {
 		t.Errorf("voiding a settled payment: status %d: %s, want 409 naming the settlement", resp.Code, resp.Body)
 	}
 
@@ -294,7 +294,7 @@ func TestASecondSettlementChargesTheCarriedPrincipal(t *testing.T) {
 
 	resp := request(t, f.handler, http.MethodPost, "/api/settlements/"+itoa(one.ID)+"/void", f.manager,
 		map[string]string{"reason": "wrong rate"})
-	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "later settlement") {
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "later liquidation") {
 		t.Errorf("voiding an earlier settlement: status %d: %s, want 409", resp.Code, resp.Body)
 	}
 
@@ -307,8 +307,12 @@ func TestASecondSettlementChargesTheCarriedPrincipal(t *testing.T) {
 
 	// The statement names the settlement on its interest entry.
 	stmt := request(t, f.handler, http.MethodGet, "/api/customers/"+itoa(f.farmer.ID)+"/statement", f.encoder, nil)
-	if !strings.Contains(stmt.Body.String(), "Settlement No. 2") {
-		t.Errorf("the statement does not name the settlement: %s", stmt.Body)
+	if !strings.Contains(stmt.Body.String(), "Liquidation No. 2") {
+		t.Errorf("the statement does not name the liquidation: %s", stmt.Body)
+	}
+	// And says what each advance was for, beside its Ref. No.
+	if !strings.Contains(stmt.Body.String(), `"particular":"2 BAGS UREA"`) {
+		t.Errorf("the statement does not carry the advance's particular: %s", stmt.Body)
 	}
 }
 
@@ -354,5 +358,51 @@ func TestACreditIsNotCharged(t *testing.T) {
 	if two.Carried.Principal.String() != "-1000.00" || !two.Carried.Charge.IsZero() {
 		t.Errorf("carried %s charged %s, want a credit of -1000.00 charged nothing",
 			two.Carried.Principal, two.Carried.Charge)
+	}
+}
+
+// An advance is edited from inside a draft liquidation: the draft is
+// recomputed on the edited figure, and the slip keeps its Ref. No. Once a
+// liquidation is posted, the advances it charged are no longer editable.
+func TestAnAdvanceIsEditedInsideALiquidation(t *testing.T) {
+	f := newSettlementFixture(t)
+	f.deliver(t, f.farmer.ID, today(t), "100.0", "15.00")
+
+	st := f.settle(t, map[string]any{"customer_id": f.farmer.ID, "cutoff": today(t)})
+	slip := st.Advances[0]
+
+	edit := map[string]any{
+		"date": daysAgo(t, 90), "notes": "",
+		"lines": []map[string]any{{"customer_id": f.farmer.ID, "particular": "2 BAGS UREA", "amount": "8000.00"}},
+	}
+	resp := request(t, f.handler, http.MethodPost, "/api/advances/"+itoa(slip.VoucherID)+"/edit", f.encoder, edit)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("edit: status %d: %s", resp.Code, resp.Body)
+	}
+	var edited struct {
+		ID       int64 `json:"id"`
+		RefNo    int64 `json:"ref_no"`
+		Revision int   `json:"revision"`
+	}
+	decode(t, resp, &edited)
+	if edited.RefNo != slip.RefNo || edited.Revision != 2 {
+		t.Errorf("the edited slip is %d rev %d, want %d rev 2", edited.RefNo, edited.Revision, slip.RefNo)
+	}
+
+	resp = request(t, f.handler, http.MethodPut, "/api/settlements/"+itoa(st.ID), f.encoder,
+		map[string]any{"customer_id": f.farmer.ID, "cutoff": today(t)})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("recompute: status %d: %s", resp.Code, resp.Body)
+	}
+	var recomputed settlement.Settlement
+	decode(t, resp, &recomputed)
+	if len(recomputed.Advances) != 1 || recomputed.Advances[0].Charge.String() != "1200.00" {
+		t.Errorf("the recomputed draft charges %+v, want ₱8,000 for 90 days: 1200.00", recomputed.Advances)
+	}
+	f.post(t, st.ID)
+
+	resp = request(t, f.handler, http.MethodPost, "/api/advances/"+itoa(edited.ID)+"/edit", f.encoder, edit)
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "void the liquidation first") {
+		t.Errorf("editing a liquidated advance: status %d: %s, want 409", resp.Code, resp.Body)
 	}
 }

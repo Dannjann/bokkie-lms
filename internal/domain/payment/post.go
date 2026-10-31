@@ -164,7 +164,7 @@ func (s *Service) VoidTx(ctx context.Context, tx *sql.Tx, id int64, by Actor, re
 		return Payment{}, err
 	}
 	if p.SettlementID != 0 {
-		return Payment{}, fmt.Errorf("%w: settlement %d applied payment %d", ErrSettled, p.SettlementNo, id)
+		return Payment{}, fmt.Errorf("%w: liquidation %d applied payment %d", ErrSettled, p.SettlementNo, id)
 	}
 
 	entries, err := s.ledger.EntriesBySourceTx(ctx, tx, SourceTable, []int64{id})

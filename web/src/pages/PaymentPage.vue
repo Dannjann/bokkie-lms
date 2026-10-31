@@ -114,8 +114,8 @@ async function load(): Promise<void> {
 }
 
 // Every one of these reloads rather than trusting the response alone: posting
-// and voiding both change what the ledger says, and the entries underneath are
-// the point of looking at a posted receipt.
+// and voiding both change what the ledger says, and the sentence about how the
+// payment split is read from it.
 async function run(what: string, action: () => Promise<Payment>): Promise<void> {
   error.value = ''
   saved.value = ''
@@ -136,7 +136,7 @@ function save(draft: PaymentDraft): void {
 }
 
 function post(): void {
-  void run('Recorded. It will be applied when the farmer is settled.', () => postPayment(id.value))
+  void run('Recorded. It will be applied when the farmer is liquidated.', () => postPayment(id.value))
 }
 
 function confirmVoid(): void {
@@ -210,7 +210,7 @@ onMounted(load)
         >
           <template #actions>
             <span class="payment__hint">
-              Recording numbers it; it is applied to the balance when the farmer is settled.
+              Recording numbers it; it is applied to the balance when the farmer is liquidated.
             </span>
             <Button
               label="Delete draft"
@@ -293,10 +293,10 @@ onMounted(load)
           <div class="payment__settle">
             <span>
               Recorded and waiting. It is applied to what {{ payment.customer_name }} owes —
-              interest first — when the farmer is settled.
+              interest first — when the farmer is liquidated.
             </span>
             <Button
-              label="Settle this farmer"
+              label="Liquidate this farmer"
               icon="pi pi-calculator"
               size="small"
               @click="
@@ -309,44 +309,13 @@ onMounted(load)
           </div>
         </Message>
         <Message v-else-if="settled" severity="success" :closable="false">
-          Settled in
+          Liquidated in
           <RouterLink :to="{ name: 'settlement', params: { id: payment.settlement_id } }">
-            Settlement No. {{ payment.settlement_no }}</RouterLink
+            Liquidation No. {{ payment.settlement_no }}</RouterLink
           >.
         </Message>
 
-        <!--
-          Where the split is read from. The payment does not store how the money
-          divided; the ledger entry does, and this is that entry.
-        -->
-        <section v-if="entries.length > 0" class="card payment__grid">
-          <h2 class="payment__section">In the ledger</h2>
-          <table class="payment__table">
-            <thead>
-              <tr>
-                <th class="payment__date">Date</th>
-                <th>Entry</th>
-                <th>By</th>
-                <th class="payment__amount">Principal</th>
-                <th class="payment__amount">Interest</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="entry in entries" :key="entry.id">
-                <td class="payment__date numeric">{{ entry.date }}</td>
-                <td>
-                  {{ entry.type === 'reversal' ? 'Reversal' : 'Payment' }}
-                  <span v-if="entry.reason" class="payment__reason">— {{ entry.reason }}</span>
-                </td>
-                <td>{{ entry.by }}</td>
-                <td class="payment__amount numeric">{{ formatPesos(entry.principal) }}</td>
-                <td class="payment__amount numeric">{{ formatPesos(entry.interest) }}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <p v-if="cleared && !reversal" class="payment__note">{{ cleared }}</p>
-        </section>
+        <p v-if="cleared && !reversal" class="payment__note">{{ cleared }}</p>
 
         <section v-if="balance" class="card card--padded payment__record">
           <div class="payment__row payment__row--total">
@@ -358,7 +327,7 @@ onMounted(load)
         </section>
 
         <p v-if="isManager && settled" class="payment__note payment__note--right">
-          To void this payment, void Settlement No. {{ payment.settlement_no }} first.
+          To void this payment, void Liquidation No. {{ payment.settlement_no }} first.
         </p>
         <div v-if="isManager && waiting" class="payment__actions">
           <Button
@@ -377,7 +346,7 @@ onMounted(load)
 
     <Dialog v-model:visible="voiding" modal header="Void this payment" :style="{ width: '28rem' }">
       <p class="payment__dialog-text">
-        The payment is cancelled and no settlement will apply it. It stays on the record, with
+        The payment is cancelled and no liquidation will apply it. It stays on the record, with
         this reason, under its OR No.
       </p>
       <Textarea v-model="voidReason" rows="3" fluid aria-label="Reason for voiding" />
@@ -489,10 +458,6 @@ onMounted(load)
    this the heading sat left while its figures sat right. */
 .payment__table th.payment__amount {
   text-align: right;
-}
-
-.payment__reason {
-  color: var(--shell-muted);
 }
 
 .payment__note {

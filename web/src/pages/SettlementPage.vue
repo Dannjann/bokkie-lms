@@ -20,9 +20,10 @@ import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
+import AdvanceLineEdit from '@/components/AdvanceLineEdit.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { ApiError } from '@/api/client'
-import { entryLabel, methodLabel, type LedgerEntryView } from '@/api/payments'
+import { methodLabel } from '@/api/payments'
 import {
   balanceLabel,
   deleteSettlement,
@@ -45,7 +46,6 @@ const { user, isManager } = storeToRefs(useSessionStore())
 const id = computed(() => Number(route.params.id))
 
 const settlement = ref<Settlement | null>(null)
-const entries = ref<LedgerEntryView[]>([])
 
 const loading = ref(true)
 const busy = ref(false)
@@ -89,8 +89,8 @@ function adopt(loaded: Settlement): void {
   notes.value = loaded.notes
   setPageTitle(
     loaded.settlement_no
-      ? `Settlement No. ${loaded.settlement_no}`
-      : `Draft settlement — ${loaded.customer_name}`,
+      ? `Liquidation No. ${loaded.settlement_no}`
+      : `Draft liquidation — ${loaded.customer_name}`,
   )
 }
 
@@ -100,7 +100,6 @@ async function load(): Promise<void> {
   try {
     const detail = await getSettlement(id.value)
     adopt(detail.settlement)
-    entries.value = detail.entries
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : 'Cannot reach the server.'
   } finally {
@@ -109,8 +108,7 @@ async function load(): Promise<void> {
 }
 
 // Every one of these reloads rather than trusting the response alone: posting
-// and voiding both change what the ledger says, and the entries underneath are
-// the point of looking at a settled farmer.
+// and voiding both change the liquidation's status and who it names.
 async function act(what: string, action: () => Promise<Settlement>): Promise<void> {
   error.value = ''
   stale.value = false
@@ -138,7 +136,7 @@ const rateInvalid = ref(false)
  * Recompute the draft with the cut-off and rate on the form — which is also
  * the answer to a stale preview, since the form starts with the draft's own.
  */
-function recompute(): void {
+function recompute(done = 'Recomputed.'): void {
   const current = settlement.value
   if (!current) return
 
@@ -150,7 +148,7 @@ function recompute(): void {
     return
   }
 
-  void act('Recomputed.', () =>
+  void act(done, () =>
     recomputeSettlement(id.value, {
       customer_id: current.customer_id,
       cutoff: toISODate(cutoff.value),
@@ -160,8 +158,21 @@ function recompute(): void {
   )
 }
 
+/**
+ * The open advance being edited in place. Only a draft offers it: a posted
+ * liquidation has charged its advances, and they are fixed until it is voided.
+ */
+const editingLine = ref<number | null>(null)
+
+// The edit moved figures this draft was computed from, so it is recomputed at
+// once on the cut-off and rate already on screen.
+function lineSaved(): void {
+  editingLine.value = null
+  recompute('Advance edited, and the liquidation recomputed.')
+}
+
 function settle(): void {
-  void act('Settled.', () => postSettlement(id.value))
+  void act('Liquidated.', () => postSettlement(id.value))
 }
 
 function confirmVoid(): void {
@@ -201,7 +212,7 @@ onMounted(load)
           <p class="settlement__no numeric label">
             {{
               settlement.settlement_no
-                ? `Settlement No. ${settlement.settlement_no}`
+                ? `Liquidation No. ${settlement.settlement_no}`
                 : 'Unnumbered draft'
             }}
           </p>
@@ -237,8 +248,8 @@ onMounted(load)
         <div class="report__title">
           {{
             settlement.settlement_no
-              ? `Settlement No. ${settlement.settlement_no}`
-              : 'Settlement (draft)'
+              ? `Liquidation No. ${settlement.settlement_no}`
+              : 'Liquidation (draft)'
           }}
           — {{ settlement.customer_code }} {{ settlement.customer_name }}
         </div>
@@ -258,7 +269,7 @@ onMounted(load)
               icon="pi pi-refresh"
               size="small"
               :disabled="busy"
-              @click="recompute"
+              @click="recompute()"
             />
           </div>
         </Message>
@@ -294,7 +305,7 @@ onMounted(load)
           <span>{{ settlement.created_by.Username }}</span>
         </div>
         <div v-if="settlement.status !== 'draft'" class="settlement__row">
-          <span class="settlement__label">Settled by</span>
+          <span class="settlement__label">Liquidated by</span>
           <span>{{ settlement.posted_by.Username }}</span>
         </div>
       </section>
@@ -325,7 +336,7 @@ onMounted(load)
           </div>
         </template>
         <p v-else class="settlement__muted settlement__flush">
-          Nothing carried — this farmer has not been settled before.
+          Nothing carried — this farmer has not been liquidated before.
         </p>
       </section>
 
@@ -344,10 +355,27 @@ onMounted(load)
               <th class="report__amount">Principal</th>
               <th class="report__amount">Days</th>
               <th class="report__amount">Interest</th>
+              <th v-if="isDraft" class="settlement__edit settlement__screen">
+                <span class="sr-only">Edit</span>
+              </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="line in settlement.advances" :key="line.advance_line_id">
+            <template v-for="line in settlement.advances" :key="line.advance_line_id">
+            <tr v-if="editingLine === line.advance_line_id" class="settlement__screen">
+              <td colspan="7">
+                <AdvanceLineEdit
+                  :voucher-id="line.voucher_id"
+                  :line-id="line.advance_line_id"
+                  :date="line.date"
+                  :particular="line.particular"
+                  :amount="line.principal"
+                  @saved="lineSaved"
+                  @cancel="editingLine = null"
+                />
+              </td>
+            </tr>
+            <tr v-else>
               <td class="report__code numeric">
                 <RouterLink :to="{ name: 'advance', params: { id: line.voucher_id } }">
                   {{ line.ref_no }}
@@ -358,7 +386,19 @@ onMounted(load)
               <td class="report__amount numeric">{{ formatPesos(line.principal) }}</td>
               <td class="report__amount numeric">{{ line.days }}</td>
               <td class="report__amount numeric">{{ formatPesos(line.charge) }}</td>
+              <td v-if="isDraft" class="settlement__edit settlement__screen">
+                <Button
+                  icon="pi pi-pencil"
+                  size="small"
+                  severity="secondary"
+                  text
+                  :aria-label="`Edit Ref. No. ${line.ref_no}`"
+                  :disabled="busy || editingLine !== null"
+                  @click="editingLine = line.advance_line_id"
+                />
+              </td>
             </tr>
+            </template>
           </tbody>
           <tfoot>
             <tr class="report__totals">
@@ -371,6 +411,7 @@ onMounted(load)
               <td class="report__amount numeric">
                 {{ formatPesos(settlement.totals.advance_interest) }}
               </td>
+              <td v-if="isDraft" class="settlement__screen" />
             </tr>
           </tfoot>
         </table>
@@ -472,7 +513,7 @@ onMounted(load)
       <template v-if="isDraft">
         <Message v-if="!hasPayments" severity="info" :closable="false" class="settlement__screen">
           This is a statement of what {{ settlement.customer_name }} owes up to the cut-off. It
-          cannot be settled until a payment is recorded for him.
+          cannot be liquidated until a payment is recorded for him.
         </Message>
 
         <section class="card card--padded settlement__screen settlement__edit">
@@ -525,10 +566,10 @@ onMounted(load)
               severity="secondary"
               outlined
               :disabled="busy"
-              @click="recompute"
+              @click="recompute()"
             />
             <Button
-              label="Settle"
+              label="Liquidate"
               icon="pi pi-check"
               severity="success"
               :disabled="busy || !hasPayments"
@@ -539,36 +580,9 @@ onMounted(load)
       </template>
 
       <template v-else>
-        <section v-if="entries.length > 0" class="card settlement__grid settlement__screen">
-          <h2 class="settlement__section">In the ledger</h2>
-          <table class="report__table settlement__table">
-            <thead>
-              <tr>
-                <th class="report__code">Date</th>
-                <th>Entry</th>
-                <th>By</th>
-                <th class="report__amount">Principal</th>
-                <th class="report__amount">Interest</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="entry in entries" :key="entry.id">
-                <td class="report__code numeric">{{ entry.date }}</td>
-                <td>
-                  {{ entryLabel(entry.type) }}
-                  <span v-if="entry.reason" class="settlement__muted">— {{ entry.reason }}</span>
-                </td>
-                <td>{{ entry.by }}</td>
-                <td class="report__amount numeric">{{ formatPesos(entry.principal) }}</td>
-                <td class="report__amount numeric">{{ formatPesos(entry.interest) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-
         <div v-if="isManager && isPosted" class="settlement__actions settlement__screen">
           <Button
-            label="Void this settlement"
+            label="Void this liquidation"
             icon="pi pi-ban"
             severity="danger"
             outlined
@@ -579,12 +593,12 @@ onMounted(load)
       </template>
     </template>
 
-    <Message v-else severity="error" :closable="false">{{ error || 'No such settlement.' }}</Message>
+    <Message v-else severity="error" :closable="false">{{ error || 'No such liquidation.' }}</Message>
 
-    <Dialog v-model:visible="voiding" modal header="Void this settlement" :style="{ width: '28rem' }">
+    <Dialog v-model:visible="voiding" modal header="Void this liquidation" :style="{ width: '28rem' }">
       <p class="settlement__dialog-text">
         The interest it charged and the payments it applied are reversed in the ledger. Its
-        advances and payments open again, waiting for a new settlement. The settlement and its
+        advances and payments open again, waiting for a new liquidation. The liquidation and its
         reversals stay on the record, and this reason is written onto each one.
       </p>
       <Textarea v-model="voidReason" rows="3" fluid aria-label="Reason for voiding" />
@@ -628,6 +642,22 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* position: relative contains the visually-hidden heading inside the card. */
+.settlement__edit {
+  position: relative;
+  width: 2.5rem;
+  text-align: right;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .settlement__screen {

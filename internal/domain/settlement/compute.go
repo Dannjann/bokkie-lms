@@ -45,7 +45,7 @@ func (s *Service) compute(ctx context.Context, q queryExecer, customerID int64, 
 	if !last.IsZero() && cutoff.Before(last) {
 		return computed{}, ValidationError{
 			Field:   "cutoff",
-			Message: fmt.Sprintf("this farmer is already settled up to %s — a cut-off cannot go back before it", last),
+			Message: fmt.Sprintf("this farmer is already liquidated up to %s — a cut-off cannot go back before it", last),
 		}
 	}
 

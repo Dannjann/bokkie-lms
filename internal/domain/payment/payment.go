@@ -20,8 +20,10 @@
 package payment
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -167,6 +169,33 @@ type Draft struct {
 	Particular string      `json:"particular"`
 }
 
+// UnmarshalJSON reads an empty amount as nothing typed rather than as a
+// malformed one. A palay payment is sent with its amount blank, since the lines
+// decide it, and a cash payment left blank is better refused by clean as a
+// field to fix than as a request that could not be read. Anything else still
+// goes through money's own reader, bare numbers and all.
+//
+// Unknown fields are refused here too: the API's decoder does that, and a
+// custom reader would otherwise quietly accept a "status" or an "or_no".
+func (d *Draft) UnmarshalJSON(data []byte) error {
+	type plain Draft
+	var raw struct {
+		plain
+		Amount json.RawMessage `json:"amount"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&raw); err != nil {
+		return err
+	}
+	*d = Draft(raw.plain)
+	d.Amount = 0
+	if len(raw.Amount) == 0 || string(raw.Amount) == `""` {
+		return nil
+	}
+	return json.Unmarshal(raw.Amount, &d.Amount)
+}
+
 // cleaned is a draft that has been checked, with its lines costed.
 type cleaned struct {
 	Draft
@@ -202,7 +231,7 @@ var (
 	// ErrSettled means a settlement has applied this payment to the balance.
 	// Voiding it would leave that settlement describing money that never came
 	// in, so the settlement is voided first — which reopens the payment.
-	ErrSettled = errors.New("that payment has been settled: void the settlement first")
+	ErrSettled = errors.New("that payment has been liquidated: void the liquidation first")
 )
 
 const maxParticularLen = 200

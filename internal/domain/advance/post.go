@@ -32,6 +32,12 @@ import (
 // back, and nothing happened. The order looks inverted because it is, and it is
 // load-bearing.
 func (s *Service) PostTx(ctx context.Context, tx *sql.Tx, id int64, by Actor) (Voucher, error) {
+	return s.postTx(ctx, tx, id, by, 0, 0)
+}
+
+// postTx posts a draft under a fresh Ref. No., or — for an edit — under the
+// number and revision it is replacing.
+func (s *Service) postTx(ctx context.Context, tx *sql.Tx, id int64, by Actor, refNo int64, revision int) (Voucher, error) {
 	if by.Username == "" {
 		return Voucher{}, fmt.Errorf("a voucher must say who posted it")
 	}
@@ -50,13 +56,18 @@ func (s *Service) PostTx(ctx context.Context, tx *sql.Tx, id int64, by Actor) (V
 		start = 1
 	}
 
+	if revision < 1 {
+		revision = 1
+	}
+
 	stamp := s.now().UTC().Format(time.RFC3339Nano)
 	res, err := tx.ExecContext(ctx,
 		`UPDATE advance_vouchers
-		    SET ref_no = (SELECT COALESCE(MAX(ref_no), ? - 1) + 1 FROM advance_vouchers),
+		    SET ref_no = COALESCE(NULLIF(?, 0), (SELECT COALESCE(MAX(ref_no), ? - 1) + 1 FROM advance_vouchers)),
+		        revision = ?,
 		        status = 'posted', posted_at = ?, posted_by = ?, posted_by_username = ?
 		  WHERE id = ? AND status = 'draft'`,
-		start, stamp, nullableID(by.UserID), by.Username, id)
+		refNo, start, revision, stamp, nullableID(by.UserID), by.Username, id)
 	if err != nil {
 		return Voucher{}, fmt.Errorf("post voucher %d: %w", id, err)
 	}
@@ -96,6 +107,12 @@ func (s *Service) PostTx(ctx context.Context, tx *sql.Tx, id int64, by Actor) (V
 // the same benefit: a double-clicked Void matches no rows the second time, long
 // before the ledger's at-most-once reversal index is reached.
 func (s *Service) VoidTx(ctx context.Context, tx *sql.Tx, id int64, by Actor, reason string) (Voucher, error) {
+	return s.voidTx(ctx, tx, id, by, reason, 0)
+}
+
+// voidTx voids a posted voucher, and for an edit records the voucher that
+// replaces it — in the same UPDATE, because a voided row is frozen after it.
+func (s *Service) voidTx(ctx context.Context, tx *sql.Tx, id int64, by Actor, reason string, supersededBy int64) (Voucher, error) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		return Voucher{}, ValidationError{Field: "reason", Message: "a void has to say why"}
@@ -107,9 +124,10 @@ func (s *Service) VoidTx(ctx context.Context, tx *sql.Tx, id int64, by Actor, re
 	stamp := s.now().UTC().Format(time.RFC3339Nano)
 	res, err := tx.ExecContext(ctx,
 		`UPDATE advance_vouchers
-		    SET status = 'voided', voided_at = ?, voided_by = ?, voided_by_username = ?, void_reason = ?
+		    SET status = 'voided', voided_at = ?, voided_by = ?, voided_by_username = ?, void_reason = ?,
+		        superseded_by = NULLIF(?, 0)
 		  WHERE id = ? AND status = 'posted'`,
-		stamp, nullableID(by.UserID), by.Username, reason, id)
+		stamp, nullableID(by.UserID), by.Username, reason, supersededBy, id)
 	if err != nil {
 		return Voucher{}, fmt.Errorf("void voucher %d: %w", id, err)
 	}
@@ -131,7 +149,7 @@ func (s *Service) VoidTx(ctx context.Context, tx *sql.Tx, id int64, by Actor, re
 		  WHERE l.voucher_id = ? AND st.status = 'posted'
 		  LIMIT 1`, id).Scan(&settledBy); {
 	case err == nil:
-		return Voucher{}, fmt.Errorf("%w (settlement %d)", ErrSettled, settledBy)
+		return Voucher{}, fmt.Errorf("%w (liquidation %d)", ErrSettled, settledBy)
 	case !errors.Is(err, sql.ErrNoRows):
 		return Voucher{}, fmt.Errorf("check whether advance slip %d is settled: %w", id, err)
 	}
@@ -210,4 +228,34 @@ func entryFor(line Line, by Actor) ledger.Entry {
 		SourceID:    line.ID,
 		By:          by,
 	}
+}
+
+// CorrectTx edits a posted voucher: the client's "edit", kept honest.
+//
+// The ledger is never rewritten. In one transaction the edited lines become a
+// replacement voucher, the original is voided — every entry reversed, with
+// "Edited by" as the reason — and the replacement is posted under the same
+// Ref. No. at the next revision. The number on the farmer's paper slip does
+// not change; the statement shows the reversal and the new entries beside it.
+//
+// The INSERT of the replacement is this transaction's first statement, which
+// is what the void and the post that follow need of it. Everything that would
+// refuse an ordinary void refuses an edit too: a slip a posted liquidation has
+// charged interest on is edited only after that liquidation is voided.
+func (s *Service) CorrectTx(ctx context.Context, tx *sql.Tx, id int64, d Draft, by Actor) (Voucher, error) {
+	replacement, err := s.CreateTx(ctx, tx, d, by)
+	if err != nil {
+		return Voucher{}, err
+	}
+
+	original, err := s.voidTx(ctx, tx, id, by, "Edited by "+by.Username, replacement.ID)
+	if errors.Is(err, ErrNotPosted) {
+		// The void's own sentence is about voiding; the person asked to edit.
+		return Voucher{}, ErrNotEditable
+	}
+	if err != nil {
+		return Voucher{}, err
+	}
+
+	return s.postTx(ctx, tx, replacement.ID, by, original.RefNo, original.Revision+1)
 }
